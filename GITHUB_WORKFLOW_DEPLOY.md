@@ -7,7 +7,7 @@
 内置工作流位于 `./.github/workflows/deploy.yml`，触发方式与流程如下：
 
 - 触发：`main`/`master` 分支 push，或手动 `workflow_dispatch`
-- 流程：Checkout → Node 20 → `npm ci` → 生成 `wrangler.jsonc` → `npm run build` → D1 migrations → `wrangler deploy`
+- 流程：Checkout → Node 24 → `npm ci` → 生成 `wrangler.jsonc` → `npm run build` → D1 migrations → `wrangler deploy` → 配置管理员 Secrets
 
 ## 前置条件
 
@@ -68,6 +68,7 @@ wrangler d1 list
 
 - 若未设置 `D1_DATABASE_ID`，工作流会使用 API Token + Account ID 自动查找数据库 ID。
 - `WEBDAV_USERNAME`/`WEBDAV_PASSWORD` 未设置时，将沿用管理员账号密码。
+- 管理员凭据通过 `wrangler secret` 写入（经 stdin，不经过命令行参数），密码含 `$`、反引号等特殊字符也不会被破坏；`ADMIN_USERNAME`/`ADMIN_PASSWORD` 缺失时工作流会直接失败，避免“部署成功但登录不了”。
 
 ## 4. 触发部署
 

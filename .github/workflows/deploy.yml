@@ -33,6 +33,10 @@ jobs:
           D1_BINDING: ${{ vars.D1_BINDING }}
           D1_MIGRATIONS_DIR: ${{ vars.D1_MIGRATIONS_DIR }}
           OBSERVABILITY_ENABLED: ${{ vars.OBSERVABILITY_ENABLED }}
+          SITE_TITLE: ${{ vars.SITE_TITLE }}
+          SITE_ANNOUNCEMENT: ${{ vars.SITE_ANNOUNCEMENT }}
+          CHUNK_SIZE_MB: ${{ vars.CHUNK_SIZE_MB }}
+          WEBDAV_ENABLED: ${{ vars.WEBDAV_ENABLED }}
         run: |
           WORKER_NAME="${WORKER_NAME:-clist}"
           WORKER_MAIN="${WORKER_MAIN:-./workers/app.ts}"
@@ -53,13 +57,21 @@ jobs:
               exit 1
             fi
           fi
+          # 非敏感变量写入 config，随 build 产物走；敏感凭据走 wrangler secret（见下步）
           cat > wrangler.jsonc <<EOF
           {
             "\$schema": "node_modules/wrangler/config-schema.json",
             "name": "$WORKER_NAME",
             "main": "$WORKER_MAIN",
             "compatibility_date": "$COMPATIBILITY_DATE",
+            "keep_vars": true,
             "observability": { "enabled": $OBSERVABILITY_ENABLED },
+            "vars": {
+              "SITE_TITLE": "${SITE_TITLE:-CList}",
+              "SITE_ANNOUNCEMENT": "${SITE_ANNOUNCEMENT:-}",
+              "CHUNK_SIZE_MB": "${CHUNK_SIZE_MB:-50}",
+              "WEBDAV_ENABLED": "${WEBDAV_ENABLED:-false}"
+            },
             "d1_databases": [
               {
                 "binding": "$D1_BINDING",
@@ -86,24 +98,26 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          VALUE_FROM_CLOUDFLARE: ${{ vars.VALUE_FROM_CLOUDFLARE }}
+        run: npx wrangler deploy --config build/server/wrangler.json
+
+      - name: Configure admin secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-          SITE_TITLE: ${{ vars.SITE_TITLE }}
-          SITE_ANNOUNCEMENT: ${{ vars.SITE_ANNOUNCEMENT }}
-          CHUNK_SIZE_MB: ${{ vars.CHUNK_SIZE_MB }}
-          WEBDAV_ENABLED: ${{ vars.WEBDAV_ENABLED }}
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
         run: |
-          npx wrangler deploy \
-            --config build/server/wrangler.json \
-            --var "VALUE_FROM_CLOUDFLARE:${VALUE_FROM_CLOUDFLARE}" \
-            --var "ADMIN_USERNAME:${ADMIN_USERNAME}" \
-            --var "ADMIN_PASSWORD:${ADMIN_PASSWORD}" \
-            --var "SITE_TITLE:${SITE_TITLE}" \
-            --var "SITE_ANNOUNCEMENT:${SITE_ANNOUNCEMENT}" \
-            --var "CHUNK_SIZE_MB:${CHUNK_SIZE_MB}" \
-            --var "WEBDAV_ENABLED:${WEBDAV_ENABLED}" \
-            --var "WEBDAV_USERNAME:${WEBDAV_USERNAME}" \
-            --var "WEBDAV_PASSWORD:${WEBDAV_PASSWORD}"
+          # 必填的管理员凭据缺失时直接失败，避免“部署成功但登录不了”
+          if [ -z "$ADMIN_USERNAME" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "Missing required secrets: ADMIN_USERNAME / ADMIN_PASSWORD" >&2
+            exit 1
+          fi
+          # 经 stdin 写入 secret，避免密码含特殊字符时被 shell 展开破坏
+          printf '%s' "$ADMIN_USERNAME" | npx wrangler secret put ADMIN_USERNAME --config build/server/wrangler.json
+          printf '%s' "$ADMIN_PASSWORD" | npx wrangler secret put ADMIN_PASSWORD --config build/server/wrangler.json
+          if [ -n "$WEBDAV_USERNAME" ] && [ -n "$WEBDAV_PASSWORD" ]; then
+            printf '%s' "$WEBDAV_USERNAME" | npx wrangler secret put WEBDAV_USERNAME --config build/server/wrangler.json
+            printf '%s' "$WEBDAV_PASSWORD" | npx wrangler secret put WEBDAV_PASSWORD --config build/server/wrangler.json
+          fi

@@ -429,6 +429,7 @@ function Modal({ title, onClose, children, maxWidth = "max-w-sm" }: { title: str
 function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -441,7 +442,7 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
       const res = await fetch("/api/storages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "login", username, password }),
+        body: JSON.stringify({ action: "login", username, password, remember }),
       });
 
       if (res.ok) {
@@ -472,6 +473,7 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full field"
+              autoFocus
               required
             />
           </div>
@@ -485,6 +487,15 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
               required
             />
           </div>
+          <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 select-none cursor-pointer">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="accent-blue-600"
+            />
+            记住我（30 天内免登录）
+          </label>
           {error && <div className="text-red-500 dark:text-red-400 text-xs font-medium">{error}</div>}
           <div className="flex gap-2">
             <button

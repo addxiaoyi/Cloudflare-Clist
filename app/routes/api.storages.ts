@@ -19,6 +19,11 @@ import {
   createSessionCookie,
   deleteSessionCookie,
   getSessionIdFromCookie,
+  renewSession,
+  shouldRenewSession,
+  cleanExpiredSessions,
+  SESSION_DEFAULT_HOURS,
+  SESSION_REMEMBER_HOURS,
 } from "~/lib/auth";
 import { getRequestMeta, logAudit } from "~/lib/audit";
 
@@ -26,33 +31,49 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
   await initDatabase(db);
 
-  const { isAdmin } = await requireAuth(request, db);
+  const auth = await requireAuth(request, db);
 
-  if (isAdmin) {
+  // 管理员会话滑动续期：剩余有效期不足一半时顺延，避免“过一段时间就掉线”
+  let headers: Record<string, string> = {};
+  if (auth.isAdmin && auth.session && shouldRenewSession(auth.session)) {
+    await renewSession(db, auth.session.id);
+    headers["Set-Cookie"] = createSessionCookie(
+      auth.session.id,
+      SESSION_DEFAULT_HOURS * 3600
+    );
+  }
+
+  if (auth.isAdmin) {
     const storages = await getAllStorages(db);
-    return Response.json({
-      storages: storages.map((s) => ({
-        ...s,
-        secretAccessKey: "***",
-        saving: {},
-      })),
-      isAdmin: true,
-    });
+    return Response.json(
+      {
+        storages: storages.map((s) => ({
+          ...s,
+          secretAccessKey: "***",
+          saving: {},
+        })),
+        isAdmin: true,
+      },
+      { headers }
+    );
   }
 
   const storages = await getPublicStorages(db);
-  return Response.json({
-    storages: storages.map((s) => ({
-      id: s.id,
-      name: s.name,
-      type: s.type,
-      isPublic: s.isPublic,
-      guestList: s.guestList,
-      guestDownload: s.guestDownload,
-      guestUpload: s.guestUpload,
-    })),
-    isAdmin: false,
-  });
+  return Response.json(
+    {
+      storages: storages.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        isPublic: s.isPublic,
+        guestList: s.guestList,
+        guestDownload: s.guestDownload,
+        guestUpload: s.guestUpload,
+      })),
+      isAdmin: false,
+    },
+    { headers }
+  );
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -68,7 +89,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
     // Login action
     if (actionType === "login") {
-      const { username, password } = body as { username: string; password: string };
+      const { username, password, remember } = body as { username: string; password: string; remember?: boolean };
       const isValid = await validateAdmin(username, password, context.cloudflare.env as { ADMIN_USERNAME: string; ADMIN_PASSWORD: string });
 
       if (!isValid) {
@@ -82,19 +103,23 @@ export async function action({ request, context }: Route.ActionArgs) {
         return Response.json({ error: "Invalid credentials" }, { status: 401 });
       }
 
-      const sessionId = await createSession(db, "admin");
+      // “记住我”=30 天，否则 7 天
+      const expiresInHours = remember ? SESSION_REMEMBER_HOURS : SESSION_DEFAULT_HOURS;
+      const sessionId = await createSession(db, "admin", expiresInHours);
+      // 顺手清理过期会话，避免 sessions 表无限膨胀
+      await cleanExpiredSessions(db);
       await logAudit(db, {
         action: "auth.login",
         userType: "admin",
         ip: meta.ip,
         userAgent: meta.userAgent,
-        detail: { username },
+        detail: { username, remember: !!remember },
       });
       return Response.json(
         { success: true },
         {
           headers: {
-            "Set-Cookie": createSessionCookie(sessionId),
+            "Set-Cookie": createSessionCookie(sessionId, expiresInHours * 3600),
           },
         }
       );

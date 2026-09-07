@@ -285,7 +285,15 @@ export async function deleteStorage(
   return (result.meta?.changes ?? 0) > 0;
 }
 
+// isolate 级缓存：D1 DDL 只需执行一次，避免每个请求重复建表/PRAGMA
+// （Workers isolate 复用周期通常数分钟，之后新 isolate 会重新初始化）
+let dbInitialized = false;
+
 export async function initDatabase(db: D1Database): Promise<void> {
+  if (dbInitialized) {
+    return;
+  }
+
   // 建表（新库）；已存在的表不受 CREATE IF NOT EXISTS 影响
   // 注意: D1 的 exec() 按换行分割语句，故每条 DDL 单独 prepare().run()
   const ddl = [
@@ -364,6 +372,8 @@ export async function initDatabase(db: D1Database): Promise<void> {
   if (shareNames.size > 0 && !shareNames.has("password_hash")) {
     await db.prepare("ALTER TABLE shares ADD COLUMN password_hash TEXT").run();
   }
+
+  dbInitialized = true;
 }
 
 // Backup types
