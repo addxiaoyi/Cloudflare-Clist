@@ -90,6 +90,7 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           # 必填的管理员凭据缺失时直接失败，避免“部署成功但登录不了”
           if [ -z "$ADMIN_USERNAME" ] || [ -z "$ADMIN_PASSWORD" ]; then
@@ -102,4 +103,7 @@ jobs:
           if [ -n "$WEBDAV_USERNAME" ] && [ -n "$WEBDAV_PASSWORD" ]; then
             printf '%s' "$WEBDAV_USERNAME" | npx wrangler secret put WEBDAV_USERNAME --config build/server/wrangler.json
             printf '%s' "$WEBDAV_PASSWORD" | npx wrangler secret put WEBDAV_PASSWORD --config build/server/wrangler.json
+          fi
+          if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+            printf '%s' "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET --config build/server/wrangler.json
           fi

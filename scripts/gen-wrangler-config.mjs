@@ -16,7 +16,6 @@ const cfg = {
     CHUNK_SIZE_MB: env.CHUNK_SIZE_MB || "50",
     WEBDAV_ENABLED: env.WEBDAV_ENABLED || "false",
     GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID || "",
-    GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET || "",
     GOOGLE_REDIRECT_URI: env.GOOGLE_REDIRECT_URI || "",
   },
   d1_databases: [

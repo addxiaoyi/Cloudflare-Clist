@@ -92,6 +92,23 @@ const emptyState: SetupState = {
   github: { repoOwner: "", repoName: "" },
 };
 
+// ---------------------------------------------------------------------------
+// 字段格式校验
+// ---------------------------------------------------------------------------
+
+const HEX32 = /^[a-f0-9]{32}$/i;
+const WORKER_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isHttpsUrl(v: string): boolean {
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" && u.hostname.includes(".");
+  } catch {
+    return false;
+  }
+}
+
 function loadDraft(): SetupState {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
@@ -132,7 +149,6 @@ function buildWranglerJson(state: SetupState): object {
       CHUNK_SIZE_MB: String(site.chunkSizeMb),
       WEBDAV_ENABLED: webdav.enabled ? "true" : "false",
       GOOGLE_CLIENT_ID: gdrive.clientId,
-      GOOGLE_CLIENT_SECRET: gdrive.clientSecret,
       GOOGLE_REDIRECT_URI: gdrive.redirectUri,
     },
   };
@@ -177,7 +193,7 @@ function buildCommands(state: SetupState): string {
   }
 
   if (gdrive.enabled) {
-    lines.push(`# 7. Google Drive OAuth`, `npx wrangler secret put GOOGLE_CLIENT_ID --config wrangler.jsonc`, `npx wrangler secret put GOOGLE_CLIENT_SECRET --config wrangler.jsonc`, `npx wrangler secret put GOOGLE_REDIRECT_URI --config wrangler.jsonc`, "");
+    lines.push(`# 7. Google Drive OAuth（Client ID / 回调地址已在 wrangler.jsonc 的 vars 中）`, `printf '%s' "${gdrive.clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET --config wrangler.jsonc`, "");
   }
 
   if (repo) {
@@ -333,8 +349,19 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
     if (!state.site.adminUsername.trim()) errors.push("管理员用户名必填");
     if (state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
     if (!state.cloudflare.accountId.trim()) errors.push("Cloudflare Account ID 必填");
+    else if (!HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
+    if (!WORKER_NAME_RE.test(state.cloudflare.workerName)) errors.push("Worker 名称只能含字母、数字、连字符");
+    if (!DATE_RE.test(state.cloudflare.compatibilityDate)) errors.push("兼容日期格式应为 YYYY-MM-DD");
     if (state.r2.enabled && !state.r2.bucketName.trim()) errors.push("R2 桶名必填");
-    if (state.gdrive.enabled && (!state.gdrive.clientId.trim() || !state.gdrive.clientSecret.trim())) errors.push("Google Client ID / Secret 必填");
+    if (state.gdrive.enabled) {
+      if (!state.gdrive.clientId.trim() || !state.gdrive.clientSecret.trim()) errors.push("Google Client ID / Secret 必填");
+      if (!state.gdrive.redirectUri.trim()) errors.push("Google 回调地址必填");
+      else if (!isHttpsUrl(state.gdrive.redirectUri.trim())) errors.push("Google 回调地址必须是合法的 HTTPS URL");
+    }
+    if (state.webdav.enabled) {
+      if (!state.webdav.username.trim()) errors.push("WebDAV 用户名必填");
+      if (!state.webdav.password.trim()) errors.push("WebDAV 密码必填");
+    }
     return errors;
   }, [state]);
 
@@ -350,11 +377,22 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
       if (state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
     } else if (current.key === "cloudflare") {
       if (!state.cloudflare.accountId.trim()) errors.push("Cloudflare Account ID 必填");
+      else if (!HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
+      if (!WORKER_NAME_RE.test(state.cloudflare.workerName)) errors.push("Worker 名称只能含字母、数字、连字符");
+      if (!DATE_RE.test(state.cloudflare.compatibilityDate)) errors.push("兼容日期格式应为 YYYY-MM-DD");
     } else if (current.key === "r2") {
       if (state.r2.enabled && !state.r2.bucketName.trim()) errors.push("R2 桶名必填");
     } else if (current.key === "gdrive") {
-      if (state.gdrive.enabled && (!state.gdrive.clientId.trim() || !state.gdrive.clientSecret.trim()))
-        errors.push("Google Client ID / Secret 必填");
+      if (state.gdrive.enabled) {
+        if (!state.gdrive.clientId.trim() || !state.gdrive.clientSecret.trim()) errors.push("Google Client ID / Secret 必填");
+        if (!state.gdrive.redirectUri.trim()) errors.push("Google 回调地址必填");
+        else if (!isHttpsUrl(state.gdrive.redirectUri.trim())) errors.push("Google 回调地址必须是合法的 HTTPS URL");
+      }
+    } else if (current.key === "webdav") {
+      if (state.webdav.enabled) {
+        if (!state.webdav.username.trim()) errors.push("WebDAV 用户名必填");
+        if (!state.webdav.password.trim()) errors.push("WebDAV 密码必填");
+      }
     }
     return errors;
   }, [state, current.key]);
