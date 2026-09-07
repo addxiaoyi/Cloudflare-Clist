@@ -166,7 +166,16 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
     }
   }
 
-  const client = createClient(storage);
+  // 配置无效时 createClient 会抛错（如 endpoint 为空），转成 JSON 错误而非 500 页面
+  let client;
+  try {
+    client = createClient(storage);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "存储配置无效，请检查后重试" },
+      { status: 400 }
+    );
+  }
 
   // List objects
   if (action === "list" || (!action && !isInlineImageRequest)) {

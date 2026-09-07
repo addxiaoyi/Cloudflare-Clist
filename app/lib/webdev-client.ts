@@ -43,7 +43,13 @@ export class WebdevClient {
   }
 
   private normalizeEndpoint(endpoint: string): string {
-    return endpoint.replace(/\/$/, "");
+    const trimmed = endpoint?.trim() || "";
+    if (!trimmed) {
+      throw new Error("服务器地址未配置，请编辑存储后填写");
+    }
+    // 缺协议头时补 https://，避免 new URL() 抛 "Invalid URL string"
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    return withScheme.replace(/\/$/, "");
   }
 
   private encodePath(path: string): string {

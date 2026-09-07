@@ -10,6 +10,7 @@ import {
   exportStoragesForBackup,
   importStoragesFromBackup,
   type BackupData,
+  type StorageInput,
 } from "~/lib/storage";
 import {
   requireAuth,
@@ -30,6 +31,22 @@ import { getRequestMeta, logAudit } from "~/lib/audit";
 // 仅 HTTPS 才给 cookie 加 Secure；http 开发环境加 Secure 会被浏览器拒收
 function isSecureRequest(request: Request): boolean {
   return new URL(request.url).protocol === "https:";
+}
+
+// S3/WebDAV 的 endpoint 必须是非空的有效 URL；缺协议头时自动补 https://
+function normalizeEndpoint(type: string, endpoint: unknown): string {
+  if (type !== "s3" && type !== "webdev") return "";
+  if (typeof endpoint !== "string" || !endpoint.trim()) {
+    throw new Error("Endpoint 不能为空，请输入有效的服务器地址");
+  }
+  const value = endpoint.trim();
+  const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    new URL(withScheme);
+  } catch {
+    throw new Error("Endpoint 不是有效的 URL 地址");
+  }
+  return withScheme;
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -221,7 +238,9 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
 
     try {
-      const storage = await createStorage(db, body as Parameters<typeof createStorage>[1]);
+      const input = body as Parameters<typeof createStorage>[1];
+      input.endpoint = normalizeEndpoint(input.type || "s3", input.endpoint);
+      const storage = await createStorage(db, input);
       const { saving, ...safeStorage } = storage;
       await logAudit(db, {
         action: "storage.create",
@@ -254,10 +273,12 @@ export async function action({ request, context }: Route.ActionArgs) {
     }
 
     const body = await request.json();
-    const { id, ...input } = body as { id: number; [key: string]: unknown };
 
     try {
-      const storage = await updateStorage(db, id, input);
+      const input = body as { id: number; type?: string; endpoint?: unknown; [key: string]: unknown };
+      const { id, ...rest } = input;
+      rest.endpoint = normalizeEndpoint(input.type || "s3", input.endpoint);
+      const storage = await updateStorage(db, id, rest as Partial<StorageInput>);
       if (!storage) {
         return Response.json({ error: "Storage not found" }, { status: 404 });
       }

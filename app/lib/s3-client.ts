@@ -88,7 +88,13 @@ export class S3Client {
   private config: S3Config;
 
   constructor(config: S3Config) {
-    this.config = config;
+    const raw = config.endpoint?.trim() || "";
+    if (!raw) {
+      throw new Error("Endpoint 未配置，请编辑存储后填写服务器地址");
+    }
+    // 用户常漏掉协议头，补上 https:// 避免 new URL() 抛 "Invalid URL string"
+    const endpoint = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    this.config = { ...config, endpoint };
   }
 
   private getFullPath(path: string): string {
