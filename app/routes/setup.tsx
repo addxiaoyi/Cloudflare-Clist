@@ -342,14 +342,52 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
   const isLast = step === STEPS.length - 1;
   const current = STEPS[step];
 
+  // 仅校验当前步骤的必填项，避免下一步按钮被后续步骤拦截
+  const stepErrors = useMemo(() => {
+    const errors: string[] = [];
+    if (current.key === "site") {
+      if (!state.site.adminUsername.trim()) errors.push("管理员用户名必填");
+      if (state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
+    } else if (current.key === "cloudflare") {
+      if (!state.cloudflare.accountId.trim()) errors.push("Cloudflare Account ID 必填");
+    } else if (current.key === "r2") {
+      if (state.r2.enabled && !state.r2.bucketName.trim()) errors.push("R2 桶名必填");
+    } else if (current.key === "gdrive") {
+      if (state.gdrive.enabled && (!state.gdrive.clientId.trim() || !state.gdrive.clientSecret.trim()))
+        errors.push("Google Client ID / Secret 必填");
+    }
+    return errors;
+  }, [state, current.key]);
+
   const copy = async (kind: "json" | "cmd") => {
     const text = kind === "json" ? wranglerJson : commands;
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    };
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        fallback();
+      }
       setCopied(kind);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      /* 剪贴板不可用时静默 */
+      // 剪贴板 API 被拒绝时退回 textarea 方案
+      try {
+        fallback();
+        setCopied(kind);
+        setTimeout(() => setCopied(null), 2000);
+      } catch {
+        /* 均不可用时静默 */
+      }
     }
   };
 
@@ -374,11 +412,8 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
 
   const next = () => {
     if (!canNext) return;
-    if (current.key === "site" || current.key === "cloudflare") {
-      setTouched(true);
-      const relevant = current.key === "site" ? validation.filter((e) => e.includes("管理员")) : validation.filter((e) => e.includes("Cloudflare"));
-      if (relevant.length > 0) return;
-    }
+    setTouched(true);
+    if (stepErrors.length > 0) return;
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
 
@@ -719,7 +754,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
           ) : (
             <button
               onClick={next}
-              disabled={validation.length > 0}
+              disabled={stepErrors.length > 0}
               className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition enabled:hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:enabled:hover:bg-zinc-300"
             >
               下一步 <ChevronRight className="h-4 w-4" />
