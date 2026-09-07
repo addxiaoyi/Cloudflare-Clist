@@ -8,6 +8,7 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { ToastProvider, ConfirmProvider } from "./components/feedback";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
@@ -34,7 +35,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <ToastProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </ToastProvider>
         <ScrollRestoration />
         <Scripts />
       </body>

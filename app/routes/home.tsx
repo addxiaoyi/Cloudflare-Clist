@@ -3,6 +3,7 @@ import { requireAuth } from "~/lib/auth";
 import { getAllStorages, getPublicStorages, initDatabase } from "~/lib/storage";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { FilePreview } from "~/components/FilePreview";
+import { useToast, useConfirm } from "~/components/feedback";
 import { getFileType, isPreviewable } from "~/lib/file-utils";
 import { apiFileUrl } from "~/lib/api-path";
 import { marked } from "marked";
@@ -935,6 +936,7 @@ function SettingsModal({
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState("");
+  const toast = useToast();
 
   const handleExportBackup = async () => {
     setExporting(true);
@@ -956,12 +958,13 @@ function SettingsModal({
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        toast("备份已导出", "success");
       } else {
         const data = await res.json() as { error?: string };
-        alert(data.error || "导出失败");
+        toast(data.error || "导出失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     } finally {
       setExporting(false);
     }
@@ -1937,6 +1940,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const canList = isAdmin || storage.guestList;
   const canDownload = isAdmin || storage.guestDownload;
   const canUpload = isAdmin || storage.guestUpload;
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [path, setPath] = useState("");
   const [objects, setObjects] = useState<S3Object[]>([]);
@@ -2070,32 +2075,46 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   };
 
   const deleteFile = async (key: string) => {
-    if (!confirm(`确定删除 ${key}?`)) return;
+    const ok = await confirm({
+      title: "删除文件",
+      message: `确定删除 ${key}?`,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(apiFileUrl(storage.id, key), { method: "DELETE" });
       if (res.ok) {
         loadFiles();
+        toast("已删除", "success");
       } else {
         const data = (await res.json()) as { error?: string };
-        alert(data.error || "删除失败");
+        toast(data.error || "删除失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     }
   };
 
   const deleteFolder = async (key: string, name: string) => {
-    if (!confirm(`确定删除文件夹 "${name}" 及其所有内容?`)) return;
+    const ok = await confirm({
+      title: "删除文件夹",
+      message: `确定删除文件夹 "${name}" 及其所有内容?`,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`${apiFileUrl(storage.id, key)}?action=rmdir`, { method: "DELETE" });
       if (res.ok) {
         loadFiles();
+        toast(`已删除文件夹 "${name}"`, "success");
       } else {
         const data = (await res.json()) as { error?: string };
-        alert(data.error || "删除失败");
+        toast(data.error || "删除失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     }
   };
 
@@ -2107,7 +2126,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const handleRename = async () => {
     if (!renameTarget || !renameValue.trim()) return;
     if (renameValue.includes("/")) {
-      alert("名称不能包含 /");
+      toast("名称不能包含 /", "error");
       return;
     }
     if (renameValue === renameTarget.name) {
@@ -2126,12 +2145,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       if (res.ok) {
         setRenameTarget(null);
         loadFiles();
+        toast(`已重命名为 "${renameValue.trim()}"`, "success");
       } else {
         const data = (await res.json()) as { error?: string };
-        alert(data.error || "重命名失败");
+        toast(data.error || "重命名失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     } finally {
       setRenaming(false);
     }
@@ -2179,12 +2199,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       if (res.ok) {
         setMoveTarget(null);
         loadFiles();
+        toast("移动完成", "success");
       } else {
         const data = (await res.json()) as { error?: string };
-        alert(data.error || "移动失败");
+        toast(data.error || "移动失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     } finally {
       setMoving(false);
     }
@@ -2238,10 +2259,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         }
       } else {
         const data = (await res.json()) as { error?: string };
-        alert(data.error || "创建分享链接失败");
+        toast(data.error || "创建分享链接失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     } finally {
       setCreatingShare(false);
     }
@@ -2249,9 +2270,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      alert("已复制到剪贴板");
+      toast("已复制到剪贴板", "success");
     }).catch(() => {
-      alert("复制失败，请手动复制");
+      toast("复制失败，请手动复制", "error");
     });
   };
 
@@ -2293,7 +2314,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       ? `确定删除 ${files.length} 个文件和 ${folders.length} 个文件夹（含其中所有内容）?`
       : `确定删除 ${files.length} 个文件?`;
 
-    if (!confirm(msg)) return;
+    const ok = await confirm({
+      title: "批量删除",
+      message: msg,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
 
     setDeleting(true);
     let failed = 0;
@@ -2320,7 +2347,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       }
 
       if (failed > 0) {
-        alert(`删除完成，${failed} 个项目删除失败`);
+        toast(`删除完成，${failed} 个项目删除失败`, "error");
+      } else {
+        toast("已删除所选项目", "success");
       }
 
       setSelectedKeys(new Set());
@@ -2354,7 +2383,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           failed++;
         }
       }
-      if (failed > 0) alert(`移动完成，${failed} 个项目失败`);
+      if (failed > 0) toast(`移动完成，${failed} 个项目失败`, "error");
+      else toast("已移动所选项目", "success");
       setBatchMoveOpen(false);
       setSelectedKeys(new Set());
       loadFiles();
@@ -2367,11 +2397,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     const files = objects.filter((obj) => !obj.isDirectory && selectedKeys.has(obj.key));
     const folders = objects.filter((obj) => obj.isDirectory && selectedKeys.has(obj.key));
     if (files.length === 0) {
-      alert("未选中可下载的文件（文件夹暂不支持批量下载）");
+      toast("未选中可下载的文件（文件夹暂不支持批量下载）", "info");
       return;
     }
     if (folders.length > 0) {
-      alert(`已忽略 ${folders.length} 个文件夹，开始下载 ${files.length} 个文件（如被浏览器拦截，请允许弹窗）`);
+      toast(`已忽略 ${folders.length} 个文件夹，开始下载 ${files.length} 个文件（如被浏览器拦截，请允许弹窗）`, "info");
     }
     // 间隔触发，避免浏览器拦截多窗口
     files.forEach((f, i) => {
@@ -2423,7 +2453,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       }
       setFolderStats({ name, stats: { totalSize: total, fileCount: count, folderCount: dirs, typeDistribution: typeDist } });
     } catch {
-      alert("统计失败");
+      toast("统计失败", "error");
     } finally {
       setCalcSizeKey(null);
     }
@@ -2462,7 +2492,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       const duplicates = Array.from(bySize.values()).filter((g) => g.length > 1).map((g) => ({ size: g[0].size, files: g })).sort((a, b) => b.size - a.size).slice(0, 20);
       setScanResults({ bigFiles, duplicates });
     } catch {
-      alert("扫描失败");
+      toast("扫描失败", "error");
     } finally {
       setScanning(false);
     }
@@ -2530,7 +2560,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           await uploadSingle(file, uploadPath);
         }
       } catch (err) {
-        alert(`上传 ${file.name} 失败: ${err instanceof Error ? err.message : "未知错误"}`);
+        toast(`上传 ${file.name} 失败: ${err instanceof Error ? err.message : "未知错误"}`, "error");
       }
     }
     setUploadProgress(null);
@@ -2622,7 +2652,12 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       try {
         const parsed = JSON.parse(savedState);
         if (parsed.uploadId && parsed.parts && parsed.fileName === file.name) {
-          const shouldResume = confirm(`检测到未完成的上传 "${file.name}"，是否继续？\n已完成 ${parsed.parts.length}/${totalParts} 分片`);
+          const shouldResume = await confirm({
+            title: "继续上传",
+            message: `检测到未完成的上传 "${file.name}"，是否继续？\n已完成 ${parsed.parts.length}/${totalParts} 分片`,
+            confirmText: "继续",
+            cancelText: "放弃",
+          });
           if (shouldResume) {
             uploadId = parsed.uploadId;
             completedParts = parsed.parts;
@@ -2879,12 +2914,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         setNewFolderName("");
         setShowNewFolderInput(false);
         loadFiles();
+        toast(`已创建文件夹 "${newFolderName.trim()}"`, "success");
       } else {
         const data = (await res.json()) as { error?: string };
-        alert(data.error || "创建文件夹失败");
+        toast(data.error || "创建文件夹失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     } finally {
       setCreatingFolder(false);
     }
@@ -2908,16 +2944,16 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
       if (res.ok && data.success) {
         const sizeStr = data.size ? ` (${formatBytes(data.size)})` : "";
-        alert(`下载成功: ${data.filename}${sizeStr}`);
+        toast(`下载成功: ${data.filename}${sizeStr}`, "success");
         setOfflineUrl("");
         setOfflineFilename("");
         setShowOfflineDownload(false);
         loadFiles();
       } else {
-        alert(data.error || "下载失败");
+        toast(data.error || "下载失败", "error");
       }
     } catch {
-      alert("网络错误");
+      toast("网络错误", "error");
     } finally {
       setOfflineDownloading(false);
     }
@@ -3859,6 +3895,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const [editingStorage, setEditingStorage] = useState<StorageInfo | null>(null);
   const [isDark, setIsDark] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const siteTitle = loaderData.siteTitle || "CList";
   const siteAnnouncement = loaderData.siteAnnouncement || "";
@@ -3957,14 +3995,25 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   };
 
   const handleDeleteStorage = async (s: StorageInfo) => {
-    if (!confirm(`删除存储 "${s.name}"?`)) return;
+    const ok = await confirm({
+      title: "删除存储",
+      message: `删除存储 "${s.name}"？此操作会同时移除其分享链接，但不会删除云端文件。`,
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/storages?id=${s.id}`, { method: "DELETE" });
       if (res.ok) {
         if (selectedStorage?.id === s.id) setSelectedStorage(null);
         refreshStorages();
+        toast(`已删除存储 "${s.name}"`, "success");
+      } else {
+        toast("删除存储失败", "error");
       }
-    } catch { /* ignore */ }
+    } catch {
+      toast("网络错误", "error");
+    }
   };
 
   return (

@@ -103,6 +103,30 @@ html.dark {
   }
 }
 
+/* Toast 通知动画（feedback.tsx） */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+}
+.toast-in {
+  animation: toast-in 0.2s ease-out;
+}
+.toast-out {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
 /* View Transition for theme toggle */
 ::view-transition-old(root),
 ::view-transition-new(root) {

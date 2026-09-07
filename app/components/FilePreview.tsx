@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { getFileType, formatDuration, getCodeLanguage, getMimeType, type FileType } from "~/lib/file-utils";
 import { apiFileUrl } from "~/lib/api-path";
+import { useToast } from "~/components/feedback";
 import hljs from "highlight.js";
 import { marked } from "marked";
 import { X, Download, Play, Pause, RefreshCw, AlertCircle, Pencil, Check } from "~/components/icons";
@@ -36,6 +37,7 @@ export function FilePreview({
   canEdit,
   onFileChanged,
 }: FilePreviewProps) {
+  const toast = useToast();
   const fileType = getFileType(fileName);
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -66,9 +68,9 @@ export function FilePreview({
   const getAbsoluteUrl = (url: string) => new URL(url, window.location.origin).href;
   const copyImageLink = () => {
     navigator.clipboard.writeText(getAbsoluteUrl(inlineFileUrlWithToken)).then(() => {
-      alert("图片链接已复制");
+      toast("图片链接已复制", "success");
     }).catch(() => {
-      alert("复制失败，请手动复制");
+      toast("复制失败，请手动复制", "error");
     });
   };
 
