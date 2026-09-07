@@ -7,6 +7,7 @@ import {
   deleteStorage,
   getStorageById,
   initDatabase,
+  autoMountR2,
   exportStoragesForBackup,
   importStoragesFromBackup,
   type BackupData,
@@ -27,6 +28,7 @@ import {
   SESSION_REMEMBER_HOURS,
 } from "~/lib/auth";
 import { getRequestMeta, logAudit } from "~/lib/audit";
+import { createClient } from "~/lib/client-factory";
 
 // 仅 HTTPS 才给 cookie 加 Secure；http 开发环境加 Secure 会被浏览器拒收
 function isSecureRequest(request: Request): boolean {
@@ -52,6 +54,8 @@ function normalizeEndpoint(type: string, endpoint: unknown): string {
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
   await initDatabase(db);
+  // 部署了 R2 绑定则自动挂载，管理员打开管理页即可看到
+  await autoMountR2(db, context.cloudflare.env);
 
   const auth = await requireAuth(request, db);
 
@@ -227,6 +231,50 @@ export async function action({ request, context }: Route.ActionArgs) {
         return Response.json(
           { error: error instanceof Error ? error.message : "Failed to import backup" },
           { status: 500 }
+        );
+      }
+    }
+
+    // 保存前连通性测试（管理员）：用草稿配置建客户端并列表根目录
+    if (actionType === "test-connection") {
+      const { isAdmin } = await requireAuth(request, db, "admin");
+      if (!isAdmin) {
+        return Response.json({ error: "Unauthorized" }, { status: 403 });
+      }
+      try {
+        const cfg = body as Record<string, any>;
+        const type = String(cfg.type || "s3");
+        const storageLike = {
+          type,
+          endpoint: normalizeEndpoint(type, cfg.endpoint),
+          region: String(cfg.region || "auto"),
+          accessKeyId: String(cfg.accessKeyId || ""),
+          secretAccessKey: String(cfg.secretAccessKey || ""),
+          bucket: String(cfg.bucket || ""),
+          basePath: String(cfg.basePath || ""),
+          config: (cfg.config || {}) as Record<string, any>,
+          saving: (cfg.saving || {}) as Record<string, any>,
+        };
+        const startedAt = Date.now();
+        let client;
+        try {
+          client = createClient(storageLike, context.cloudflare.env, Number(cfg.storageId || 0));
+        } catch (error) {
+          return Response.json({
+            ok: false,
+            error: error instanceof Error ? error.message : "配置无效",
+          });
+        }
+        const result = await client.listObjects("", "/", 1);
+        return Response.json({
+          ok: true,
+          latencyMs: Date.now() - startedAt,
+          items: (result.objects || []).length + (result.prefixes || []).length,
+        });
+      } catch (error) {
+        return Response.json(
+          { ok: false, error: error instanceof Error ? error.message : "连接测试失败" },
+          { status: 200 }
         );
       }
     }

@@ -1,11 +1,6 @@
 import type { Route } from "./+types/dav.$storageId.$";
 import { getStorageById, getAllStorages, initDatabase, updateStorage } from "~/lib/storage";
-import { S3Client } from "~/lib/s3-client";
-import { WebdevClient } from "~/lib/webdev-client";
-import { OneDriveClient } from "~/lib/onedrive-client";
-import { GoogleDriveClient } from "~/lib/gdrive-client";
-import { AliyunDriveClient } from "~/lib/alicloud-client";
-import { BaiduYunClient } from "~/lib/baiduyun-client";
+import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
 
 // WebDAV server endpoint - provides WebDAV access to storages
 
@@ -152,52 +147,9 @@ function createUnauthorizedResponse(): Response {
   });
 }
 
-type StorageClient = S3Client | WebdevClient | OneDriveClient | GoogleDriveClient | AliyunDriveClient | BaiduYunClient;
 type StatefulClient = {
   getStateUpdates: () => { config?: Record<string, any>; saving?: Record<string, any> } | null;
 };
-
-// Create storage client based on type
-function createClient(storage: {
-  type: string;
-  endpoint: string;
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  bucket: string;
-  basePath: string;
-  config?: Record<string, any>;
-  saving?: Record<string, any>;
-}): StorageClient {
-  if (storage.type === "webdev") {
-    return new WebdevClient({
-      endpoint: storage.endpoint,
-      username: storage.accessKeyId,
-      password: storage.secretAccessKey,
-      basePath: storage.basePath,
-    });
-  }
-  if (storage.type === "onedrive") {
-    return new OneDriveClient({ config: storage.config, saving: storage.saving });
-  }
-  if (storage.type === "gdrive") {
-    return new GoogleDriveClient({ config: storage.config, saving: storage.saving });
-  }
-  if (storage.type === "alicloud") {
-    return new AliyunDriveClient({ config: storage.config, saving: storage.saving });
-  }
-  if (storage.type === "baiduyun") {
-    return new BaiduYunClient({ config: storage.config, saving: storage.saving });
-  }
-  return new S3Client({
-    endpoint: storage.endpoint,
-    region: storage.region,
-    accessKeyId: storage.accessKeyId,
-    secretAccessKey: storage.secretAccessKey,
-    bucket: storage.bucket,
-    basePath: storage.basePath,
-  });
-}
 
 async function persistClientState(
   client: StorageClient,
@@ -353,7 +305,7 @@ export async function handleWebdavRequest(
     return new Response("Storage not found", { status: 404 });
   }
 
-  const client = createClient(storage);
+  const client = createClient(storage, context.cloudflare.env, storageId);
   const url = new URL(request.url);
   const baseUrl = `/dav/${storageId}`;
 

@@ -16,13 +16,23 @@
     "CHUNK_SIZE_MB": "10",
     "WEBDAV_ENABLED": "false",
     "WEBDAV_USERNAME": "webdav",
-    "WEBDAV_PASSWORD": "changeme"
+    "WEBDAV_PASSWORD": "changeme",
+    "GOOGLE_CLIENT_ID": "",
+    "GOOGLE_CLIENT_SECRET": "",
+    "GOOGLE_REDIRECT_URI": ""
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "clist",
       "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "clist",
+      "preview_bucket_name": "clist-preview"
     }
   ]
 }

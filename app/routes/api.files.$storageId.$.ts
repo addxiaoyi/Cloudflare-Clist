@@ -2,60 +2,13 @@ import type { Route } from "./+types/api.files.$storageId.$";
 import { getStorageById, initDatabase, updateStorage } from "~/lib/storage";
 import { requireAuth } from "~/lib/auth";
 import { getShareByToken, verifySharePassword } from "~/lib/shares";
-import { S3Client } from "~/lib/s3-client";
-import { WebdevClient } from "~/lib/webdev-client";
-import { OneDriveClient } from "~/lib/onedrive-client";
-import { GoogleDriveClient } from "~/lib/gdrive-client";
-import { AliyunDriveClient } from "~/lib/alicloud-client";
-import { BaiduYunClient } from "~/lib/baiduyun-client";
+import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
 import { getRequestMeta, logAudit } from "~/lib/audit";
 import { getFileType, getMimeType } from "~/lib/file-utils";
 
-type StorageClient = S3Client | WebdevClient | OneDriveClient | GoogleDriveClient | AliyunDriveClient | BaiduYunClient;
 type StatefulClient = {
   getStateUpdates: () => { config?: Record<string, any>; saving?: Record<string, any> } | null;
 };
-
-function createClient(storage: {
-  type: string;
-  endpoint: string;
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  bucket: string;
-  basePath: string;
-  config?: Record<string, any>;
-  saving?: Record<string, any>;
-}): StorageClient {
-  if (storage.type === "webdev") {
-    return new WebdevClient({
-      endpoint: storage.endpoint,
-      username: storage.accessKeyId,
-      password: storage.secretAccessKey,
-      basePath: storage.basePath,
-    });
-  }
-  if (storage.type === "onedrive") {
-    return new OneDriveClient({ config: storage.config, saving: storage.saving });
-  }
-  if (storage.type === "gdrive") {
-    return new GoogleDriveClient({ config: storage.config, saving: storage.saving });
-  }
-  if (storage.type === "alicloud") {
-    return new AliyunDriveClient({ config: storage.config, saving: storage.saving });
-  }
-  if (storage.type === "baiduyun") {
-    return new BaiduYunClient({ config: storage.config, saving: storage.saving });
-  }
-  return new S3Client({
-    endpoint: storage.endpoint,
-    region: storage.region,
-    accessKeyId: storage.accessKeyId,
-    secretAccessKey: storage.secretAccessKey,
-    bucket: storage.bucket,
-    basePath: storage.basePath,
-  });
-}
 
 async function persistClientState(
   client: StorageClient,
@@ -169,7 +122,7 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // 配置无效时 createClient 会抛错（如 endpoint 为空），转成 JSON 错误而非 500 页面
   let client;
   try {
-    client = createClient(storage);
+    client = createClient(storage, context.cloudflare.env, storageId);
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "存储配置无效，请检查后重试" },
@@ -341,7 +294,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
   }
 
-  const client = createClient(storage);
+  const client = createClient(storage, context.cloudflare.env, storageId);
 
   // Initialize multipart upload
   if (method === "POST" && action === "multipart-init") {
@@ -783,6 +736,92 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     } catch (error) {
       return Response.json(
         { error: error instanceof Error ? error.message : "Failed to move" },
+        { status: 500 }
+      );
+    }
+  }
+
+  // Copy file or folder (keep source)
+  if (method === "POST" && action === "copy") {
+    try {
+      const body = await request.json() as { destPath?: string };
+      const { destPath } = body;
+
+      if (destPath === undefined) {
+        return Response.json({ error: "destPath is required" }, { status: 400 });
+      }
+
+      const isDirectory = path.endsWith("/");
+      const cleanPath = path.replace(/\/$/, "");
+      const fileName = cleanPath.includes("/")
+        ? cleanPath.substring(cleanPath.lastIndexOf("/") + 1)
+        : cleanPath;
+
+      // destPath is the target directory, fileName is preserved
+      const targetDir = destPath.endsWith("/") ? destPath : (destPath ? destPath + "/" : "");
+      const newPath = targetDir + fileName + (isDirectory ? "/" : "");
+
+      const canDirectCopy = typeof (client as { copyObject?: (src: string, dest: string) => Promise<void> }).copyObject === "function";
+      if (isDirectory) {
+        // Copy folder: list all objects under prefix, copy to new prefix
+        const listAll = async (prefix: string): Promise<string[]> => {
+          const keys: string[] = [];
+          let continuationToken: string | undefined;
+
+          do {
+            const result = await withClientState(
+              client,
+              db,
+              storageId,
+              () => client.listObjects(prefix, "", 1000, continuationToken)
+            );
+            for (const obj of result.objects) {
+              keys.push(obj.key);
+            }
+            continuationToken = result.nextContinuationToken;
+          } while (continuationToken);
+
+          return keys;
+        };
+
+        const oldPrefix = cleanPath + "/";
+        const newPrefix = targetDir + fileName + "/";
+        const keysToCopy = await listAll(oldPrefix);
+
+        for (const key of keysToCopy) {
+          const newKey = newPrefix + key.substring(oldPrefix.length);
+          await withClientState(client, db, storageId, () => client.copyObject(key, newKey));
+        }
+
+        await logAudit(db, {
+          action: "file.copy",
+          userType,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          storageId,
+          path,
+          detail: { newPath: newPrefix, copied: keysToCopy.length, isDirectory: true },
+        });
+        return Response.json({ success: true, newPath: newPrefix, copied: keysToCopy.length });
+      } else {
+        if (!canDirectCopy) {
+          return Response.json({ error: "该存储不支持复制操作" }, { status: 400 });
+        }
+        await withClientState(client, db, storageId, () => client.copyObject(path, newPath));
+        await logAudit(db, {
+          action: "file.copy",
+          userType,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+          storageId,
+          path,
+          detail: { newPath, isDirectory: false },
+        });
+        return Response.json({ success: true, newPath });
+      }
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : "Failed to copy" },
         { status: 500 }
       );
     }

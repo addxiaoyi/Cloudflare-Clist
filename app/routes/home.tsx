@@ -564,9 +564,12 @@ function StorageModal({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; latencyMs?: number; items?: number; error?: string } | null>(null);
   const driveConfig = driveConfigMap[formData.type || ""];
   const isS3 = formData.type === "s3";
   const isWebdav = formData.type === "webdev";
+  const isR2 = formData.type === "r2";
 
   const handleTypeChange = (nextType: string) => {
     setFormData({
@@ -706,6 +709,112 @@ function StorageModal({
     }
   };
 
+  // 用当前表单草稿测试连接，不落库
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/storages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "test-connection",
+          storageId: storage?.id || 0,
+          type: formData.type,
+          endpoint: formData.endpoint,
+          region: formData.region,
+          accessKeyId: formData.accessKeyId,
+          secretAccessKey: formData.secretAccessKey,
+          bucket: formData.bucket,
+          basePath: formData.basePath,
+          config: formData.config || {},
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; latencyMs?: number; items?: number; error?: string };
+      setTestResult({ ok: Boolean(data.ok), latencyMs: data.latencyMs, items: data.items, error: data.error });
+    } catch {
+      setTestResult({ ok: false, error: "网络错误" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthError, setOauthError] = useState("");
+  const [oauthConfigured, setOauthConfigured] = useState(false);
+  const [oauthAuthorized, setOauthAuthorized] = useState(false);
+
+  // gdrive 类型时查询 OAuth 配置与授权状态，用于显示按钮提示
+  useEffect(() => {
+    if (formData.type !== "gdrive") {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/gdrive-oauth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "status", storageId: storage?.id || 0 }),
+        });
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as { configured?: boolean; authorized?: boolean };
+        if (!cancelled) {
+          setOauthConfigured(Boolean(data.configured));
+          setOauthAuthorized(Boolean(data.authorized));
+        }
+      } catch {
+        // status 仅作提示，失败静默
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.type, storage?.id]);
+
+  // 发起 Google OAuth：已有存储直接跳转；新存储先落库拿到 id 再跳转
+  const startGdriveAuth = async () => {
+    setOauthLoading(true);
+    setOauthError("");
+    try {
+      let storageId = storage?.id;
+      if (!storageId) {
+        const configToSend = { ...(formData.config || {}) };
+        delete configToSend.refresh_token;
+        const res = await fetch("/api/storages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...formData, config: configToSend }),
+        });
+        const data = (await res.json()) as { error?: string; storage?: { id?: number } };
+        if (!res.ok || !data.storage?.id) {
+          setOauthError(data.error || "保存存储失败，无法发起授权");
+          setOauthLoading(false);
+          return;
+        }
+        storageId = data.storage.id;
+        onSave(); // 刷新存储列表
+      }
+      const res = await fetch("/api/gdrive-oauth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", storageId }),
+      });
+      const data = (await res.json()) as { error?: string; url?: string };
+      if (!res.ok || !data.url) {
+        setOauthError(data.error || "发起授权失败");
+        setOauthLoading(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setOauthError("网络错误");
+      setOauthLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onCancel}>
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -740,6 +849,7 @@ function StorageModal({
                 <option value="gdrive">Google Drive</option>
                 <option value="alicloud">阿里云盘</option>
                 <option value="baiduyun">百度网盘</option>
+                <option value="r2">Cloudflare R2</option>
               </select>
             </div>
             {(isS3 || isWebdav) && (
@@ -820,12 +930,50 @@ function StorageModal({
                 </div>
               </>
             )}
+            {isR2 && (
+              <div className="col-span-2">
+                <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
+                  使用部署时 wrangler 配置的 <code className="text-zinc-700 dark:text-zinc-300">r2_buckets</code> 绑定，
+                  无需填写密钥。部署了 R2 绑定后系统会自动挂载，这里可手动添加或调整根路径。
+                </div>
+                <label className="block text-xs text-zinc-500 mb-1.5 mt-3">根路径（可选）</label>
+                <input
+                  type="text"
+                  value={formData.basePath}
+                  onChange={(e) => setFormData({ ...formData, basePath: e.target.value })}
+                  className="w-full field"
+                  placeholder="/photos"
+                />
+              </div>
+            )}
             {driveConfig && (
               <div className="col-span-2 border-t border-zinc-200 dark:border-zinc-700 pt-3 mt-1">
                 <div className="text-xs text-zinc-500 mb-2 font-medium">驱动配置 - {driveConfig.name}</div>
                 <div className="space-y-3">
                   {driveConfig.fields.map(renderConfigField)}
                 </div>
+                {formData.type === "gdrive" && (
+                  <div className="pt-1 space-y-2">
+                    <div className="text-xs text-zinc-500 leading-relaxed">
+                      {oauthConfigured
+                        ? oauthAuthorized
+                          ? "已通过 Google 授权，刷新令牌已保存"
+                          : "尚未授权，点击下方按钮跳转 Google 完成授权"
+                        : "未配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET，可手动填写下方刷新令牌"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startGdriveAuth}
+                      disabled={oauthLoading}
+                      className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
+                    >
+                      {oauthLoading ? "跳转中..." : "通过 Google 授权"}
+                    </button>
+                    {oauthError && (
+                      <div className="text-red-500 dark:text-red-400 text-xs font-medium">{oauthError}</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             <div className="col-span-2">
@@ -885,6 +1033,13 @@ function StorageModal({
             </div>
           </div>
           {error && <div className="text-red-500 dark:text-red-400 text-xs font-medium">{error}</div>}
+          {testResult && (
+            <div className={`text-xs rounded p-2.5 leading-relaxed ${testResult.ok ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400" : "bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400"}`}>
+              {testResult.ok
+                ? `连接成功，耗时 ${testResult.latencyMs}ms，根目录 ${testResult.items} 项`
+                : `连接失败：${testResult.error || "未知错误"}`}
+            </div>
+          )}
           <div className="flex gap-2 pt-2">
             <button
               type="button"
@@ -892,6 +1047,14 @@ function StorageModal({
               className="flex-1 py-2 px-4 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 text-sm transition rounded"
             >
               取消
+            </button>
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={testing || loading}
+              className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 text-sm transition rounded disabled:opacity-50"
+            >
+              {testing ? "测试中..." : "测试连接"}
             </button>
             <button
               type="submit"
@@ -1997,6 +2160,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const [batchMoveOpen, setBatchMoveOpen] = useState(false);
   const [batchMoveDest, setBatchMoveDest] = useState("");
   const [batchMoving, setBatchMoving] = useState(false);
+  const [batchCopyOpen, setBatchCopyOpen] = useState(false);
+  const [batchCopyDest, setBatchCopyDest] = useState("");
+  const [batchCopying, setBatchCopying] = useState(false);
   const [shareTarget, setShareTarget] = useState<S3Object | null>(null);
   const [shareToken, setShareToken] = useState("");
   const [shareUrl, setShareUrl] = useState("");
@@ -2005,6 +2171,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const [shareExpireHours, setShareExpireHours] = useState(0);
   const [sharePassword, setSharePassword] = useState("");
   const [creatingShare, setCreatingShare] = useState(false);
+  const [shareId, setShareId] = useState<number | null>(null);
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -2219,6 +2387,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     setCustomShareToken("");
     setShareExpireHours(0);
     setSharePassword("");
+    setShareId(null);
+    setShareExpiresAt(null);
   };
 
   const handleCreateShare = async () => {
@@ -2247,9 +2417,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       });
 
       if (res.ok) {
-        const data = (await res.json()) as { share: { shareToken: string }; shareUrl: string };
+        const data = (await res.json()) as { share: { shareToken: string; id?: number; expiresAt?: string | null }; shareUrl: string };
         setShareToken(data.share.shareToken);
         setShareUrl(data.shareUrl);
+        setShareId(data.share.id ?? null);
+        setShareExpiresAt(data.share.expiresAt || null);
         try {
           const QRCode = await import("qrcode");
           const dataUrl = await QRCode.toDataURL(data.shareUrl, { margin: 1, width: 240 });
@@ -2274,6 +2446,30 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     }).catch(() => {
       toast("复制失败，请手动复制", "error");
     });
+  };
+
+  // 撤销分享：删除服务端记录，访客立即无法访问
+  const handleRevokeShare = async () => {
+    if (!shareId) return;
+    const ok = await confirm({
+      title: "撤销分享",
+      message: "确定撤销此分享链接?撤销后访客将无法再访问。",
+      confirmText: "撤销",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/shares?id=${shareId}`, { method: "DELETE" });
+      if (res.ok) {
+        toast("分享已撤销", "success");
+        setShareTarget(null);
+      } else {
+        const data = (await res.json()) as { error?: string };
+        toast(data.error || "撤销失败", "error");
+      }
+    } catch {
+      toast("网络错误", "error");
+    }
   };
 
   const toggleSelect = (key: string) => {
@@ -2366,6 +2562,40 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     setBatchMoveOpen(true);
   };
 
+  const startBatchCopy = async () => {
+    if (selectedKeys.size === 0) return;
+    setBatchCopyDest("");
+    await loadAllFolders();
+    setBatchCopyOpen(true);
+  };
+
+  const handleBatchCopy = async () => {
+    if (selectedKeys.size === 0) return;
+    setBatchCopying(true);
+    let failed = 0;
+    try {
+      for (const key of selectedKeys) {
+        try {
+          const res = await fetch(`${apiFileUrl(storage.id, key)}?action=copy`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ destPath: batchCopyDest }),
+          });
+          if (!res.ok) failed++;
+        } catch {
+          failed++;
+        }
+      }
+      if (failed > 0) toast(`复制完成，${failed} 个项目失败`, "error");
+      else toast("已复制所选项目", "success");
+      setBatchCopyOpen(false);
+      setSelectedKeys(new Set());
+      loadFiles();
+    } finally {
+      setBatchCopying(false);
+    }
+  };
+
   const handleBatchMove = async () => {
     if (selectedKeys.size === 0) return;
     setBatchMoving(true);
@@ -2393,17 +2623,69 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     }
   };
 
-  const handleBatchDownload = () => {
+  // 递归收集文件夹内所有文件
+  const collectFolderFiles = async (folderKey: string, prefix: string, out: { key: string; name: string }[]) => {
+    const res = await fetch(`${apiFileUrl(storage.id, folderKey)}?action=list`);
+    if (!res.ok) return;
+    const data = (await res.json()) as { objects?: S3Object[] };
+    for (const obj of data.objects || []) {
+      if (obj.isDirectory) {
+        await collectFolderFiles(obj.key, `${prefix}${obj.name}/`, out);
+      } else {
+        out.push({ key: obj.key, name: `${prefix}${obj.name}` });
+      }
+    }
+  };
+
+  const handleBatchDownload = async () => {
     const files = objects.filter((obj) => !obj.isDirectory && selectedKeys.has(obj.key));
     const folders = objects.filter((obj) => obj.isDirectory && selectedKeys.has(obj.key));
-    if (files.length === 0) {
-      toast("未选中可下载的文件（文件夹暂不支持批量下载）", "info");
+    if (files.length === 0 && folders.length === 0) {
+      toast("未选中可下载的文件", "info");
       return;
     }
+
+    // 选中了文件夹：递归收集后打包 zip
     if (folders.length > 0) {
-      toast(`已忽略 ${folders.length} 个文件夹，开始下载 ${files.length} 个文件（如被浏览器拦截，请允许弹窗）`, "info");
+      const collected: { key: string; name: string }[] = [];
+      for (const f of files) collected.push({ key: f.key, name: f.name });
+      for (const folder of folders) {
+        await collectFolderFiles(folder.key, folder.name + "/", collected);
+      }
+      if (collected.length === 0) {
+        toast("所选文件夹均为空", "info");
+        return;
+      }
+      toast(`正在打包 ${collected.length} 个文件为 zip…`, "info");
+      try {
+        const JSZip = (await import("jszip")).default;
+        const zip = new JSZip();
+        for (const item of collected) {
+          try {
+            const res = await fetch(`${apiFileUrl(storage.id, item.key)}?action=download`);
+            if (!res.ok) continue;
+            zip.file(item.name, await res.blob());
+          } catch {
+            /* 跳过下载失败的文件 */
+          }
+        }
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${folders.length === 1 ? folders[0].name : "batch"}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        toast("打包完成，已开始下载", "success");
+      } catch {
+        toast("打包失败", "error");
+      }
+      return;
     }
-    // 间隔触发，避免浏览器拦截多窗口
+
+    // 纯文件直下，间隔触发避免浏览器拦截多窗口
     files.forEach((f, i) => {
       setTimeout(() => window.open(`${apiFileUrl(storage.id, f.key)}?action=download`, "_blank"), i * 400);
     });
@@ -3174,6 +3456,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                 <ArrowRightLeft />
                 {`移动 (${selectedKeys.size})`}
               </button>
+              <button onClick={startBatchCopy} className="btn btn-sm btn-outline">
+                <Copy />
+                {`复制到 (${selectedKeys.size})`}
+              </button>
               <button onClick={handleBatchDownload} className="btn btn-sm btn-outline">
                 <Download />
                 {`下载 (${objects.filter((o) => !o.isDirectory && selectedKeys.has(o.key)).length})`}
@@ -3709,8 +3995,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                       </div>
                     </div>
                   )}
+                  {shareExpiresAt && <ShareExpiryCountdown expiresAt={shareExpiresAt} />}
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={handleRevokeShare} className="btn btn-danger flex-1 py-2">撤销分享</button>
                   <button onClick={() => setShareTarget(null)} className="btn btn-primary flex-1 py-2">完成</button>
                 </div>
               </>
@@ -3768,6 +4056,33 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             <div className="flex gap-2">
               <button onClick={() => setBatchMoveOpen(false)} className="btn btn-outline flex-1 py-2">取消</button>
               <button onClick={handleBatchMove} disabled={batchMoving} className="btn btn-primary flex-1 py-2">{batchMoving ? "处理中…" : "确定"}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Batch Copy Modal */}
+      {batchCopyOpen && (
+        <Modal title="批量复制到" onClose={() => setBatchCopyOpen(false)}>
+          <div className="space-y-4">
+            <div className="text-xs text-zinc-500">将 {selectedKeys.size} 个选中项目复制到（保留原文件）：</div>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">目标文件夹</label>
+              <select
+                value={batchCopyDest}
+                onChange={(e) => setBatchCopyDest(e.target.value)}
+                className="field"
+              >
+                {allFolders.map((folder) => (
+                  <option key={folder} value={folder}>
+                    {folder === "" ? "/ (根目录)" : "/" + folder}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setBatchCopyOpen(false)} className="btn btn-outline flex-1 py-2">取消</button>
+              <button onClick={handleBatchCopy} disabled={batchCopying} className="btn btn-primary flex-1 py-2">{batchCopying ? "处理中…" : "确定"}</button>
             </div>
           </div>
         </Modal>
@@ -3881,6 +4196,30 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   );
 }
 
+// 分享过期倒计时：每秒刷新剩余时间
+function ShareExpiryCountdown({ expiresAt }: { expiresAt: string }) {
+  const [remaining, setRemaining] = useState(() => new Date(expiresAt).getTime() - Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setRemaining(new Date(expiresAt).getTime() - Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [expiresAt]);
+
+  if (remaining <= 0) {
+    return <div className="text-xs text-red-500 dark:text-red-400 font-medium">该分享已过期</div>;
+  }
+  const total = Math.floor(remaining / 1000);
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const text = d > 0 ? `${d}天 ${h}小时 ${m}分 ${s}秒` : h > 0 ? `${h}小时 ${m}分 ${s}秒` : `${m}分 ${s}秒`;
+  return (
+    <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2">
+      剩余有效时间：<span className="font-medium text-zinc-700 dark:text-zinc-300">{text}</span>
+    </div>
+  );
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const [isAdmin, setIsAdmin] = useState(loaderData.isAdmin);
   const [storages, setStorages] = useState<StorageInfo[]>(loaderData.storages);
@@ -3921,6 +4260,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       }
     }
   }, [siteAnnouncement]);
+
+  // Google OAuth 回调结果提示（授权完成后 Google 重定向回首页）
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauth = params.get("oauth");
+    if (!oauth) {
+      return;
+    }
+    if (oauth === "google-success") {
+      toast("Google Drive 授权成功，刷新令牌已保存", "success");
+    } else if (oauth === "google-error") {
+      toast(`Google Drive 授权失败：${params.get("reason") || "未知错误"}`, "error");
+    }
+    params.delete("oauth");
+    params.delete("reason");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  }, [toast]);
 
   const toggleTheme = useCallback((event: React.MouseEvent) => {
     const newIsDark = !isDark;

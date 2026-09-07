@@ -478,3 +478,47 @@ export async function importStoragesFromBackup(
 
   return { imported, skipped, errors };
 }
+
+// 自动挂载部署的 R2 桶：worker 配了 r2_buckets 绑定且库里没有 r2 存储时，
+// 自动创建一条记录，免去手动添加。幂等，可安全地在每次管理页加载时调用。
+let r2MountChecked = false;
+
+export async function autoMountR2(
+  db: D1Database,
+  env: { R2?: R2Bucket }
+): Promise<void> {
+  if (!env.R2 || r2MountChecked) {
+    return;
+  }
+  r2MountChecked = true;
+
+  const existing = await db
+    .prepare("SELECT id FROM storages WHERE type = 'r2' LIMIT 1")
+    .first<{ id: number }>();
+  if (existing) {
+    return;
+  }
+
+  const nameTaken = await getStorageByName(db, "R2 存储");
+  if (nameTaken) {
+    return;
+  }
+
+  await createStorage(db, {
+    name: "R2 存储",
+    type: "r2",
+    endpoint: "",
+    region: "auto",
+    accessKeyId: "",
+    secretAccessKey: "",
+    bucket: "R2",
+    basePath: "",
+    config: {},
+    saving: {},
+    isPublic: false,
+    guestList: true,
+    guestDownload: true,
+    guestUpload: false,
+  });
+}
+

@@ -8,6 +8,7 @@ export default [
   route("api/changelog", "routes/api.changelog.ts"),
   route("api/audit", "routes/api.audit.ts"),
   route("api/shares", "routes/api.shares.ts"),
+  route("api/gdrive-oauth", "routes/api.gdrive-oauth.ts"),
   route("share", "routes/share.tsx"),
   route("dav/:storageId/*", "routes/dav.$storageId.$.ts"),
 ] satisfies RouteConfig;
