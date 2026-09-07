@@ -199,8 +199,14 @@ function buildCommands(state: SetupState): string {
   if (repo) {
     lines.push(`# 8. GitHub Actions 部署（可选，代替本地 wrangler 命令）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `gh secret set CLOUDFLARE_ACCOUNT_ID --repo ${repo} --body "${cloudflare.accountId}"`, `gh secret set ADMIN_USERNAME --repo ${repo} --body "${site.adminUsername}"`, `gh secret set ADMIN_PASSWORD --repo ${repo} --body "${site.adminPassword}"`);
     if (r2.enabled) lines.push(`gh variable set R2_BUCKET_NAME --repo ${repo} --body "${r2.bucketName}"`);
+    if (webdav.enabled) {
+      lines.push(`gh secret set WEBDAV_USERNAME --repo ${repo} --body "${webdav.username}"`, `gh secret set WEBDAV_PASSWORD --repo ${repo} --body "${webdav.password}"`);
+    }
     if (gdrive.enabled) {
       lines.push(`gh variable set GOOGLE_CLIENT_ID --repo ${repo} --body "${gdrive.clientId}"`, `gh variable set GOOGLE_REDIRECT_URI --repo ${repo} --body "${gdrive.redirectUri}"`, `gh secret set GOOGLE_CLIENT_SECRET --repo ${repo} --body "${gdrive.clientSecret}"`);
+    }
+    if (d1.enabled) {
+      lines.push(`# D1 无需手动配置：未设 D1_DATABASE_ID 变量时，CI 会自动用 wrangler d1 list 查找（API Token 需有 D1 权限）`);
     }
   }
 

@@ -2,7 +2,7 @@
 import sys
 from playwright.sync_api import sync_playwright
 
-BASE = "http://localhost:5177/setup"
+BASE = "http://localhost:5174/setup"
 results = []
 
 def check(name, cond, detail=""):
@@ -12,7 +12,7 @@ def check(name, cond, detail=""):
 with sync_playwright() as p:
     browser = p.chromium.launch(
         headless=True,
-        executable_path="/root/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell",
+        executable_path="/root/.cache/puppeteer/chrome-headless-shell/linux-151.0.7922.71/chrome-headless-shell-linux64/chrome-headless-shell",
     )
     page = browser.new_page()
     console_errors = []
@@ -96,9 +96,11 @@ with sync_playwright() as p:
     page.fill("input[type='password']", "webdav-pass")
     check("WebDAV 密码填后可用", not next_btn.is_disabled())
 
-    # 8. GitHub 步骤（可选，无必填）→ 生成配置
+    # 8. GitHub 步骤（可选）→ 填入仓库验证 gh 命令生成
     page.click("button:has-text('下一步')")
     page.wait_for_timeout(200)
+    page.fill("input[placeholder='你的 GitHub 用户名']", "addxiaoyi")
+    page.fill("input[placeholder='repo-name']", "Cloudflare-Clist")
     check("GitHub 步骤可继续", not next_btn.is_disabled())
     page.click("button:has-text('下一步')")
     page.wait_for_timeout(200)
@@ -112,6 +114,8 @@ with sync_playwright() as p:
     check("wrangler.jsonc 含 GDrive vars", "GOOGLE_CLIENT_ID" in json_t and "GOOGLE_REDIRECT_URI" in json_t)
     check("命令含 GDrive secret 单条", "GOOGLE_CLIENT_SECRET" in cmd_t and "secret put GOOGLE_CLIENT_ID" not in cmd_t)
     check("命令含 WebDAV 凭据", "WEBDAV_USERNAME" in cmd_t and "WEBDAV_PASSWORD" in cmd_t)
+    check("命令含 gh WebDAV secrets", "gh secret set WEBDAV_USERNAME" in cmd_t and "gh secret set WEBDAV_PASSWORD" in cmd_t)
+    check("命令含 gh R2 variable", "gh variable set R2_BUCKET_NAME" in cmd_t)
     check("命令不含重复 GDrive 回调 secret", "secret put GOOGLE_REDIRECT_URI" not in cmd_t)
 
     # 10. 完整校验通过后无警告
