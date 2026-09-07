@@ -27,6 +27,11 @@ import {
 } from "~/lib/auth";
 import { getRequestMeta, logAudit } from "~/lib/audit";
 
+// 仅 HTTPS 才给 cookie 加 Secure；http 开发环境加 Secure 会被浏览器拒收
+function isSecureRequest(request: Request): boolean {
+  return new URL(request.url).protocol === "https:";
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
   await initDatabase(db);
@@ -39,7 +44,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     await renewSession(db, auth.session.id);
     headers["Set-Cookie"] = createSessionCookie(
       auth.session.id,
-      SESSION_DEFAULT_HOURS * 3600
+      SESSION_DEFAULT_HOURS * 3600,
+      isSecureRequest(request)
     );
   }
 
@@ -119,7 +125,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         { success: true },
         {
           headers: {
-            "Set-Cookie": createSessionCookie(sessionId, expiresInHours * 3600),
+            "Set-Cookie": createSessionCookie(sessionId, expiresInHours * 3600, isSecureRequest(request)),
           },
         }
       );
@@ -293,8 +299,10 @@ export async function action({ request, context }: Route.ActionArgs) {
       return Response.json({ error: "Storage ID required" }, { status: 400 });
     }
 
-    const deleted = await deleteStorage(db, id);
-    if (!deleted) {
+    // 先确认存在并写审计，再删除。删除后父行消失，
+    // 此时再插入指向它的审计记录会触发外键约束失败（500）
+    const existing = await getStorageById(db, id);
+    if (!existing) {
       return Response.json({ error: "Storage not found" }, { status: 404 });
     }
 
@@ -305,6 +313,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       userAgent: meta.userAgent,
       storageId: id,
     });
+    await deleteStorage(db, id);
     return Response.json({ success: true });
   }
 

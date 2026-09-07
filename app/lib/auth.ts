@@ -111,9 +111,14 @@ export function getSessionIdFromCookie(cookieHeader: string | null): string | nu
   return null;
 }
 
-export function createSessionCookie(sessionId: string, maxAge: number = 86400): string {
-  // Secure: 生产环境为 HTTPS；localhost 现代浏览器同样接受
-  return `session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=${maxAge}`;
+export function createSessionCookie(
+  sessionId: string,
+  maxAge: number = 86400,
+  secure: boolean = true
+): string {
+  // 生产环境 HTTPS 必须 Secure；http 下的 localhost/开发环境去掉 Secure，
+  // 否则浏览器（尤其非 Chrome 内核）会直接拒收该 cookie 导致登录态丢失
+  return `session=${sessionId}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}; Max-Age=${maxAge}`;
 }
 
 export function deleteSessionCookie(): string {
