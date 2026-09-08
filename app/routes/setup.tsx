@@ -70,6 +70,7 @@ interface WebdavConfig {
 interface GithubConfig {
   repoOwner: string;
   repoName: string;
+  token: string;
 }
 
 interface SetupState {
@@ -89,7 +90,7 @@ const emptyState: SetupState = {
   r2: { enabled: false, bucketName: "clist", binding: "R2" },
   gdrive: { enabled: false, clientId: "", clientSecret: "", redirectUri: "" },
   webdav: { enabled: false, username: "webdav", password: "" },
-  github: { repoOwner: "", repoName: "" },
+  github: { repoOwner: "", repoName: "", token: "" },
 };
 
 // ---------------------------------------------------------------------------
@@ -107,6 +108,141 @@ function isHttpsUrl(v: string): boolean {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// GitHub Secrets / Variables 一键写入
+// ---------------------------------------------------------------------------
+
+const GH_API = "https://api.github.com";
+
+interface WriteTarget {
+  name: string;
+  kind: "secret" | "variable";
+  value: string;
+}
+
+interface WriteEntry {
+  name: string;
+  kind: "secret" | "variable";
+  status: "pending" | "ok" | "error";
+  detail?: string;
+}
+
+function b64FromBytes(bytes: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(s);
+}
+
+function bytesFromB64(b64: string): Uint8Array {
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+
+// libsodium crypto_box_seal：GitHub Secrets API 要求的加密格式。
+// tweetnacl 含 Node 端 require('crypto')，只能在浏览器侧动态加载，避免污染 SSR 产物。
+type NaclModule = typeof import("tweetnacl");
+type BlakeModule = typeof import("blakejs");
+let naclMod: NaclModule | null = null;
+let blake2bFn: BlakeModule["blake2b"] | null = null;
+
+async function loadCrypto(): Promise<void> {
+  if (!naclMod) {
+    const [n, b] = await Promise.all([import("tweetnacl"), import("blakejs")]);
+    naclMod = n;
+    blake2bFn = b.blake2b;
+  }
+}
+
+async function boxSeal(value: string, recipientKeyB64: string): Promise<string> {
+  await loadCrypto();
+  const recipient = bytesFromB64(recipientKeyB64);
+  const ephemeral = naclMod!.box.keyPair();
+  const nonce = blake2bFn!(new Uint8Array([...ephemeral.publicKey, ...recipient]), undefined, 24);
+  const cipher = naclMod!.box(new TextEncoder().encode(value), nonce, recipient, ephemeral.secretKey);
+  const out = new Uint8Array(32 + cipher.length);
+  out.set(ephemeral.publicKey, 0);
+  out.set(cipher, 32);
+  return b64FromBytes(out);
+}
+
+async function ghJson(token: string, path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${GH_API}${path}`, {
+    ...init,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
+  });
+}
+
+async function writeGitHubSecret(owner: string, repo: string, name: string, value: string, token: string): Promise<void> {
+  const keyRes = await ghJson(token, `/repos/${owner}/${repo}/actions/secrets/public-key`);
+  if (!keyRes.ok) throw new Error(`获取公钥失败 (${keyRes.status})`);
+  const key = (await keyRes.json()) as { key_id: string; key: string };
+  const res = await ghJson(token, `/repos/${owner}/${repo}/actions/secrets/${name}`, {
+    method: "PUT",
+    body: JSON.stringify({ encrypted_value: await boxSeal(value, key.key), key_id: key.key_id }),
+  });
+  if (!res.ok) throw new Error(`写入失败 (${res.status})`);
+}
+
+async function writeGitHubVariable(owner: string, repo: string, name: string, value: string, token: string): Promise<void> {
+  const payload = JSON.stringify({ name, value });
+  let res = await ghJson(token, `/repos/${owner}/${repo}/actions/variables/${name}`, {
+    method: "PUT",
+    body: payload,
+  });
+  if (res.status === 404) {
+    res = await ghJson(token, `/repos/${owner}/${repo}/actions/variables`, {
+      method: "POST",
+      body: payload,
+    });
+  }
+  if (!res.ok) throw new Error(`写入失败 (${res.status})`);
+}
+
+function collectWriteTargets(state: SetupState): WriteTarget[] {
+  const targets: WriteTarget[] = [];
+  const add = (name: string, kind: "secret" | "variable", value: string) => {
+    if (value) targets.push({ name, kind, value });
+  };
+  add("CLOUDFLARE_API_TOKEN", "secret", state.cloudflare.apiToken);
+  add("CLOUDFLARE_ACCOUNT_ID", "secret", state.cloudflare.accountId);
+  add("WORKER_NAME", "variable", state.cloudflare.workerName);
+  add("COMPATIBILITY_DATE", "variable", state.cloudflare.compatibilityDate);
+  add("OBSERVABILITY_ENABLED", "variable", state.cloudflare.observability ? "true" : "false");
+  add("SITE_TITLE", "variable", state.site.siteTitle);
+  add("SITE_ANNOUNCEMENT", "variable", state.site.announcement);
+  add("CHUNK_SIZE_MB", "variable", String(state.site.chunkSizeMb));
+  if (state.site.adminUsername && state.site.adminPassword) {
+    add("ADMIN_USERNAME", "secret", state.site.adminUsername);
+    add("ADMIN_PASSWORD", "secret", state.site.adminPassword);
+  }
+  if (state.d1.enabled) {
+    add("D1_DATABASE_NAME", "variable", state.d1.databaseName);
+    add("D1_BINDING", "variable", state.d1.binding);
+  }
+  add("WEBDAV_ENABLED", "variable", state.webdav.enabled ? "true" : "false");
+  if (state.webdav.enabled) {
+    add("WEBDAV_USERNAME", "secret", state.webdav.username);
+    add("WEBDAV_PASSWORD", "secret", state.webdav.password);
+  }
+  if (state.r2.enabled) add("R2_BUCKET_NAME", "variable", state.r2.bucketName);
+  if (state.gdrive.enabled) {
+    add("GOOGLE_CLIENT_ID", "variable", state.gdrive.clientId);
+    add("GOOGLE_REDIRECT_URI", "variable", state.gdrive.redirectUri);
+    add("GOOGLE_CLIENT_SECRET", "secret", state.gdrive.clientSecret);
+  }
+  return targets;
 }
 
 function loadDraft(): SetupState {
@@ -201,7 +337,7 @@ function buildCommands(state: SetupState): string {
   }
 
   if (repo) {
-    lines.push(`# 8. GitHub Actions 一键部署（仅需配置 CLOUDFLARE_API_TOKEN）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `# Account ID / D1 未配置时自动推导或创建；管理员凭据首次自动生成、后续沿用`);
+    lines.push(`# 8. GitHub Actions 一键部署（仅需 CLOUDFLARE_API_TOKEN；也可在上一步用「一键写入」代替以下命令）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `# Account ID / D1 未配置时自动推导或创建；管理员凭据首次自动生成、后续沿用`);
     if (site.adminUsername && site.adminPassword) {
       lines.push(`gh secret set ADMIN_USERNAME --repo ${repo} --body "${site.adminUsername}"`, `gh secret set ADMIN_PASSWORD --repo ${repo} --body "${site.adminPassword}"`);
     }
@@ -324,6 +460,69 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
   const [copied, setCopied] = useState<"json" | "cmd" | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [writeLog, setWriteLog] = useState<WriteEntry[]>([]);
+  const [writing, setWriting] = useState(false);
+
+  const pushWrite = (target: WriteTarget, status: WriteEntry["status"], detail?: string) => {
+    setWriteLog((prev) => {
+      const next = prev.filter((e) => e.name !== target.name);
+      return [...next, { name: target.name, kind: target.kind, status, detail }];
+    });
+  };
+
+  const runWriteAll = async () => {
+    const { repoOwner, repoName, token } = state.github;
+    if (!repoOwner || !repoName || !token) return;
+    const targets = collectWriteTargets(state);
+    if (targets.length === 0) return;
+    setWriting(true);
+    setWriteLog(targets.map((t) => ({ name: t.name, kind: t.kind, status: "pending" as const })));
+    // 先验证 token 与仓库可达，给出清晰报错
+    const probe = await ghJson(token, `/repos/${repoOwner}/${repoName}`).catch(() => null);
+    if (!probe) {
+      setWriteLog((prev) => [
+        ...prev,
+        { name: "仓库检查", kind: "secret", status: "error", detail: "网络错误，无法连接 GitHub API" },
+      ]);
+      setWriting(false);
+      return;
+    }
+    if (!probe.ok) {
+      setWriteLog((prev) => [
+        ...prev,
+        {
+          name: "仓库检查",
+          kind: "secret",
+          status: "error",
+          detail: probe.status === 404 ? "仓库不存在或 Token 无访问权限" : `GitHub API 返回 ${probe.status}`,
+        },
+      ]);
+      setWriting(false);
+      return;
+    }
+    let failed = 0;
+    for (const t of targets) {
+      try {
+        if (t.kind === "secret") {
+          await writeGitHubSecret(repoOwner, repoName, t.name, t.value, token);
+        } else {
+          await writeGitHubVariable(repoOwner, repoName, t.name, t.value, token);
+        }
+        pushWrite(t, "ok");
+      } catch (err) {
+        failed += 1;
+        pushWrite(t, "error", err instanceof Error ? err.message : String(err));
+      }
+    }
+    setWriting(false);
+    if (failed === 0) {
+      pushWrite(
+        { name: "全部完成", kind: "variable", value: "" },
+        "ok",
+        "Secrets / Variables 已写入，push 代码后即自动部署"
+      );
+    }
+  };
 
   useEffect(() => {
     setState((prev) => ({
@@ -703,7 +902,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
 
           {current.key === "github" && (
             <div className="space-y-4">
-              <SectionTitle icon={<Github className="h-4 w-4" />} title="GitHub Actions 部署" desc="配置后每次 push 自动构建部署，跳过本地 wrangler 命令" />
+              <SectionTitle icon={<Github className="h-4 w-4" />} title="GitHub Actions 部署" desc="一键写入 Secrets / 变量，push 后自动构建部署" />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="仓库 Owner">
                   <input className={inputCls} value={state.github.repoOwner} onChange={(e) => patch("github", { repoOwner: e.target.value })} placeholder="你的 GitHub 用户名" />
@@ -712,8 +911,54 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
                   <input className={inputCls} value={state.github.repoName} onChange={(e) => patch("github", { repoName: e.target.value })} placeholder="repo-name" />
                 </Field>
               </div>
+              <Field label="GitHub Token（临时，仅本次写入使用）" hint="GitHub → Settings → Developer settings → Fine-grained PAT，需仓库 Actions 读写权限；不会保存到草稿之外，仅存于当前页面会话">
+                <input className={inputCls} type="password" value={state.github.token} onChange={(e) => patch("github", { token: e.target.value })} placeholder="github_pat_..." />
+              </Field>
+
+              <button
+                onClick={runWriteAll}
+                disabled={writing || !state.github.token || !state.github.repoOwner || !state.github.repoName}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:enabled:hover:bg-zinc-300"
+              >
+                {writing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" /> 正在写入…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" /> 一键写入 Secrets / 变量
+                  </>
+                )}
+              </button>
+
+              {writeLog.length > 0 && (
+                <div className="max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-800">
+                  {writeLog.map((e) => (
+                    <div key={`${e.name}-${e.status}`} className="flex items-start gap-2 py-0.5">
+                      <span
+                        className={
+                          e.status === "ok"
+                            ? "text-emerald-500"
+                            : e.status === "error"
+                              ? "text-red-500"
+                              : "text-zinc-400"
+                        }
+                      >
+                        {e.status === "ok" ? <Check className="h-3.5 w-3.5" /> : e.status === "error" ? <AlertCircle className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                      </span>
+                      <span className="font-medium text-zinc-600 dark:text-zinc-300">{e.name}</span>
+                      <span className="text-zinc-400 dark:text-zinc-500">
+                        {e.kind === "secret" ? "Secret" : "Variable"}
+                        {e.detail ? ` · ${e.detail}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="rounded-lg bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
-                生成的命令会把全部 Secrets / Vars 写入 GitHub 仓库（使用 <code className="text-zinc-600 dark:text-zinc-300">gh</code> 命令，需先 <code className="text-zinc-600 dark:text-zinc-300">gh auth login</code>）。随后 push 到 main/master 即自动部署。
+                一键写入会把全部 Secrets / 变量直接写入 GitHub 仓库。之后 <code className="text-zinc-600 dark:text-zinc-300">git push</code> 到 main/master 即自动部署。
+                未使用一键写入时，也可用下方「部署命令」中的 <code className="text-zinc-600 dark:text-zinc-300">gh</code> 命令逐条执行（需先 <code className="text-zinc-600 dark:text-zinc-300">gh auth login</code>）。
               </div>
             </div>
           )}
