@@ -21,14 +21,16 @@ with sync_playwright() as p:
     page.goto(BASE, wait_until="networkidle", timeout=30000)
     check("页面渲染", page.locator("h1:has-text('项目初始化向导')").count() > 0)
 
-    # 1. 空表单时下一步应被禁用（管理员必填校验生效）
+    # 1. 空表单：管理员可留空（CI 自动生成）→ 下一步可用
     next_btn = page.locator("button:has-text('下一步')")
-    check("空表单下一步禁用", next_btn.is_disabled())
-    check("显示待完善提示", page.locator("text=项待完善").count() > 0)
+    check("空表单下一步可用（管理员可自动生成）", not next_btn.is_disabled())
 
-    # 2. 填站点但密码过短，仍禁用
+    # 2. 只填用户名未填密码，仍禁用
     page.fill("input[placeholder='CList']", "测试站点")
     page.fill("input[placeholder='admin']", "admin")
+    check("仅填用户名未填密码禁用", next_btn.is_disabled())
+
+    # 2b. 密码过短，仍禁用
     page.fill("input[placeholder='至少 6 位']", "123")
     check("短密码仍禁用", next_btn.is_disabled())
 
@@ -36,22 +38,22 @@ with sync_playwright() as p:
     page.fill("input[placeholder='至少 6 位']", "test123456")
     check("填齐后下一步可用", not next_btn.is_disabled())
 
-    # 4. Cloudflare 步骤：Account ID 为空/非法格式时禁用
+    # 4. Cloudflare 步骤：Account ID 可留空（CI 自动推导），但填了必须合法
     page.click("button:has-text('下一步')")
     page.wait_for_timeout(200)
-    check("Cloudflare 空 AccountID 禁用", next_btn.is_disabled())
-    page.fill("input[placeholder='粘贴 Account ID']", "test-account-id")
+    check("AccountID 留空可用（CI 自动推导）", not next_btn.is_disabled())
+    page.fill("input[placeholder='可选，粘贴 Account ID']", "test-account-id")
     check("AccountID 非 32 位十六进制禁用", next_btn.is_disabled())
-    page.fill("input[placeholder='粘贴 Account ID']", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
+    page.fill("input[placeholder='可选，粘贴 Account ID']", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
     check("AccountID 合法后可用", not next_btn.is_disabled())
 
     # 4b. Worker 名与兼容日期格式校验（Cloudflare 步骤输入顺序：API Token / Account ID / Worker 名称 / 兼容日期）
     step_inputs = page.locator("input")
     worker_input = step_inputs.nth(2)
     date_input = step_inputs.nth(3)
-    page.fill("input[placeholder='粘贴 Account ID']", "test-account-id")
+    page.fill("input[placeholder='可选，粘贴 Account ID']", "test-account-id")
     check("非法 AccountID 恢复禁用", next_btn.is_disabled())
-    page.fill("input[placeholder='粘贴 Account ID']", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
+    page.fill("input[placeholder='可选，粘贴 Account ID']", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6")
     worker_input.fill("bad_name!!")
     check("Worker 名非法禁用", next_btn.is_disabled())
     worker_input.fill("clist")
@@ -116,6 +118,7 @@ with sync_playwright() as p:
     check("命令含 WebDAV 凭据", "WEBDAV_USERNAME" in cmd_t and "WEBDAV_PASSWORD" in cmd_t)
     check("命令含 gh WebDAV secrets", "gh secret set WEBDAV_USERNAME" in cmd_t and "gh secret set WEBDAV_PASSWORD" in cmd_t)
     check("命令含 gh R2 variable", "gh variable set R2_BUCKET_NAME" in cmd_t)
+    check("gh 命令仅需 API_TOKEN", "gh secret set CLOUDFLARE_API_TOKEN" in cmd_t and "gh secret set CLOUDFLARE_ACCOUNT_ID" not in cmd_t)
     check("命令不含重复 GDrive 回调 secret", "secret put GOOGLE_REDIRECT_URI" not in cmd_t)
 
     # 10. 完整校验通过后无警告

@@ -174,19 +174,23 @@ function buildCommands(state: SetupState): string {
   const hasGh = github.repoOwner && github.repoName;
   const repo = hasGh ? `${github.repoOwner}/${github.repoName}` : "";
 
-  lines.push("# 1. 认证", 'export CLOUDFLARE_API_TOKEN="<你的API_Token>"', `export CLOUDFLARE_ACCOUNT_ID="${cloudflare.accountId}"`, "");
+  lines.push("# 1. 认证", 'export CLOUDFLARE_API_TOKEN="<你的API_Token>"', cloudflare.accountId ? `export CLOUDFLARE_ACCOUNT_ID="${cloudflare.accountId}"` : "# Account ID 可留空：wrangler 会用 API Token 自动识别", "");
 
   if (d1.enabled) {
-    lines.push(`# 2. 创建 D1 数据库（仅首次）`, `npx wrangler d1 create ${d1.databaseName}`, `# 把返回的 database_id 填入 wrangler.jsonc 的 d1_databases[].database_id`, "");
+    lines.push(`# 2. D1 数据库：GitHub Actions 部署时会自动查找或创建（无需手动执行）`, `# 本地部署首次需执行: npx wrangler d1 create ${d1.databaseName}`, "");
   }
 
   if (r2.enabled) {
-    lines.push(`# 3. 创建 R2 桶（仅首次）`, `npx wrangler r2 bucket create ${r2.bucketName}`, "");
+    lines.push(`# 3. R2 桶：GitHub Actions 部署时会自动创建（无需手动执行）`, `# 本地部署首次需执行: npx wrangler r2 bucket create ${r2.bucketName}`, "");
   }
 
   lines.push(`# 4. 部署 Worker`, `npx wrangler deploy --config wrangler.jsonc`, "");
 
-  lines.push(`# 5. 写入管理员凭据`, `printf '%s' "${site.adminUsername}" | npx wrangler secret put ADMIN_USERNAME --config wrangler.jsonc`, `printf '%s' "${site.adminPassword}" | npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc`, "");
+  if (site.adminUsername && site.adminPassword) {
+    lines.push(`# 5. 写入管理员凭据`, `printf '%s' "${site.adminUsername}" | npx wrangler secret put ADMIN_USERNAME --config wrangler.jsonc`, `printf '%s' "${site.adminPassword}" | npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc`, "");
+  } else {
+    lines.push(`# 5. 管理员凭据未填：CI 部署时会自动生成并打印在 Actions 日志；本地部署请先补上`, "");
+  }
 
   if (webdav.enabled) {
     lines.push(`# 6. WebDAV 凭据`, `printf '%s' "${webdav.username}" | npx wrangler secret put WEBDAV_USERNAME --config wrangler.jsonc`, `printf '%s' "${webdav.password}" | npx wrangler secret put WEBDAV_PASSWORD --config wrangler.jsonc`, "");
@@ -197,7 +201,10 @@ function buildCommands(state: SetupState): string {
   }
 
   if (repo) {
-    lines.push(`# 8. GitHub Actions 部署（可选，代替本地 wrangler 命令）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `gh secret set CLOUDFLARE_ACCOUNT_ID --repo ${repo} --body "${cloudflare.accountId}"`, `gh secret set ADMIN_USERNAME --repo ${repo} --body "${site.adminUsername}"`, `gh secret set ADMIN_PASSWORD --repo ${repo} --body "${site.adminPassword}"`);
+    lines.push(`# 8. GitHub Actions 一键部署（仅需配置 CLOUDFLARE_API_TOKEN）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `# Account ID / D1 / 管理员凭据 未配置时，CI 会自动推导或自动生成`);
+    if (site.adminUsername && site.adminPassword) {
+      lines.push(`gh secret set ADMIN_USERNAME --repo ${repo} --body "${site.adminUsername}"`, `gh secret set ADMIN_PASSWORD --repo ${repo} --body "${site.adminPassword}"`);
+    }
     if (r2.enabled) lines.push(`gh variable set R2_BUCKET_NAME --repo ${repo} --body "${r2.bucketName}"`);
     if (webdav.enabled) {
       lines.push(`gh secret set WEBDAV_USERNAME --repo ${repo} --body "${webdav.username}"`, `gh secret set WEBDAV_PASSWORD --repo ${repo} --body "${webdav.password}"`);
@@ -206,7 +213,7 @@ function buildCommands(state: SetupState): string {
       lines.push(`gh variable set GOOGLE_CLIENT_ID --repo ${repo} --body "${gdrive.clientId}"`, `gh variable set GOOGLE_REDIRECT_URI --repo ${repo} --body "${gdrive.redirectUri}"`, `gh secret set GOOGLE_CLIENT_SECRET --repo ${repo} --body "${gdrive.clientSecret}"`);
     }
     if (d1.enabled) {
-      lines.push(`# D1 无需手动配置：未设 D1_DATABASE_ID 变量时，CI 会自动用 wrangler d1 list 查找（API Token 需有 D1 权限）`);
+      lines.push(`# D1 无需手动配置：CI 会自动查找或创建数据库，并自动推导 Account ID（API Token 需有 D1 权限）`);
     }
   }
 
@@ -352,10 +359,9 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
 
   const validation = useMemo(() => {
     const errors: string[] = [];
-    if (!state.site.adminUsername.trim()) errors.push("管理员用户名必填");
-    if (state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
-    if (!state.cloudflare.accountId.trim()) errors.push("Cloudflare Account ID 必填");
-    else if (!HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
+    if (!!state.site.adminUsername.trim() !== !!state.site.adminPassword.trim()) errors.push("管理员用户名与密码需同时填写，或都留空由部署时自动生成");
+    else if (state.site.adminPassword.length > 0 && state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
+    if (state.cloudflare.accountId.trim() && !HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
     if (!WORKER_NAME_RE.test(state.cloudflare.workerName)) errors.push("Worker 名称只能含字母、数字、连字符");
     if (!DATE_RE.test(state.cloudflare.compatibilityDate)) errors.push("兼容日期格式应为 YYYY-MM-DD");
     if (state.r2.enabled && !state.r2.bucketName.trim()) errors.push("R2 桶名必填");
@@ -379,11 +385,10 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
   const stepErrors = useMemo(() => {
     const errors: string[] = [];
     if (current.key === "site") {
-      if (!state.site.adminUsername.trim()) errors.push("管理员用户名必填");
-      if (state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
+      if (!!state.site.adminUsername.trim() !== !!state.site.adminPassword.trim()) errors.push("管理员用户名与密码需同时填写，或都留空自动生成");
+      else if (state.site.adminPassword.length > 0 && state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
     } else if (current.key === "cloudflare") {
-      if (!state.cloudflare.accountId.trim()) errors.push("Cloudflare Account ID 必填");
-      else if (!HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
+      if (state.cloudflare.accountId.trim() && !HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
       if (!WORKER_NAME_RE.test(state.cloudflare.workerName)) errors.push("Worker 名称只能含字母、数字、连字符");
       if (!DATE_RE.test(state.cloudflare.compatibilityDate)) errors.push("兼容日期格式应为 YYYY-MM-DD");
     } else if (current.key === "r2") {
@@ -538,7 +543,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
         <div className={cardCls}>
           {current.key === "site" && (
             <div className="space-y-4">
-              <SectionTitle icon={<Megaphone className="h-4 w-4" />} title="站点与管理员账号" desc="基础信息与管理凭据，密码至少 6 位" />
+              <SectionTitle icon={<Megaphone className="h-4 w-4" />} title="站点与管理员账号" desc="管理员可留空：CI 部署时会自动生成并打印凭据" />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="站点标题">
                   <input className={inputCls} value={state.site.siteTitle} onChange={(e) => patch("site", { siteTitle: e.target.value })} placeholder="CList" />
@@ -571,8 +576,8 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
               <Field label="API Token（Secret）" hint="Cloudflare → My Profile → API Tokens → Edit Cloudflare Workers 模板">
                 <input className={inputCls} type="password" value={state.cloudflare.apiToken} onChange={(e) => patch("cloudflare", { apiToken: e.target.value })} placeholder="粘贴 API Token" />
               </Field>
-              <Field label="Account ID" hint="Cloudflare Dashboard 右侧栏">
-                <input className={inputCls} value={state.cloudflare.accountId} onChange={(e) => patch("cloudflare", { accountId: e.target.value })} placeholder="粘贴 Account ID" />
+              <Field label="Account ID" hint="可留空：GitHub Actions 会从 API Token 自动推导">
+                <input className={inputCls} value={state.cloudflare.accountId} onChange={(e) => patch("cloudflare", { accountId: e.target.value })} placeholder="可选，粘贴 Account ID" />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Worker 名称">

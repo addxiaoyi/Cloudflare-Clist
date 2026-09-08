@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      secrets: write # 允许把自动生成的管理员密码写回仓库 Secret，保持跨部署稳定
     steps:
       - uses: actions/checkout@v4
 
@@ -21,15 +22,69 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Wrangler config
+      # 唯一必配项：CLOUDFLARE_API_TOKEN。Account ID 自动推导；D1 缺失时自动创建
+      - name: Resolve Cloudflare account & D1 database
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "缺少必需 Secret: CLOUDFLARE_API_TOKEN（Cloudflare 后台创建 API Token 后用 gh secret set 写入）" >&2
+            exit 1
+          fi
+
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            CLOUDFLARE_ACCOUNT_ID="$(curl -fsS "https://api.cloudflare.com/client/v4/accounts?per_page=1" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(0,'utf8'));if(!d.success||!d.result||!d.result[0]){process.exit(1)}process.stdout.write(d.result[0].id)")" \
+              && echo "已自动推导 Account ID: $CLOUDFLARE_ACCOUNT_ID" \
+              || { echo "无法从 API Token 推导 Account ID，请手动设置 Secret: CLOUDFLARE_ACCOUNT_ID" >&2; exit 1; }
+          fi
+          echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
+
+          D1_DATABASE_NAME="${D1_DATABASE_NAME:-clist}"
+          echo "D1_DATABASE_NAME=$D1_DATABASE_NAME" >> "$GITHUB_ENV"
+
+          if [ -z "$D1_DATABASE_ID" ]; then
+            D1_DATABASE_ID="$(npx wrangler d1 list --json 2>/dev/null | node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync(0,'utf8'));const arr=Array.isArray(data)?data:(data.result||[]);const hit=arr.find(d=>d.name===process.env.D1_DATABASE_NAME);if(hit){process.stdout.write(hit.uuid)}" || true)"
+            if [ -z "$D1_DATABASE_ID" ]; then
+              echo "D1 数据库 $D1_DATABASE_NAME 不存在，自动创建..."
+              D1_DATABASE_ID="$(npx wrangler d1 create "$D1_DATABASE_NAME" | sed -n 's/^database_id = "\([^"]*\)"/\1/p' | head -1)"
+              echo "已自动创建 D1 数据库 $D1_DATABASE_NAME"
+            fi
+            if [ -z "$D1_DATABASE_ID" ]; then
+              echo "无法确定 D1 数据库 ID，请手动创建数据库并设置变量 D1_DATABASE_ID" >&2
+              exit 1
+            fi
+          fi
+          echo "D1_DATABASE_ID=$D1_DATABASE_ID" >> "$GITHUB_ENV"
+
+      # R2 桶：设置了 R2_BUCKET_NAME 但桶不存在时自动创建
+      - name: Ensure R2 bucket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
+        run: |
+          if [ -z "$R2_BUCKET_NAME" ]; then
+            echo "未配置 R2_BUCKET_NAME，跳过 R2 桶检查"
+            exit 0
+          fi
+          if npx wrangler r2 bucket list --json 2>/dev/null | grep -q "\"name\": \"$R2_BUCKET_NAME\""; then
+            echo "R2 桶 $R2_BUCKET_NAME 已存在"
+          else
+            npx wrangler r2 bucket create "$R2_BUCKET_NAME"
+            echo "已自动创建 R2 桶 $R2_BUCKET_NAME"
+          fi
+
+      - name: Generate Wrangler config
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           WORKER_NAME: ${{ vars.WORKER_NAME }}
           WORKER_MAIN: ${{ vars.WORKER_MAIN }}
           COMPATIBILITY_DATE: ${{ vars.COMPATIBILITY_DATE }}
-          D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
-          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+          D1_DATABASE_NAME: ${{ env.D1_DATABASE_NAME }}
+          D1_DATABASE_ID: ${{ env.D1_DATABASE_ID }}
           D1_BINDING: ${{ vars.D1_BINDING }}
           D1_MIGRATIONS_DIR: ${{ vars.D1_MIGRATIONS_DIR }}
           OBSERVABILITY_ENABLED: ${{ vars.OBSERVABILITY_ENABLED }}
@@ -39,29 +94,14 @@ jobs:
           WEBDAV_ENABLED: ${{ vars.WEBDAV_ENABLED }}
           R2_BUCKET_NAME: ${{ vars.R2_BUCKET_NAME }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REDIRECT_URI: ${{ vars.GOOGLE_REDIRECT_URI }}
         run: |
           WORKER_NAME="${WORKER_NAME:-clist}"
           WORKER_MAIN="${WORKER_MAIN:-./workers/app.ts}"
           COMPATIBILITY_DATE="${COMPATIBILITY_DATE:-2025-04-04}"
-          D1_DATABASE_NAME="${D1_DATABASE_NAME:-clist}"
           D1_BINDING="${D1_BINDING:-DB}"
           D1_MIGRATIONS_DIR="${D1_MIGRATIONS_DIR:-./migrations}"
           OBSERVABILITY_ENABLED="${OBSERVABILITY_ENABLED:-true}"
-
-          if [ -z "$D1_DATABASE_ID" ]; then
-            if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-              echo "Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID for D1 lookup." >&2
-              exit 1
-            fi
-            D1_DATABASE_ID="$(npx wrangler d1 list --json | node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync(0,'utf8'));const name=process.env.D1_DATABASE_NAME;const hit=data.find(d=>d.name===name);if(!hit){process.exit(2)};process.stdout.write(hit.uuid);")"
-            if [ $? -ne 0 ] || [ -z "$D1_DATABASE_ID" ]; then
-              echo "Failed to find D1 database ID for name: $D1_DATABASE_NAME" >&2
-              exit 1
-            fi
-          fi
-          export D1_DATABASE_ID
           # 非敏感变量写入 config，随 build 产物走；敏感凭据走 wrangler secret（见下步）
           node scripts/gen-wrangler-config.mjs
 
@@ -73,30 +113,55 @@ jobs:
       - name: Apply D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler d1 migrations apply ${{ vars.D1_DATABASE_NAME }} --remote --config wrangler.jsonc
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          D1_DATABASE_NAME: ${{ env.D1_DATABASE_NAME }}
+        run: npx wrangler d1 migrations apply "${D1_DATABASE_NAME}" --remote --config wrangler.jsonc
+
+      # 管理员凭据：未配置时自动生成并写回仓库 Secret，保证后续部署不换密码
+      - name: Resolve admin credentials
+        env:
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
+          echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> "$GITHUB_ENV"
+          if [ -z "$ADMIN_PASSWORD" ]; then
+            ADMIN_PASSWORD="$(node -e "console.log(require('crypto').randomBytes(6).toString('hex'))")"
+            if printf '%s' "$ADMIN_PASSWORD" | gh secret set ADMIN_PASSWORD --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "已自动生成管理员密码并写回仓库 Secret（后续部署保持不变）"
+            else
+              echo "警告：无法写回 ADMIN_PASSWORD Secret，本次部署后密码会变化" >&2
+            fi
+          fi
+          echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
+          echo "::warning title=管理员登录凭据::用户名 ${ADMIN_USERNAME} / 密码 ${ADMIN_PASSWORD}"
+          {
+            echo "## 管理员登录凭据"
+            echo ""
+            echo "- 用户名: \`${ADMIN_USERNAME}\`"
+            echo "- 密码: \`${ADMIN_PASSWORD}\`"
+            echo ""
+            echo "> 未在 GitHub Secrets 配置 ADMIN_USERNAME/ADMIN_PASSWORD 时自动生成。"
+            echo "> 已自动写回仓库 Secret，后续部署保持不变；可在仓库 Settings → Secrets 中修改。"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --config build/server/wrangler.json
 
-      - name: Configure admin secrets
+      # worker 已部署后再写入 secrets（wrangler secret put 需要 worker 已存在）
+      - name: Configure worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_USERNAME: ${{ env.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ env.ADMIN_PASSWORD }}
           WEBDAV_USERNAME: ${{ secrets.WEBDAV_USERNAME }}
           WEBDAV_PASSWORD: ${{ secrets.WEBDAV_PASSWORD }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
-          # 必填的管理员凭据缺失时直接失败，避免“部署成功但登录不了”
-          if [ -z "$ADMIN_USERNAME" ] || [ -z "$ADMIN_PASSWORD" ]; then
-            echo "Missing required secrets: ADMIN_USERNAME / ADMIN_PASSWORD" >&2
-            exit 1
-          fi
           # 经 stdin 写入 secret，避免密码含特殊字符时被 shell 展开破坏
           printf '%s' "$ADMIN_USERNAME" | npx wrangler secret put ADMIN_USERNAME --config build/server/wrangler.json
           printf '%s' "$ADMIN_PASSWORD" | npx wrangler secret put ADMIN_PASSWORD --config build/server/wrangler.json
