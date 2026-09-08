@@ -127,7 +127,18 @@ export async function action({ request, context }: Route.ActionArgs) {
           userAgent: meta.userAgent,
           detail: { username },
         });
-        return Response.json({ error: "Invalid credentials" }, { status: 401 });
+        const adminUser = (context.cloudflare.env as Record<string, string | undefined>).ADMIN_USERNAME;
+        const hasAdminVar =
+          adminUser !== undefined && adminUser !== null && adminUser !== "";
+        return Response.json(
+          {
+            error: "Invalid credentials",
+            hint: hasAdminVar
+              ? `请检查用户名与密码；若在 Cloudflare 控制台配置过 ADMIN_USERNAME / ADMIN_PASSWORD Secret，Secret 会覆盖 wrangler.jsonc 中的值，请使用 Secret 中的凭据或在控制台删除 Secret 后使用默认值 admin / changeme。`
+              : "管理员账号未配置，请在 Cloudflare 控制台 Settings → Variables and Secrets 中添加 ADMIN_USERNAME 与 ADMIN_PASSWORD。",
+          },
+          { status: 401 }
+        );
       }
 
       // “记住我”=30 天，否则 7 天

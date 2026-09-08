@@ -449,8 +449,8 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
       if (res.ok) {
         onLogin();
       } else {
-        const data = (await res.json()) as { error?: string };
-        setError(data.error || "登录失败");
+        const data = (await res.json()) as { error?: string; hint?: string };
+        setError(data.hint || data.error || "登录失败");
       }
     } catch {
       setError("网络错误");
