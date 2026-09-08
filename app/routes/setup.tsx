@@ -189,7 +189,7 @@ function buildCommands(state: SetupState): string {
   if (site.adminUsername && site.adminPassword) {
     lines.push(`# 5. 写入管理员凭据`, `printf '%s' "${site.adminUsername}" | npx wrangler secret put ADMIN_USERNAME --config wrangler.jsonc`, `printf '%s' "${site.adminPassword}" | npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc`, "");
   } else {
-    lines.push(`# 5. 管理员凭据未填：CI 部署时会自动生成并打印在 Actions 日志；本地部署请先补上`, "");
+    lines.push(`# 5. 管理员凭据未填：CI 首次部署自动生成并打印在 Actions 日志，后续部署沿用；本地部署请先补上`, "");
   }
 
   if (webdav.enabled) {
@@ -201,7 +201,7 @@ function buildCommands(state: SetupState): string {
   }
 
   if (repo) {
-    lines.push(`# 8. GitHub Actions 一键部署（仅需配置 CLOUDFLARE_API_TOKEN）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `# Account ID / D1 / 管理员凭据 未配置时，CI 会自动推导或自动生成`);
+    lines.push(`# 8. GitHub Actions 一键部署（仅需配置 CLOUDFLARE_API_TOKEN）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `# Account ID / D1 未配置时自动推导或创建；管理员凭据首次自动生成、后续沿用`);
     if (site.adminUsername && site.adminPassword) {
       lines.push(`gh secret set ADMIN_USERNAME --repo ${repo} --body "${site.adminUsername}"`, `gh secret set ADMIN_PASSWORD --repo ${repo} --body "${site.adminPassword}"`);
     }

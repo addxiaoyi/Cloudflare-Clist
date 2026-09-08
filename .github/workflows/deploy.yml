@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      secrets: write # 允许把自动生成的管理员密码写回仓库 Secret，保持跨部署稳定
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +35,13 @@ jobs:
           fi
 
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            CLOUDFLARE_ACCOUNT_ID="$(curl -fsS "https://api.cloudflare.com/client/v4/accounts?per_page=1" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(0,'utf8'));if(!d.success||!d.result||!d.result[0]){process.exit(1)}process.stdout.write(d.result[0].id)")" \
-              && echo "已自动推导 Account ID: $CLOUDFLARE_ACCOUNT_ID" \
-              || { echo "无法从 API Token 推导 Account ID，请手动设置 Secret: CLOUDFLARE_ACCOUNT_ID" >&2; exit 1; }
+            CLOUDFLARE_ACCOUNT_ID="$(curl -fsS "https://api.cloudflare.com/client/v4/accounts?per_page=1" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync(0,'utf8'));if(!d.success||!d.result||!d.result[0]){process.exit(1)}process.stdout.write(d.result[0].id)")"
+            if [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+              echo "已自动推导 Account ID: $CLOUDFLARE_ACCOUNT_ID"
+            else
+              echo "无法从 API Token 推导 Account ID，请手动设置 Secret: CLOUDFLARE_ACCOUNT_ID" >&2
+              exit 1
+            fi
           fi
           echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
 
@@ -117,33 +120,37 @@ jobs:
           D1_DATABASE_NAME: ${{ env.D1_DATABASE_NAME }}
         run: npx wrangler d1 migrations apply "${D1_DATABASE_NAME}" --remote --config wrangler.jsonc
 
-      # 管理员凭据：未配置时自动生成并写回仓库 Secret，保证后续部署不换密码
+      # 管理员凭据：优先用已部署的密码（wrangler secret list 检测），首次部署自动生成
       - name: Resolve admin credentials
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
           ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
           echo "ADMIN_USERNAME=$ADMIN_USERNAME" >> "$GITHUB_ENV"
-          if [ -z "$ADMIN_PASSWORD" ]; then
+          if [ -n "$ADMIN_PASSWORD" ]; then
+            echo "使用 GitHub Secrets 中配置的管理员密码"
+          elif npx wrangler secret list --config build/server/wrangler.json 2>/dev/null | grep -q '"name": "ADMIN_PASSWORD"'; then
+            echo "检测到已部署的 ADMIN_PASSWORD，保持现有密码不变"
+          else
             ADMIN_PASSWORD="$(node -e "console.log(require('crypto').randomBytes(6).toString('hex'))")"
-            if printf '%s' "$ADMIN_PASSWORD" | gh secret set ADMIN_PASSWORD --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "已自动生成管理员密码并写回仓库 Secret（后续部署保持不变）"
-            else
-              echo "警告：无法写回 ADMIN_PASSWORD Secret，本次部署后密码会变化" >&2
-            fi
+            echo "首次部署：自动生成管理员密码（仅本次日志可见，后续部署保持）"
           fi
           echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
-          echo "::warning title=管理员登录凭据::用户名 ${ADMIN_USERNAME} / 密码 ${ADMIN_PASSWORD}"
-          {
-            echo "## 管理员登录凭据"
-            echo ""
-            echo "- 用户名: \`${ADMIN_USERNAME}\`"
-            echo "- 密码: \`${ADMIN_PASSWORD}\`"
-            echo ""
-            echo "> 未在 GitHub Secrets 配置 ADMIN_USERNAME/ADMIN_PASSWORD 时自动生成。"
-            echo "> 已自动写回仓库 Secret，后续部署保持不变；可在仓库 Settings → Secrets 中修改。"
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$ADMIN_PASSWORD" ]; then
+            echo "::warning title=管理员登录凭据::用户名 ${ADMIN_USERNAME} / 密码 ${ADMIN_PASSWORD}"
+            {
+              echo "## 管理员登录凭据"
+              echo ""
+              echo "- 用户名: \`${ADMIN_USERNAME}\`"
+              echo "- 密码: \`${ADMIN_PASSWORD}\`"
+              echo ""
+              echo "> 未在 GitHub Secrets 配置 ADMIN_USERNAME/ADMIN_PASSWORD 时，首次部署自动生成。"
+              echo "> 之后部署自动沿用现有密码；可在仓库 Settings → Secrets 中修改。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Deploy
         env:
@@ -164,7 +171,10 @@ jobs:
         run: |
           # 经 stdin 写入 secret，避免密码含特殊字符时被 shell 展开破坏
           printf '%s' "$ADMIN_USERNAME" | npx wrangler secret put ADMIN_USERNAME --config build/server/wrangler.json
-          printf '%s' "$ADMIN_PASSWORD" | npx wrangler secret put ADMIN_PASSWORD --config build/server/wrangler.json
+          # 密码为空表示沿用已部署的现有密码，不覆盖
+          if [ -n "$ADMIN_PASSWORD" ]; then
+            printf '%s' "$ADMIN_PASSWORD" | npx wrangler secret put ADMIN_PASSWORD --config build/server/wrangler.json
+          fi
           if [ -n "$WEBDAV_USERNAME" ] && [ -n "$WEBDAV_PASSWORD" ]; then
             printf '%s' "$WEBDAV_USERNAME" | npx wrangler secret put WEBDAV_USERNAME --config build/server/wrangler.json
             printf '%s' "$WEBDAV_PASSWORD" | npx wrangler secret put WEBDAV_PASSWORD --config build/server/wrangler.json
