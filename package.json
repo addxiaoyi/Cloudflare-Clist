@@ -6,7 +6,8 @@
 	"scripts": {
 		"build": "react-router build",
 		"cf-typegen": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join('.wrangler','tmp');fs.mkdirSync(dir,{recursive:true});const cfg=path.join(dir,'wrangler.jsonc');fs.writeFileSync(cfg,fs.readFileSync('wrangler.jsonc.example','utf8'));\" && wrangler types --config .wrangler/tmp/wrangler.jsonc",
-		"deploy": "npm run build && wrangler deploy",
+		"deploy": "npm run build && wrangler deploy --config build/server/wrangler.json",
+		"deploy:local": "npm run build && wrangler dev --config build/server/wrangler.json",
 		"dev": "react-router dev",
 		"postinstall": "npm run cf-typegen",
 		"preview": "npm run build && vite preview",
@@ -14,7 +15,6 @@
 	},
 	"dependencies": {
 		"@types/qrcode": "^1.5.6",
-		"blakejs": "^1.2.1",
 		"highlight.js": "^11.11.1",
 		"isbot": "^5.1.31",
 		"jszip": "^3.10.1",
@@ -25,7 +25,6 @@
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
 		"react-router": "^7.10.0",
-		"tweetnacl": "^1.0.3",
 		"xlsx": "^0.18.5"
 	},
 	"devDependencies": {

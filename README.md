@@ -11,7 +11,7 @@
   ·
   <a href="./docs/webdav.md">WebDAV</a>
   ·
-  <a href="./GITHUB_WORKFLOW_DEPLOY.md">GitHub Actions</a>
+  <a href="./docs/index.md">Docs</a>
 </p>
 
 <p align="center">
@@ -67,7 +67,7 @@ flowchart LR
 - Storage statistics with visual charts for total size, file count, folder count, and file type distribution
 - Audit logs for admin actions and file operations
 - Cloudflare D1 persistence and Workers edge deployment
-- GitHub Actions deployment guide for repeatable releases
+- One-click deploy via Cloudflare Git integration
 
 ## Supported Backends
 
@@ -90,58 +90,35 @@ cd Cloudflare-Clist
 npm install
 ```
 
-### 2. Create a D1 Database
+### 2. Connect to Cloudflare (one-time)
+
+No API token or D1/R2 setup is needed. In the Cloudflare dashboard:
+
+1. Go to **Workers and Pages → Create → Worker → Connect to Git repository**.
+2. Pick this repository and the `main` branch.
+3. In **Build settings**, set:
+   - Build command: `npm run build`
+   - Deploy command: `npx wrangler deploy --config build/server/wrangler.json`
+4. Push code — Cloudflare builds and deploys automatically.
+
+The D1 database and R2 bucket are created automatically on first deploy (they only need a `database_name`/`bucket_name` in `wrangler.jsonc`, no IDs). Tables are initialized by the app on first request, so no migration step is required.
+
+### 3. Default admin account
+
+Defaults are `admin` / `changeme` (see `wrangler.jsonc`). Change them after going live in **Cloudflare dashboard → Settings → Variables and Secrets** (`ADMIN_PASSWORD`).
+
+### 4. Local development
 
 ```bash
-npx wrangler login
-npx wrangler d1 create clist
+npm install
+npm run dev
 ```
 
-Keep the returned `database_id`; it is used in the next step.
-
-### 3. Configure Wrangler
-
-Create your production config from the example:
-
-```bash
-cp wrangler.jsonc.example wrangler.jsonc
-```
-
-Then copy the D1 `database_id` returned by Wrangler into `wrangler.jsonc`.
-
-Recommended production shape:
-
-```jsonc
-{
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "clist",
-  "main": "./workers/app.ts",
-  "compatibility_date": "2025-04-04",
-  "keep_vars": true,
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "clist",
-      "database_id": "your-d1-database-id",
-      "migrations_dir": "./migrations"
-    }
-  ]
-}
-```
-
-Use Cloudflare Dashboard or Wrangler secrets/vars for runtime values. Keeping `keep_vars: true` avoids overwriting Dashboard-managed variables during deploys.
-
-### 4. Apply Database Migrations
-
-```bash
-npx wrangler d1 migrations apply clist --remote
-```
-
-### 5. Deploy
+Local production preview:
 
 ```bash
 npm run build
-npx wrangler deploy
+npm run preview
 ```
 
 ## Environment Variables
@@ -157,6 +134,9 @@ npx wrangler deploy
 | `WEBDAV_ENABLED` | No | `true` | Enables the WebDAV server endpoint |
 | `WEBDAV_USERNAME` | No | `webdav` | WebDAV username; falls back to admin username |
 | `WEBDAV_PASSWORD` | No | `secret` | WebDAV password; falls back to admin password |
+| `GOOGLE_CLIENT_ID` | No | - | Google Drive OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | No | - | Google Drive OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | No | - | Google Drive OAuth redirect URI |
 
 ## WebDAV
 
@@ -218,7 +198,6 @@ public/              static assets
 - [Deployment Guide](./docs/deployment.md)
 - [Configuration Guide](./docs/configuration.md)
 - [WebDAV Guide](./docs/webdav.md)
-- [GitHub Actions Deployment](./GITHUB_WORKFLOW_DEPLOY.md)
 
 ## Star History
 

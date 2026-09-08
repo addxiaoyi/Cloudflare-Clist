@@ -11,7 +11,7 @@ CList 是一个基于 Cloudflare Workers 与 D1 的云存储聚合平台，支�
 - [核心能力](#核心能力)
 - [快速开始](#快速开始)
 - [配置说明](#配置说明)
-- [数据库迁移](#数据库迁移)
+- [数据库与存储](#数据库与存储)
 - [开发与构建](#开发与构建)
 - [部署](#部署)
 - [WebDAV](#webdav)
@@ -79,7 +79,11 @@ npm install
 
 ### 3. 初始化配置
 
-将示例配置复制为实际配置文件，并根据实际环境修改：
+部署前无需手动配置：`wrangler.jsonc` 已提交到仓库，D1 数据库与 R2 桶会在首次部署时自动创建。
+
+也可以启动应用后访问 `/setup` 打开图形化初始化向导，分步填写站点信息、管理员账号、D1 / R2、Google Drive、WebDAV 等配置，实时预览并复制最终的 `wrangler.jsonc`。
+
+若本地开发需要示例配置：
 
 ```bash
 cp wrangler.jsonc.example wrangler.jsonc
@@ -112,40 +116,29 @@ Copy-Item .\wrangler.jsonc.example .\wrangler.jsonc
 | `WEBDAV_USERNAME` | 否 | `webdav` | WebDAV 用户名 |
 | `WEBDAV_PASSWORD` | 否 | `changeme` | WebDAV 密码 |
 | `VALUE_FROM_CLOUDFLARE` | 否 | `Hello from Cloudflare` | 示例变量（可选） |
+| `GOOGLE_CLIENT_ID` | 否 | 空 | Google Drive 客户端 ID |
+| `GOOGLE_CLIENT_SECRET` | 否 | 空 | Google Drive 客户端密钥 |
+| `GOOGLE_REDIRECT_URI` | 否 | 空 | Google Drive 回调地址 |
 
-> 建议将敏感字段（如密码）通过 Wrangler Secret 管理，以避免明文配置。
+> 敏感字段（如 `ADMIN_PASSWORD`、Google 密钥）建议部署后在 Cloudflare 控制台 → Settings → Variables and Secrets 中修改为 Secret，避免明文留在仓库。
 
-## 数据库迁移
+## 数据库与存储
 
-1. 登录 Cloudflare：
-
-```bash
-wrangler login
-```
-
-2. 创建 D1 数据库：
-
-```bash
-wrangler d1 create clist
-```
-
-3. 将返回的 `database_id` 更新到 `wrangler.jsonc`：
+D1 数据库与 R2 桶由 `wrangler.jsonc` 声明（仅 `database_name` / `bucket_name`，不写 ID），首次部署时自动创建：
 
 ```json
 {
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "clist",
-      "database_id": "your_database_id_here"
-    }
-  ]
+  "d1_databases": [{ "binding": "DB", "database_name": "clist" }],
+  "r2_buckets": [{ "binding": "R2", "bucket_name": "clist" }]
 }
 ```
 
-4. 执行数据库迁移：
+应用首次访问时自动建表（`CREATE TABLE IF NOT EXISTS`），无需手动迁移。
+
+本地开发如需手动迁移：
 
 ```bash
+wrangler d1 create clist
 wrangler d1 migrations apply clist
 ```
 
@@ -177,22 +170,30 @@ npm run typecheck
 
 ## 部署
 
-### 一键部署
+### Cloudflare Git 集成（推荐，一键部署）
+
+将仓库推送到 GitHub 后，在 Cloudflare 控制台连接 Git 仓库即可自动构建部署，无需 API Token，也无需手动创建 D1 / R2：
+
+1. 将代码推送到 GitHub（`wrangler.jsonc` 已提交，是部署配置的来源）。
+2. 打开 [Cloudflare 控制台](https://dash.cloudflare.com) → **Workers 和 Pages** → **创建** → **Workers** → **连接 Git 仓库**。
+3. 选择仓库与分支（默认 `main`）。
+4. 在构建设置中填写：
+
+   | 配置项 | 值 |
+   | --- | --- |
+   | 构建命令 | `npm run build` |
+   | 部署命令 | `npx wrangler deploy --config build/server/wrangler.json` |
+   | 根目录 | 留空 |
+
+5. 保存后，推送代码即自动部署。首次部署自动创建 D1 数据库与 R2 桶，应用首次访问自动建表。
+
+> 详细步骤见 [部署指南](docs/deployment.md)。
+
+### 命令行部署（可选）
 
 ```bash
 npm run deploy
 ```
-
-### 手动部署
-
-```bash
-npm run build
-wrangler deploy
-```
-
-### GitHub Actions
-
-自动化部署说明请参阅 `GITHUB_WORKFLOW_DEPLOY.md`。
 
 ## WebDAV
 

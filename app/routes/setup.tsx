@@ -70,7 +70,6 @@ interface WebdavConfig {
 interface GithubConfig {
   repoOwner: string;
   repoName: string;
-  token: string;
 }
 
 interface SetupState {
@@ -90,7 +89,7 @@ const emptyState: SetupState = {
   r2: { enabled: false, bucketName: "clist", binding: "R2" },
   gdrive: { enabled: false, clientId: "", clientSecret: "", redirectUri: "" },
   webdav: { enabled: false, username: "webdav", password: "" },
-  github: { repoOwner: "", repoName: "", token: "" },
+  github: { repoOwner: "", repoName: "" },
 };
 
 // ---------------------------------------------------------------------------
@@ -108,141 +107,6 @@ function isHttpsUrl(v: string): boolean {
   } catch {
     return false;
   }
-}
-
-// ---------------------------------------------------------------------------
-// GitHub Secrets / Variables 一键写入
-// ---------------------------------------------------------------------------
-
-const GH_API = "https://api.github.com";
-
-interface WriteTarget {
-  name: string;
-  kind: "secret" | "variable";
-  value: string;
-}
-
-interface WriteEntry {
-  name: string;
-  kind: "secret" | "variable";
-  status: "pending" | "ok" | "error";
-  detail?: string;
-}
-
-function b64FromBytes(bytes: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(s);
-}
-
-function bytesFromB64(b64: string): Uint8Array {
-  const s = atob(b64);
-  const out = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
-  return out;
-}
-
-// libsodium crypto_box_seal：GitHub Secrets API 要求的加密格式。
-// tweetnacl 含 Node 端 require('crypto')，只能在浏览器侧动态加载，避免污染 SSR 产物。
-type NaclModule = typeof import("tweetnacl");
-type BlakeModule = typeof import("blakejs");
-let naclMod: NaclModule | null = null;
-let blake2bFn: BlakeModule["blake2b"] | null = null;
-
-async function loadCrypto(): Promise<void> {
-  if (!naclMod) {
-    const [n, b] = await Promise.all([import("tweetnacl"), import("blakejs")]);
-    naclMod = n;
-    blake2bFn = b.blake2b;
-  }
-}
-
-async function boxSeal(value: string, recipientKeyB64: string): Promise<string> {
-  await loadCrypto();
-  const recipient = bytesFromB64(recipientKeyB64);
-  const ephemeral = naclMod!.box.keyPair();
-  const nonce = blake2bFn!(new Uint8Array([...ephemeral.publicKey, ...recipient]), undefined, 24);
-  const cipher = naclMod!.box(new TextEncoder().encode(value), nonce, recipient, ephemeral.secretKey);
-  const out = new Uint8Array(32 + cipher.length);
-  out.set(ephemeral.publicKey, 0);
-  out.set(cipher, 32);
-  return b64FromBytes(out);
-}
-
-async function ghJson(token: string, path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${GH_API}${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
-}
-
-async function writeGitHubSecret(owner: string, repo: string, name: string, value: string, token: string): Promise<void> {
-  const keyRes = await ghJson(token, `/repos/${owner}/${repo}/actions/secrets/public-key`);
-  if (!keyRes.ok) throw new Error(`获取公钥失败 (${keyRes.status})`);
-  const key = (await keyRes.json()) as { key_id: string; key: string };
-  const res = await ghJson(token, `/repos/${owner}/${repo}/actions/secrets/${name}`, {
-    method: "PUT",
-    body: JSON.stringify({ encrypted_value: await boxSeal(value, key.key), key_id: key.key_id }),
-  });
-  if (!res.ok) throw new Error(`写入失败 (${res.status})`);
-}
-
-async function writeGitHubVariable(owner: string, repo: string, name: string, value: string, token: string): Promise<void> {
-  const payload = JSON.stringify({ name, value });
-  let res = await ghJson(token, `/repos/${owner}/${repo}/actions/variables/${name}`, {
-    method: "PUT",
-    body: payload,
-  });
-  if (res.status === 404) {
-    res = await ghJson(token, `/repos/${owner}/${repo}/actions/variables`, {
-      method: "POST",
-      body: payload,
-    });
-  }
-  if (!res.ok) throw new Error(`写入失败 (${res.status})`);
-}
-
-function collectWriteTargets(state: SetupState): WriteTarget[] {
-  const targets: WriteTarget[] = [];
-  const add = (name: string, kind: "secret" | "variable", value: string) => {
-    if (value) targets.push({ name, kind, value });
-  };
-  add("CLOUDFLARE_API_TOKEN", "secret", state.cloudflare.apiToken);
-  add("CLOUDFLARE_ACCOUNT_ID", "secret", state.cloudflare.accountId);
-  add("WORKER_NAME", "variable", state.cloudflare.workerName);
-  add("COMPATIBILITY_DATE", "variable", state.cloudflare.compatibilityDate);
-  add("OBSERVABILITY_ENABLED", "variable", state.cloudflare.observability ? "true" : "false");
-  add("SITE_TITLE", "variable", state.site.siteTitle);
-  add("SITE_ANNOUNCEMENT", "variable", state.site.announcement);
-  add("CHUNK_SIZE_MB", "variable", String(state.site.chunkSizeMb));
-  if (state.site.adminUsername && state.site.adminPassword) {
-    add("ADMIN_USERNAME", "secret", state.site.adminUsername);
-    add("ADMIN_PASSWORD", "secret", state.site.adminPassword);
-  }
-  if (state.d1.enabled) {
-    add("D1_DATABASE_NAME", "variable", state.d1.databaseName);
-    add("D1_BINDING", "variable", state.d1.binding);
-  }
-  add("WEBDAV_ENABLED", "variable", state.webdav.enabled ? "true" : "false");
-  if (state.webdav.enabled) {
-    add("WEBDAV_USERNAME", "secret", state.webdav.username);
-    add("WEBDAV_PASSWORD", "secret", state.webdav.password);
-  }
-  if (state.r2.enabled) add("R2_BUCKET_NAME", "variable", state.r2.bucketName);
-  if (state.gdrive.enabled) {
-    add("GOOGLE_CLIENT_ID", "variable", state.gdrive.clientId);
-    add("GOOGLE_REDIRECT_URI", "variable", state.gdrive.redirectUri);
-    add("GOOGLE_CLIENT_SECRET", "secret", state.gdrive.clientSecret);
-  }
-  return targets;
 }
 
 function loadDraft(): SetupState {
@@ -277,26 +141,26 @@ function buildWranglerJson(state: SetupState): object {
     name: cloudflare.workerName,
     main: "./workers/app.ts",
     compatibility_date: cloudflare.compatibilityDate,
-    keep_vars: true,
     observability: { enabled: cloudflare.observability },
     vars: {
-      SITE_TITLE: site.siteTitle,
+      SITE_TITLE: site.siteTitle || "CList",
       SITE_ANNOUNCEMENT: site.announcement,
-      CHUNK_SIZE_MB: String(site.chunkSizeMb),
+      CHUNK_SIZE_MB: String(site.chunkSizeMb || 50),
       WEBDAV_ENABLED: webdav.enabled ? "true" : "false",
-      GOOGLE_CLIENT_ID: gdrive.clientId,
-      GOOGLE_REDIRECT_URI: gdrive.redirectUri,
+      ADMIN_USERNAME: site.adminUsername || "admin",
+      ADMIN_PASSWORD: site.adminPassword || "changeme",
     },
   };
+  if (gdrive.enabled) {
+    cfg.vars = {
+      ...(cfg.vars as Record<string, string>),
+      GOOGLE_CLIENT_ID: gdrive.clientId,
+      GOOGLE_REDIRECT_URI: gdrive.redirectUri,
+    };
+  }
   if (d1.enabled) {
-    cfg.d1_databases = [
-      {
-        binding: d1.binding,
-        database_name: d1.databaseName,
-        database_id: "REPLACE_WITH_D1_DATABASE_ID",
-        migrations_dir: "./migrations",
-      },
-    ];
+    // 不写 database_id：wrangler 部署时按 database_name 自动查找或创建
+    cfg.d1_databases = [{ binding: d1.binding, database_name: d1.databaseName }];
   }
   if (r2.enabled) {
     cfg.r2_buckets = [{ binding: r2.binding, bucket_name: r2.bucketName }];
@@ -310,47 +174,40 @@ function buildCommands(state: SetupState): string {
   const hasGh = github.repoOwner && github.repoName;
   const repo = hasGh ? `${github.repoOwner}/${github.repoName}` : "";
 
-  lines.push("# 1. 认证", 'export CLOUDFLARE_API_TOKEN="<你的API_Token>"', cloudflare.accountId ? `export CLOUDFLARE_ACCOUNT_ID="${cloudflare.accountId}"` : "# Account ID 可留空：wrangler 会用 API Token 自动识别", "");
-
-  if (d1.enabled) {
-    lines.push(`# 2. D1 数据库：GitHub Actions 部署时会自动查找或创建（无需手动执行）`, `# 本地部署首次需执行: npx wrangler d1 create ${d1.databaseName}`, "");
-  }
-
-  if (r2.enabled) {
-    lines.push(`# 3. R2 桶：GitHub Actions 部署时会自动创建（无需手动执行）`, `# 本地部署首次需执行: npx wrangler r2 bucket create ${r2.bucketName}`, "");
-  }
-
-  lines.push(`# 4. 部署 Worker`, `npx wrangler deploy --config wrangler.jsonc`, "");
-
-  if (site.adminUsername && site.adminPassword) {
-    lines.push(`# 5. 写入管理员凭据`, `printf '%s' "${site.adminUsername}" | npx wrangler secret put ADMIN_USERNAME --config wrangler.jsonc`, `printf '%s' "${site.adminPassword}" | npx wrangler secret put ADMIN_PASSWORD --config wrangler.jsonc`, "");
+  lines.push("# 1. Cloudflare 连接 GitHub（控制台操作，一次性）");
+  lines.push("#    访问 https://dash.cloudflare.com → Workers 和 Pages → 创建 → Workers → 连接 Git 仓库");
+  if (repo) lines.push(`#    选择仓库 ${repo}，监听分支 main`);
+  lines.push(`#    构建设置：构建命令 npm run build；部署命令 npx wrangler deploy --config build/server/wrangler.json`);
+  lines.push("");
+  lines.push("# 2. 推送代码，自动构建部署");
+  if (repo) {
+    lines.push(`git add -A && git commit -m "deploy" && git push origin main`);
   } else {
-    lines.push(`# 5. 管理员凭据未填：CI 首次部署自动生成并打印在 Actions 日志，后续部署沿用；本地部署请先补上`, "");
+    lines.push("git add -A && git commit -m \"deploy\" && git push");
   }
+  lines.push("");
+  if (d1.enabled) {
+    lines.push(`# 3. D1 数据库 ${d1.databaseName} 与 R2 桶：首次部署自动创建，无需手动配置`);
+  } else {
+    lines.push("# 3. R2 桶：首次部署自动创建，无需手动配置");
+  }
+  lines.push("");
+  lines.push("# 4. 管理员账号（默认 admin / changeme）");
+  lines.push("#    上线后务必在 Cloudflare 控制台 → Settings → Variables and Secrets 中修改 ADMIN_PASSWORD");
 
   if (webdav.enabled) {
-    lines.push(`# 6. WebDAV 凭据`, `printf '%s' "${webdav.username}" | npx wrangler secret put WEBDAV_USERNAME --config wrangler.jsonc`, `printf '%s' "${webdav.password}" | npx wrangler secret put WEBDAV_PASSWORD --config wrangler.jsonc`, "");
+    lines.push("");
+    lines.push("# 5. WebDAV 凭据：控制台 Settings → Variables and Secrets 中添加 WEBDAV_USERNAME / WEBDAV_PASSWORD");
   }
-
   if (gdrive.enabled) {
-    lines.push(`# 7. Google Drive OAuth（Client ID / 回调地址已在 wrangler.jsonc 的 vars 中）`, `printf '%s' "${gdrive.clientSecret}" | npx wrangler secret put GOOGLE_CLIENT_SECRET --config wrangler.jsonc`, "");
+    lines.push("");
+    lines.push("# 5. Google Drive：GOOGLE_CLIENT_ID / GOOGLE_REDIRECT_URI 已写入 wrangler.jsonc");
+    lines.push("#    GOOGLE_CLIENT_SECRET 在控制台 Settings → Variables and Secrets 中添加");
   }
-
-  if (repo) {
-    lines.push(`# 8. GitHub Actions 一键部署（仅需 CLOUDFLARE_API_TOKEN；也可在上一步用「一键写入」代替以下命令）`, `gh secret set CLOUDFLARE_API_TOKEN --repo ${repo} --body "<你的API_Token>"`, `# Account ID / D1 未配置时自动推导或创建；管理员凭据首次自动生成、后续沿用`);
-    if (site.adminUsername && site.adminPassword) {
-      lines.push(`gh secret set ADMIN_USERNAME --repo ${repo} --body "${site.adminUsername}"`, `gh secret set ADMIN_PASSWORD --repo ${repo} --body "${site.adminPassword}"`);
-    }
-    if (r2.enabled) lines.push(`gh variable set R2_BUCKET_NAME --repo ${repo} --body "${r2.bucketName}"`);
-    if (webdav.enabled) {
-      lines.push(`gh secret set WEBDAV_USERNAME --repo ${repo} --body "${webdav.username}"`, `gh secret set WEBDAV_PASSWORD --repo ${repo} --body "${webdav.password}"`);
-    }
-    if (gdrive.enabled) {
-      lines.push(`gh variable set GOOGLE_CLIENT_ID --repo ${repo} --body "${gdrive.clientId}"`, `gh variable set GOOGLE_REDIRECT_URI --repo ${repo} --body "${gdrive.redirectUri}"`, `gh secret set GOOGLE_CLIENT_SECRET --repo ${repo} --body "${gdrive.clientSecret}"`);
-    }
-    if (d1.enabled) {
-      lines.push(`# D1 无需手动配置：CI 会自动查找或创建数据库，并自动推导 Account ID（API Token 需有 D1 权限）`);
-    }
+  if (cloudflare.apiToken) {
+    lines.push("");
+    lines.push("# 本地部署（可选，需先 wrangler login）");
+    lines.push("npm run deploy");
   }
 
   return lines.join("\n");
@@ -460,69 +317,6 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
   const [copied, setCopied] = useState<"json" | "cmd" | null>(null);
   const [showSecrets, setShowSecrets] = useState(false);
   const [touched, setTouched] = useState(false);
-  const [writeLog, setWriteLog] = useState<WriteEntry[]>([]);
-  const [writing, setWriting] = useState(false);
-
-  const pushWrite = (target: WriteTarget, status: WriteEntry["status"], detail?: string) => {
-    setWriteLog((prev) => {
-      const next = prev.filter((e) => e.name !== target.name);
-      return [...next, { name: target.name, kind: target.kind, status, detail }];
-    });
-  };
-
-  const runWriteAll = async () => {
-    const { repoOwner, repoName, token } = state.github;
-    if (!repoOwner || !repoName || !token) return;
-    const targets = collectWriteTargets(state);
-    if (targets.length === 0) return;
-    setWriting(true);
-    setWriteLog(targets.map((t) => ({ name: t.name, kind: t.kind, status: "pending" as const })));
-    // 先验证 token 与仓库可达，给出清晰报错
-    const probe = await ghJson(token, `/repos/${repoOwner}/${repoName}`).catch(() => null);
-    if (!probe) {
-      setWriteLog((prev) => [
-        ...prev,
-        { name: "仓库检查", kind: "secret", status: "error", detail: "网络错误，无法连接 GitHub API" },
-      ]);
-      setWriting(false);
-      return;
-    }
-    if (!probe.ok) {
-      setWriteLog((prev) => [
-        ...prev,
-        {
-          name: "仓库检查",
-          kind: "secret",
-          status: "error",
-          detail: probe.status === 404 ? "仓库不存在或 Token 无访问权限" : `GitHub API 返回 ${probe.status}`,
-        },
-      ]);
-      setWriting(false);
-      return;
-    }
-    let failed = 0;
-    for (const t of targets) {
-      try {
-        if (t.kind === "secret") {
-          await writeGitHubSecret(repoOwner, repoName, t.name, t.value, token);
-        } else {
-          await writeGitHubVariable(repoOwner, repoName, t.name, t.value, token);
-        }
-        pushWrite(t, "ok");
-      } catch (err) {
-        failed += 1;
-        pushWrite(t, "error", err instanceof Error ? err.message : String(err));
-      }
-    }
-    setWriting(false);
-    if (failed === 0) {
-      pushWrite(
-        { name: "全部完成", kind: "variable", value: "" },
-        "ok",
-        "Secrets / Variables 已写入，push 代码后即自动部署"
-      );
-    }
-  };
 
   useEffect(() => {
     setState((prev) => ({
@@ -558,7 +352,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
 
   const validation = useMemo(() => {
     const errors: string[] = [];
-    if (!!state.site.adminUsername.trim() !== !!state.site.adminPassword.trim()) errors.push("管理员用户名与密码需同时填写，或都留空由部署时自动生成");
+    if (!!state.site.adminUsername.trim() !== !!state.site.adminPassword.trim()) errors.push("管理员用户名与密码需同时填写，或都留空使用默认 admin / changeme");
     else if (state.site.adminPassword.length > 0 && state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
     if (state.cloudflare.accountId.trim() && !HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
     if (!WORKER_NAME_RE.test(state.cloudflare.workerName)) errors.push("Worker 名称只能含字母、数字、连字符");
@@ -584,7 +378,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
   const stepErrors = useMemo(() => {
     const errors: string[] = [];
     if (current.key === "site") {
-      if (!!state.site.adminUsername.trim() !== !!state.site.adminPassword.trim()) errors.push("管理员用户名与密码需同时填写，或都留空自动生成");
+      if (!!state.site.adminUsername.trim() !== !!state.site.adminPassword.trim()) errors.push("管理员用户名与密码需同时填写，或都留空使用默认 admin / changeme");
       else if (state.site.adminPassword.length > 0 && state.site.adminPassword.length < 6) errors.push("管理员密码至少 6 位");
     } else if (current.key === "cloudflare") {
       if (state.cloudflare.accountId.trim() && !HEX32.test(state.cloudflare.accountId.trim())) errors.push("Account ID 应为 32 位十六进制");
@@ -742,7 +536,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
         <div className={cardCls}>
           {current.key === "site" && (
             <div className="space-y-4">
-              <SectionTitle icon={<Megaphone className="h-4 w-4" />} title="站点与管理员账号" desc="管理员可留空：CI 部署时会自动生成并打印凭据" />
+              <SectionTitle icon={<Megaphone className="h-4 w-4" />} title="站点与管理员账号" desc="留空则使用默认 admin / changeme，上线后请在 Cloudflare 控制台修改" />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="站点标题">
                   <input className={inputCls} value={state.site.siteTitle} onChange={(e) => patch("site", { siteTitle: e.target.value })} placeholder="CList" />
@@ -771,11 +565,11 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
 
           {current.key === "cloudflare" && (
             <div className="space-y-4">
-              <SectionTitle icon={<Cloud className="h-4 w-4" />} title="Cloudflare 连接" desc="用于本地 wrangler 部署或 GitHub Actions 自动部署" />
-              <Field label="API Token（Secret）" hint="Cloudflare → My Profile → API Tokens → Edit Cloudflare Workers 模板">
-                <input className={inputCls} type="password" value={state.cloudflare.apiToken} onChange={(e) => patch("cloudflare", { apiToken: e.target.value })} placeholder="粘贴 API Token" />
+              <SectionTitle icon={<Cloud className="h-4 w-4" />} title="Cloudflare 连接" desc="Git 集成部署无需 API Token；Token 仅本地部署需要" />
+              <Field label="API Token（可选）" hint="仅本地 wrangler 部署需要：Cloudflare → My Profile → API Tokens → Edit Cloudflare Workers 模板">
+                <input className={inputCls} type="password" value={state.cloudflare.apiToken} onChange={(e) => patch("cloudflare", { apiToken: e.target.value })} placeholder="可选，粘贴 API Token" />
               </Field>
-              <Field label="Account ID" hint="可留空：GitHub Actions 会从 API Token 自动推导">
+              <Field label="Account ID（可选）" hint="仅本地部署需要，可留空自动识别">
                 <input className={inputCls} value={state.cloudflare.accountId} onChange={(e) => patch("cloudflare", { accountId: e.target.value })} placeholder="可选，粘贴 Account ID" />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -814,8 +608,8 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
                   </Field>
                 </div>
               )}
-              <p className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
-                部署前执行 <code className="text-zinc-600 dark:text-zinc-300">npx wrangler d1 create {state.d1.databaseName}</code> 并把返回的 database_id 填入生成的配置。
+              <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">
+                无需手动创建：首次部署时 wrangler 会按名称自动创建 D1 数据库 <code className="text-emerald-600 dark:text-emerald-300">{state.d1.databaseName}</code>，应用首次访问会自动建表。
               </p>
             </div>
           )}
@@ -902,7 +696,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
 
           {current.key === "github" && (
             <div className="space-y-4">
-              <SectionTitle icon={<Github className="h-4 w-4" />} title="GitHub Actions 部署" desc="一键写入 Secrets / 变量，push 后自动构建部署" />
+              <SectionTitle icon={<Github className="h-4 w-4" />} title="Cloudflare Git 集成部署" desc="连接 GitHub 仓库后，push 即自动构建部署，无需任何 Secrets" />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="仓库 Owner">
                   <input className={inputCls} value={state.github.repoOwner} onChange={(e) => patch("github", { repoOwner: e.target.value })} placeholder="你的 GitHub 用户名" />
@@ -911,54 +705,34 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
                   <input className={inputCls} value={state.github.repoName} onChange={(e) => patch("github", { repoName: e.target.value })} placeholder="repo-name" />
                 </Field>
               </div>
-              <Field label="GitHub Token（临时，仅本次写入使用）" hint="GitHub → Settings → Developer settings → Fine-grained PAT，需仓库 Actions 读写权限；不会保存到草稿之外，仅存于当前页面会话">
-                <input className={inputCls} type="password" value={state.github.token} onChange={(e) => patch("github", { token: e.target.value })} placeholder="github_pat_..." />
-              </Field>
 
-              <button
-                onClick={runWriteAll}
-                disabled={writing || !state.github.token || !state.github.repoOwner || !state.github.repoName}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:enabled:hover:bg-zinc-300"
-              >
-                {writing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" /> 正在写入…
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" /> 一键写入 Secrets / 变量
-                  </>
-                )}
-              </button>
+              <div className="rounded-lg bg-zinc-50 p-4 text-sm dark:bg-zinc-800">
+                <ol className="list-decimal list-inside space-y-2 text-zinc-600 dark:text-zinc-300">
+                  <li>
+                    访问 <a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" className="text-blue-500 hover:underline">Cloudflare 控制台</a>
+                    → Workers 和 Pages → 创建 → Workers → 连接 Git 仓库
+                  </li>
+                  <li>
+                    选择仓库{state.github.repoOwner && state.github.repoName ? <> <code className="font-mono text-xs">{state.github.repoOwner}/{state.github.repoName}</code></> : "（上面填写的仓库）"}，监听分支 <code className="font-mono text-xs">main</code>
+                  </li>
+                  <li>
+                    在构建设置中填写：
+                    <ul className="mt-1 ml-5 list-disc list-inside text-xs text-zinc-400 dark:text-zinc-500">
+                      <li>构建命令: <code className="font-mono">npm run build</code></li>
+                      <li>部署命令: <code className="font-mono">npx wrangler deploy --config build/server/wrangler.json</code></li>
+                      <li>根目录: 留空</li>
+                    </ul>
+                  </li>
+                  <li>把下方生成的 <code className="font-mono text-xs">wrangler.jsonc</code> 提交到仓库，然后 <code className="font-mono text-xs">git push origin main</code></li>
+                </ol>
+              </div>
 
-              {writeLog.length > 0 && (
-                <div className="max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-800">
-                  {writeLog.map((e) => (
-                    <div key={`${e.name}-${e.status}`} className="flex items-start gap-2 py-0.5">
-                      <span
-                        className={
-                          e.status === "ok"
-                            ? "text-emerald-500"
-                            : e.status === "error"
-                              ? "text-red-500"
-                              : "text-zinc-400"
-                        }
-                      >
-                        {e.status === "ok" ? <Check className="h-3.5 w-3.5" /> : e.status === "error" ? <AlertCircle className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                      </span>
-                      <span className="font-medium text-zinc-600 dark:text-zinc-300">{e.name}</span>
-                      <span className="text-zinc-400 dark:text-zinc-500">
-                        {e.kind === "secret" ? "Secret" : "Variable"}
-                        {e.detail ? ` · ${e.detail}` : ""}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="rounded-lg bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">
-                一键写入会把全部 Secrets / 变量直接写入 GitHub 仓库。之后 <code className="text-zinc-600 dark:text-zinc-300">git push</code> 到 main/master 即自动部署。
-                未使用一键写入时，也可用下方「部署命令」中的 <code className="text-zinc-600 dark:text-zinc-300">gh</code> 命令逐条执行（需先 <code className="text-zinc-600 dark:text-zinc-300">gh auth login</code>）。
+              <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
+                <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>
+                  D1 数据库与 R2 桶在首次部署时自动创建；默认管理员 <code className="font-mono">admin / changeme</code>。
+                  上线后请在 Cloudflare 控制台 → Settings → Variables and Secrets 中修改 <code className="font-mono">ADMIN_PASSWORD</code>。
+                </p>
               </div>
             </div>
           )}
@@ -1015,7 +789,8 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
               <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
                 <Upload className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>
-                  已自动保存草稿（本地浏览器）。按照「部署命令」逐步执行即可完成初始化；部署后管理员在「存储管理」页挂载各存储，R2 桶会自动出现。
+                  已自动保存草稿（本地浏览器）。把生成的 <code className="font-mono">wrangler.jsonc</code> 提交到仓库并推送，Cloudflare 会自动构建部署；
+                  部署后管理员在「存储管理」页挂载各存储，R2 桶会自动出现。
                 </p>
               </div>
             </div>
