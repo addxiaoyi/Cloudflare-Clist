@@ -413,6 +413,26 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
     ],
   },
+  ftp: {
+    name: "FTP 文件网关",
+    supportsMultipart: false,
+    fields: [
+      { key: "endpoint", label: "HTTP 网关地址", type: "text", required: true, placeholder: "https://ftp.example.com/dav" },
+      { key: "username", label: "用户名", type: "text", required: true, placeholder: "FTP 用户名" },
+      { key: "password", label: "密码", type: "password", required: true, placeholder: "FTP 密码" },
+      { key: "base_path", label: "根目录路径", type: "text", defaultValue: "/" },
+      { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
+    ],
+  },
+  mysql: {
+    name: "MySQL 数据库",
+    supportsMultipart: false,
+    fields: [
+      { key: "connection_string", label: "Hyperdrive 连接串", type: "textarea", required: true, placeholder: "mysql://user:pass@host:port/db" },
+      { key: "database", label: "数据库名", type: "text", required: true, placeholder: "my_database" },
+      { key: "table_prefix", label: "表前缀", type: "text", placeholder: "可选：wp_" },
+    ],
+  },
 };
 
 function supportsMultipart(type?: string): boolean {
@@ -680,10 +700,12 @@ function StorageModal({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; latencyMs?: number; items?: number; error?: string } | null>(null);
   const driveConfig = driveConfigMap[formData.type || ""];
-  const isS3 = formData.type === "s3";
+const isS3 = formData.type === "s3";
   const isS3Like = formData.type === "s3" || formData.type === "tigris" || formData.type === "qiniu";
-  const isWebdav = formData.type === "webdev";
   const isR2 = formData.type === "r2";
+  const isFtp = formData.type === "ftp";
+  const isWebdav = formData.type === "webdev" || isFtp;
+  const isMysql = formData.type === "mysql";
 
   const handleTypeChange = (nextType: string) => {
     const keepTopFields = nextType === "s3" || nextType === "webdev";
@@ -1093,6 +1115,8 @@ function StorageModal({
                 <option value="alicloud">阿里云盘</option>
                 <option value="baiduyun">百度网盘</option>
                 <option value="r2">Cloudflare R2</option>
+                <option value="ftp">FTP 文件网关</option>
+                <option value="mysql">MySQL 数据库</option>
               </select>
             </div>
             {(isS3 || isWebdav) && (
@@ -1187,6 +1211,14 @@ function StorageModal({
                   className="w-full field"
                   placeholder="/photos"
                 />
+              </div>
+            )}
+            {isMysql && (
+              <div className="col-span-2">
+                <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
+                  MySQL 数据库通过 Cloudflare Hyperdrive 接入。在下方填写 Hyperdrive 连接串和数据库名，
+                  即可浏览虚拟主机上的数据库表和查询数据。连接串格式：<code className="text-zinc-700 dark:text-zinc-300">mysql://user:pass@host:port/db</code>
+                </div>
               </div>
             )}
             {driveConfig && (

@@ -5,6 +5,9 @@ import { GoogleDriveClient } from "./gdrive-client";
 import { AliyunDriveClient } from "./alicloud-client";
 import { BaiduYunClient } from "./baiduyun-client";
 import { R2Client } from "./r2-client";
+import { MySqlClient, type MySqlConfig } from "./mysql-client";
+
+export type { MySqlConfig };
 
 export type StorageClient =
   | S3Client
@@ -27,7 +30,7 @@ export type StorageLike = {
   saving?: Record<string, any>;
 };
 
-export type ClientEnv = { R2?: R2Bucket };
+export type ClientEnv = { R2?: R2Bucket; HYPERDRIVE?: any };
 
 // 按存储类型构造对应客户端。r2 类型需要 worker 的 R2 binding。
 export function createClient(
@@ -98,6 +101,14 @@ export function createClient(
   if (storage.type === "baiduyun") {
     return new BaiduYunClient({ config: storage.config, saving: storage.saving });
   }
+  if (storage.type === "ftp") {
+    return new WebdevClient({
+      endpoint: storage.config?.endpoint || storage.endpoint,
+      username: storage.config?.username || storage.accessKeyId,
+      password: storage.config?.password || storage.secretAccessKey,
+      basePath: storage.config?.base_path || storage.basePath,
+    });
+  }
   return new S3Client({
     endpoint: storage.endpoint,
     region: storage.region,
@@ -106,4 +117,20 @@ export function createClient(
     bucket: storage.bucket,
     basePath: storage.basePath,
   });
+}
+
+// MySQL 通过 Hyperdrive 访问，接口与文件存储不同，单独构造
+export function createMysqlClient(
+  storage: StorageLike,
+  env?: ClientEnv
+): MySqlClient {
+  const cfg = storage.config || {};
+  return new MySqlClient(
+    {
+      connectionString: cfg.connection_string || cfg.endpoint || storage.endpoint || "",
+      database: cfg.database || storage.bucket,
+      tablePrefix: cfg.table_prefix,
+    },
+    env
+  );
 }
