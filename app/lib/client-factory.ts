@@ -65,6 +65,7 @@ export function createClient(
       "cn-east-2": "cn-east-2",
       na0: "us-north-1",
       as0: "ap-southeast-1",
+      as2: "ap-southeast-3",
     };
     const awsRegion = regionMap[cfg.region || "z0"] || regionMap.z0;
     return new S3Client({
@@ -74,6 +75,7 @@ export function createClient(
       secretAccessKey: cfg.secret_key || storage.secretAccessKey || "",
       bucket: cfg.bucket || storage.bucket || "",
       basePath: cfg.root_folder_path || storage.basePath || "/",
+      usePathStyle: cfg.path_style ?? true,
     });
   }
   if (storage.type === "webdev") {

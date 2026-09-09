@@ -5,6 +5,7 @@ export interface S3Config {
   secretAccessKey: string;
   bucket: string;
   basePath?: string;
+  usePathStyle?: boolean;
 }
 
 export interface S3Object {
@@ -86,6 +87,7 @@ async function getSignatureKey(
 
 export class S3Client {
   private config: S3Config;
+  private hostStyle: "path" | "vhost";
 
   constructor(config: S3Config) {
     const raw = config.endpoint?.trim() || "";
@@ -95,6 +97,22 @@ export class S3Client {
     // 用户常漏掉协议头，补上 https:// 避免 new URL() 抛 "Invalid URL string"
     const endpoint = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     this.config = { ...config, endpoint };
+    this.hostStyle = config.usePathStyle === false ? "vhost" : "path";
+  }
+
+  private getBaseHost(url: URL): string {
+    if (this.hostStyle === "vhost") {
+      return `${this.config.bucket}.${url.host}`;
+    }
+    return url.host;
+  }
+
+  private getRequestUrl(objectPath: string): string {
+    const url = new URL(this.config.endpoint);
+    if (this.hostStyle === "vhost") {
+      return `${url.protocol}//${this.getBaseHost(url)}${objectPath}`;
+    }
+    return `${url.protocol}//${url.host}${objectPath}`;
   }
 
   private getFullPath(path: string): string {
@@ -112,7 +130,7 @@ export class S3Client {
     useUnsignedPayload: boolean = false
   ): Promise<Record<string, string>> {
     const url = new URL(this.config.endpoint);
-    const host = url.host;
+    const host = this.getBaseHost(url);
     const now = new Date();
     const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
     const dateStamp = amzDate.slice(0, 8);
@@ -180,14 +198,12 @@ export class S3Client {
     maxKeys: number = 1000,
     continuationToken?: string
   ): Promise<ListObjectsResult> {
-    // Ensure prefix ends with / when listing a directory (not root)
     let normalizedPrefix = prefix;
     if (normalizedPrefix && !normalizedPrefix.endsWith("/")) {
       normalizedPrefix = normalizedPrefix + "/";
     }
 
     const fullPrefix = this.getFullPath(normalizedPrefix);
-    const path = `/${this.config.bucket}`;
 
     const queryParams: Record<string, string> = {
       "list-type": "2",
@@ -200,11 +216,14 @@ export class S3Client {
       queryParams["continuation-token"] = continuationToken;
     }
 
+    const path = this.hostStyle === "vhost" ? `/${fullPrefix}` : `/${this.config.bucket}`;
+
     const headers = await this.signRequest("GET", path, queryParams);
 
     const queryString = buildCanonicalQueryString(queryParams);
 
-    const response = await fetch(`${this.config.endpoint}${path}?${queryString}`, {
+    const url = this.getRequestUrl(path.startsWith("/") ? path : "/" + path);
+    const response = await fetch(`${url}?${queryString}`, {
       method: "GET",
       headers,
     });
