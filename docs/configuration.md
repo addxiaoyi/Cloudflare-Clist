@@ -26,7 +26,7 @@ Create or update the `wrangler.jsonc` file with your specific database ID and en
     "ADMIN_USERNAME": "your_admin_username",
     "ADMIN_PASSWORD": "your_secure_password",
     "SITE_TITLE": "Your Site Title",
-    "SITE_ANNOUNCEMENT": "Welcome to CList storage service!",
+    "SITE_ANNOUNCEMENT": "Welcome to Starx storage service!",
     "CHUNK_SIZE_MB": "10"
   },
   "d1_databases": [

@@ -12,10 +12,11 @@ import {
   ChevronRight, ArrowLeft, ArrowRightLeft, RefreshCw, PanelLeft,
   FolderPlus, Upload, Download, Copy, Share2, Pencil, Trash2, Play, BarChart3, FileText,
   Folder, AlertCircle, Github, fileTypeIcon, Globe, LayoutGrid, List, Star, Calculator,
+  Eye, EyeClosed,
 } from "~/components/icons";
 
 export function meta({ data }: Route.MetaArgs) {
-  const title = data?.siteTitle || "CList";
+  const title = data?.siteTitle || "Starx";
   return [
     { title: `${title} - 存储聚合` },
     { name: "description", content: "S3 兼容存储聚合服务" },
@@ -24,7 +25,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
-  const siteTitle = context.cloudflare.env.SITE_TITLE || "CList";
+  const siteTitle = context.cloudflare.env.SITE_TITLE || "Starx";
   const siteAnnouncement = context.cloudflare.env.SITE_ANNOUNCEMENT || "";
   const chunkSizeMB = parseInt(context.cloudflare.env.CHUNK_SIZE_MB || "50", 10);
   const webdavEnabled = (context.cloudflare.env.WEBDAV_ENABLED as string) === "true";
@@ -88,6 +89,7 @@ interface StorageInfo {
   guestList: boolean;
   guestDownload: boolean;
   guestUpload: boolean;
+  description?: string;
 }
 
 type ConfigField = {
@@ -357,6 +359,58 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       },
     ],
   },
+  tigris: {
+    name: "Tigris 对象存储",
+    supportsMultipart: true,
+    fields: [
+      {
+        key: "region",
+        label: "区域",
+        type: "select",
+        required: true,
+        options: [
+          { value: "us-east-1", label: "美国东部" },
+          { value: "eu-central-1", label: "欧洲中部" },
+          { value: "ap-southeast-1", label: "亚太东南" },
+        ],
+        defaultValue: "us-east-1",
+      },
+      { key: "endpoint", label: "端点", type: "text", defaultValue: "https://fly/storage", placeholder: "https://fly/storage" },
+      { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-bucket" },
+      { key: "access_key_id", label: "访问密钥 ID", type: "password", required: true, placeholder: "Tigris Access Key ID" },
+      { key: "secret_access_key", label: "访问密钥", type: "password", required: true, placeholder: "Tigris Secret Access Key" },
+      { key: "session_token", label: "会话令牌", type: "password", placeholder: "可选：临时凭证" },
+      { key: "use_ssl", label: "启用 SSL", type: "boolean", defaultValue: true },
+      { key: "path_style", label: "路径风格访问", type: "boolean", defaultValue: false },
+      { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
+    ],
+  },
+  qiniu: {
+    name: "七牛云 KODO",
+    supportsMultipart: true,
+    fields: [
+      {
+        key: "region",
+        label: "区域",
+        type: "select",
+        required: true,
+        options: [
+          { value: "z0", label: "华东" },
+          { value: "z1", label: "华北" },
+          { value: "z2", label: "华南" },
+          { value: "na0", label: "北美" },
+          { value: "as0", label: "东南亚" },
+        ],
+        defaultValue: "z0",
+      },
+      { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-kodo-bucket" },
+      { key: "access_key", label: "Access Key", type: "password", required: true, placeholder: "七牛 Access Key" },
+      { key: "secret_key", label: "Secret Key", type: "password", required: true, placeholder: "七牛 Secret Key" },
+      { key: "domain", label: "域名", type: "text", placeholder: "https://cdn.example.com（可选）" },
+      { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
+      { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
+    ],
+  },
 };
 
 function supportsMultipart(type?: string): boolean {
@@ -423,6 +477,57 @@ function Modal({ title, onClose, children, maxWidth = "max-w-sm" }: { title: str
         </div>
         <div className="p-4">{children}</div>
       </div>
+    </div>
+  );
+}
+
+interface PasswordInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  required?: boolean;
+}
+
+function PasswordInput({ value, onChange, label, required }: PasswordInputProps) {
+  const [showValue, setShowValue] = useState(false);
+
+  return (
+    <div>
+      <label className="block text-xs text-zinc-500 mb-1.5">{label}{required ? " *" : ""}</label>
+      <div className="relative">
+        <input
+          type={showValue ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full field"
+          required={required}
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowValue(!showValue)}
+            className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+            title={showValue ? "隐藏密钥" : "显示密钥"}
+          >
+            {showValue ? <EyeClosed className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+          {value && (
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(value)}
+              className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+              title="复制密钥"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+      {value && (
+        <span className="text-xs text-zinc-500 mt-1 block">
+          当前值：{value.slice(0, 4)}****{value.slice(-4)}
+        </span>
+      )}
     </div>
   );
 }
@@ -535,13 +640,18 @@ function StorageModal({
     if (base.api_address === undefined && base.api_url_address !== undefined) {
       base.api_address = base.api_url_address;
     }
+    const hasLocalClient = Boolean(String(base.client_id || "").trim() && String(base.client_secret || "").trim());
     for (const field of fields) {
       if (base[field.key] === undefined && field.defaultValue !== undefined) {
+        // 已有本地客户端凭据时默认走本地（官方）刷新，避免把原生授权存储切回在线聚合 API
+        if (field.key === "use_online_api" && hasLocalClient) {
+          base[field.key] = false;
+          continue;
+        }
         base[field.key] = field.defaultValue;
       }
     }
-    const hasLocalClient = Boolean(String(base.client_id || "").trim() && String(base.client_secret || "").trim());
-    if (fields.some((field) => field.key === "use_online_api") && !hasLocalClient) {
+    if (fields.some((field) => field.key === "use_online_api") && !hasLocalClient && base.use_online_api === undefined) {
       base.use_online_api = true;
     }
     return base;
@@ -561,6 +671,7 @@ function StorageModal({
     guestList: storage?.guestList ?? false,
     guestDownload: storage?.guestDownload ?? false,
     guestUpload: storage?.guestUpload ?? false,
+    description: storage?.description || "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -568,19 +679,21 @@ function StorageModal({
   const [testResult, setTestResult] = useState<{ ok: boolean; latencyMs?: number; items?: number; error?: string } | null>(null);
   const driveConfig = driveConfigMap[formData.type || ""];
   const isS3 = formData.type === "s3";
+  const isS3Like = formData.type === "s3" || formData.type === "tigris" || formData.type === "qiniu";
   const isWebdav = formData.type === "webdev";
   const isR2 = formData.type === "r2";
 
   const handleTypeChange = (nextType: string) => {
+    const keepTopFields = nextType === "s3" || nextType === "webdev";
     setFormData({
       ...formData,
       type: nextType,
-      endpoint: nextType === "s3" || nextType === "webdev" ? formData.endpoint : "",
-      region: nextType === "s3" ? formData.region : "auto",
-      accessKeyId: nextType === "s3" || nextType === "webdev" ? formData.accessKeyId : "",
+      endpoint: keepTopFields ? formData.endpoint : "",
+      region: keepTopFields ? formData.region : "auto",
+      accessKeyId: keepTopFields ? formData.accessKeyId : "",
       secretAccessKey: "",
-      bucket: nextType === "s3" ? formData.bucket : "",
-      basePath: nextType === "s3" || nextType === "webdev" ? formData.basePath : "",
+      bucket: keepTopFields ? formData.bucket : "",
+      basePath: keepTopFields ? formData.basePath : "",
       config: initConfig(nextType, {}),
     });
   };
@@ -600,6 +713,7 @@ function StorageModal({
 
     const commonClasses = "w-full field";
     const value = values[field.key] ?? "";
+    const isPasswordLike = field.type === "password" || field.key.includes("secret") || field.key.includes("key") || field.key === "client_secret" || field.key === "refresh_token";
 
     if (field.type === "boolean") {
       return (
@@ -649,6 +763,18 @@ function StorageModal({
       );
     }
 
+    if (isPasswordLike) {
+      return (
+        <PasswordInput
+          key={field.key}
+          value={String(value)}
+          onChange={(v) => updateConfigValue(field.key, v)}
+          label={field.label}
+          required={field.required}
+        />
+      );
+    }
+
     return (
       <div key={field.key}>
         <label className="block text-xs text-zinc-500 mb-1.5">{field.label}{field.required ? " *" : ""}</label>
@@ -686,7 +812,7 @@ function StorageModal({
         ? { id: storage.id, ...formData, config: configToSend }
         : { ...formData, config: configToSend };
 
-      if (storage && !formData.secretAccessKey && (isS3 || isWebdav)) {
+      if (storage && !formData.secretAccessKey && (isS3Like || isWebdav)) {
         delete (body as Record<string, unknown>).secretAccessKey;
       }
 
@@ -795,7 +921,7 @@ function StorageModal({
           return;
         }
         storageId = data.storage.id;
-        onSave(); // 刷新存储列表
+        onSave();
       }
       const res = await fetch("/api/gdrive-oauth", {
         method: "POST",
@@ -808,12 +934,115 @@ function StorageModal({
         setOauthLoading(false);
         return;
       }
-      window.location.href = data.url;
+      const popup = window.open(data.url, "_blank", "noopener,noreferrer,width=600,height=700");
+      if (!popup) {
+        setOauthError("弹出窗口被阻止，请允许弹出窗");
+        setOauthLoading(false);
+        return;
+      }
+      const handleMessage = (e: MessageEvent) => {
+        if (e.data?.type === "oauth" && e.data.provider === "google") {
+          window.removeEventListener("message", handleMessage);
+          popup.close();
+          setOauthLoading(false);
+          setTimeout(() => {
+            onSave();
+          }, 500);
+        }
+      };
+      window.addEventListener("message", handleMessage);
     } catch {
       setOauthError("网络错误");
       setOauthLoading(false);
     }
   };
+
+  // OneDrive OAuth：弹窗 + postMessage
+  const startOneDriveAuth = async () => {
+    setOauthLoading(true);
+    setOauthError("");
+    try {
+      let storageId = storage?.id;
+      if (!storageId) {
+        const configToSend = { ...(formData.config || {}) };
+        delete configToSend.refresh_token;
+        const res = await fetch("/api/storages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...formData, config: configToSend }),
+        });
+        const data = (await res.json()) as { error?: string; storage?: { id?: number } };
+        if (!res.ok || !data.storage?.id) {
+          setOauthError(data.error || "保存存储失败，无法发起授权");
+          setOauthLoading(false);
+          return;
+        }
+        storageId = data.storage.id;
+        onSave();
+      }
+      const res = await fetch("/api/onedrive-oauth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", storageId }),
+      });
+      const data = (await res.json()) as { error?: string; url?: string };
+      if (!res.ok || !data.url) {
+        setOauthError(data.error || "发起授权失败");
+        setOauthLoading(false);
+        return;
+      }
+      const popup = window.open(data.url, "_blank", "noopener,noreferrer,width=600,height=700");
+      if (!popup) {
+        setOauthError("弹出窗口被阻止，请允许弹出窗");
+        setOauthLoading(false);
+        return;
+      }
+      const handleMessage = (e: MessageEvent) => {
+        if (e.data?.type === "oauth" && e.data.provider === "microsoft") {
+          window.removeEventListener("message", handleMessage);
+          popup.close();
+          setOauthLoading(false);
+          setTimeout(() => {
+            onSave();
+          }, 500);
+        }
+      };
+      window.addEventListener("message", handleMessage);
+    } catch {
+      setOauthError("网络错误");
+      setOauthLoading(false);
+    }
+  };
+
+  // OneDrive OAuth 配置状态查询
+  useEffect(() => {
+    if (formData.type !== "onedrive") {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/onedrive-oauth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "status", storageId: storage?.id || 0 }),
+        });
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as { configured?: boolean; authorized?: boolean };
+        if (!cancelled) {
+          setOauthConfigured(Boolean(data.configured));
+          setOauthAuthorized(Boolean(data.authorized));
+        }
+      } catch {
+        // status 仅作提示，失败静默
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.type, storage?.id]);
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onCancel}>
@@ -836,6 +1065,16 @@ function StorageModal({
               />
             </div>
             <div className="col-span-2">
+              <label className="block text-xs text-zinc-500 mb-1.5">描述</label>
+              <input
+                type="text"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full field"
+                placeholder="可选：存储的简短描述"
+              />
+            </div>
+            <div className="col-span-2">
               <label className="block text-xs text-zinc-500 mb-1.5">存储类型 *</label>
               <select
                 value={formData.type}
@@ -847,6 +1086,8 @@ function StorageModal({
                 <option value="webdev">WebDAV</option>
                 <option value="onedrive">OneDrive</option>
                 <option value="gdrive">Google Drive</option>
+                <option value="tigris">Tigris 对象存储</option>
+                <option value="qiniu">七牛云 KODO</option>
                 <option value="alicloud">阿里云盘</option>
                 <option value="baiduyun">百度网盘</option>
                 <option value="r2">Cloudflare R2</option>
@@ -968,6 +1209,28 @@ function StorageModal({
                       className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
                     >
                       {oauthLoading ? "跳转中..." : "通过 Google 授权"}
+                    </button>
+                    {oauthError && (
+                      <div className="text-red-500 dark:text-red-400 text-xs font-medium">{oauthError}</div>
+                    )}
+                  </div>
+                )}
+                {formData.type === "onedrive" && (
+                  <div className="pt-1 space-y-2">
+                    <div className="text-xs text-zinc-500 leading-relaxed">
+                      {oauthConfigured
+                        ? oauthAuthorized
+                          ? "已通过 Microsoft 授权，刷新令牌已保存"
+                          : "尚未授权，点击下方按钮跳转 Microsoft 完成授权"
+                        : "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET，可手动填写下方刷新令牌"}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startOneDriveAuth}
+                      disabled={oauthLoading}
+                      className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
+                    >
+                      {oauthLoading ? "跳转中..." : "通过 Microsoft 授权"}
                     </button>
                     {oauthError && (
                       <div className="text-red-500 dark:text-red-400 text-xs font-medium">{oauthError}</div>
@@ -1338,6 +1601,9 @@ function SettingsModal({
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {storages.map((storage) => (
                           <div key={storage.id} className="bg-zinc-50 dark:bg-zinc-800 p-2 rounded border border-zinc-200 dark:border-zinc-700">
+                            {storage.description && (
+                              <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">{storage.description}</div>
+                            )}
                             <div className="text-xs text-zinc-700 dark:text-zinc-300 font-mono mb-1">{storage.name}</div>
                             <code className="text-xs text-blue-600 dark:text-blue-400 font-mono break-all">
                               {typeof window !== 'undefined' ? `${window.location.origin}/dav/${storage.id}/` : `/dav/${storage.id}/`}
@@ -1527,11 +1793,9 @@ function SettingsModal({
               <div className="text-xs text-zinc-600 dark:text-zinc-400 font-mono space-y-2">
                 <p>S3 兼容存储聚合服务</p>
                 <p className="text-zinc-500">支持: AWS S3 / Cloudflare R2 / 阿里云 OSS / 腾讯云 COS / MinIO / WebDAV / OneDrive / Google Drive / 阿里云盘 / 百度网盘</p>
-                <p>作者: ooyyh</p>
-                <p>联系方式: 3266940347@qq.com</p>
               </div>
               <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs text-zinc-500 font-medium">
-                <p>Powered by Cloudflare Workers && ooyyh</p>
+                <p>Powered by Cloudflare Workers</p>
               </div>
             </div>
           )}
@@ -4237,7 +4501,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const toast = useToast();
   const confirm = useConfirm();
 
-  const siteTitle = loaderData.siteTitle || "CList";
+  const siteTitle = loaderData.siteTitle || "Starx";
   const siteAnnouncement = loaderData.siteAnnouncement || "";
   const chunkSizeMB = loaderData.chunkSizeMB || 50;
   const webdavEnabled = loaderData.webdavEnabled || false;
@@ -4382,7 +4646,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-600/20">
               <Cloud className="h-[18px] w-[18px]" />
             </span>
-            <span className="text-lg font-bold tracking-tight">CList</span>
+            <span className="text-lg font-bold tracking-tight">Starx</span>
           </div>
           <div className="flex-1 text-center min-w-0">
             <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate block">{siteTitle}</span>
@@ -4566,8 +4830,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           >
             更新日志
           </button>
-          <span className="text-zinc-300 dark:text-zinc-700">·</span>
-          <span>Made by <span className="text-zinc-700 dark:text-zinc-300">ooyyh</span></span>
           <span className="text-zinc-300 dark:text-zinc-700">·</span>
           <span className="inline-flex items-center gap-1">
             Powered by

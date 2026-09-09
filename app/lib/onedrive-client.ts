@@ -151,7 +151,7 @@ export class OneDriveClient {
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
-        "User-Agent": "CList/1.0",
+        "User-Agent": "Mozilla/5.0 (compatible)",
       },
     });
 

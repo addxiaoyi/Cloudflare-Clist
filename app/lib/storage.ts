@@ -14,6 +14,7 @@ export interface Storage {
   guestList: boolean;
   guestDownload: boolean;
   guestUpload: boolean;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,6 +34,7 @@ export interface StorageInput {
   guestList?: boolean;
   guestDownload?: boolean;
   guestUpload?: boolean;
+  description?: string;
 }
 
 interface StorageRow {
@@ -51,6 +53,7 @@ interface StorageRow {
   guest_list: number | null;
   guest_download: number | null;
   guest_upload: number | null;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -84,6 +87,7 @@ function rowToStorage(row: StorageRow): Storage {
     guestList: row.guest_list === 1 || (row.guest_list === null && row.is_public === 1),
     guestDownload: row.guest_download === 1 || (row.guest_download === null && row.is_public === 1),
     guestUpload: row.guest_upload === 1,
+    description: row.description?.trim() || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -149,11 +153,12 @@ export async function createStorage(
   const guestList = input.guestList !== undefined ? (input.guestList ? 1 : 0) : isPublic;
   const guestDownload = input.guestDownload !== undefined ? (input.guestDownload ? 1 : 0) : isPublic;
   const guestUpload = input.guestUpload ? 1 : 0;
+  const description = input.description?.trim() || null;
 
   const result = await db
     .prepare(
-      `INSERT INTO storages (name, type, endpoint, region, access_key_id, secret_access_key, bucket, base_path, config_json, saving_json, is_public, guest_list, guest_download, guest_upload)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO storages (name, type, endpoint, region, access_key_id, secret_access_key, bucket, base_path, config_json, saving_json, is_public, guest_list, guest_download, guest_upload, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING *`
     )
     .bind(
@@ -170,7 +175,8 @@ export async function createStorage(
       isPublic,
       guestList,
       guestDownload,
-      guestUpload
+      guestUpload,
+      description
     )
     .first<StorageRow>();
 
@@ -255,6 +261,11 @@ export async function updateStorage(
     updates.push("guest_upload = ?");
     values.push(input.guestUpload ? 1 : 0);
   }
+  if (input.description !== undefined) {
+    const desc = input.description?.trim() || "";
+    updates.push("description = ?");
+    values.push(desc);
+  }
 
   if (updates.length === 0) {
     return existing;
@@ -313,6 +324,7 @@ export async function initDatabase(db: D1Database): Promise<void> {
       guest_list INTEGER DEFAULT 1,
       guest_download INTEGER DEFAULT 1,
       guest_upload INTEGER DEFAULT 0,
+      description TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     )`,
@@ -363,6 +375,9 @@ export async function initDatabase(db: D1Database): Promise<void> {
     }
     if (!names.has("saving_json")) {
       await db.prepare("ALTER TABLE storages ADD COLUMN saving_json TEXT DEFAULT '{}'").run();
+    }
+    if (!names.has("description")) {
+      await db.prepare("ALTER TABLE storages ADD COLUMN description TEXT").run();
     }
   }
 

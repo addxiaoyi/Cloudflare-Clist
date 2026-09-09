@@ -1,4 +1,4 @@
-# CList
+# Starx
 
 <p align="center">
   <strong>A Cloudflare-native storage aggregation panel with WebDAV, multi-drive support, file preview, sharing, audit logs, and admin controls.</strong>
@@ -33,12 +33,12 @@
 </p>
 
 <p align="center">
-  <img src="./public/clist-cover.png" alt="CList product preview" width="100%">
+  <img src="./public/clist-cover.png" alt="Starx product preview" width="100%">
 </p>
 
 ## Overview
 
-CList turns Cloudflare Workers + D1 into a lightweight cloud storage aggregation service. It gives you a single web UI and WebDAV endpoint for S3-compatible storage, WebDAV servers, OneDrive, Google Drive, Aliyun Drive, and Baidu Netdisk.
+Starx turns Cloudflare Workers + D1 into a lightweight cloud storage aggregation service. It gives you a single web UI and WebDAV endpoint for S3-compatible storage, WebDAV servers, OneDrive, Google Drive, Aliyun Drive, and Baidu Netdisk.
 
 It is designed for small personal data centers, public download mirrors, private file hubs, and edge-hosted storage dashboards where running a traditional server is overkill.
 
@@ -74,7 +74,7 @@ flowchart LR
 | Backend | Browse | Upload | Rename / Move | Notes |
 | --- | --- | --- | --- | --- |
 | S3 compatible | Yes | Yes | Yes | Works with R2-like and S3-compatible endpoints |
-| WebDAV upstream | Yes | Yes | Yes | Also exposed through CList's own WebDAV server |
+| WebDAV upstream | Yes | Yes | Yes | Also exposed through Starx's own WebDAV server |
 | OneDrive | Yes | Yes | Yes | Supports online refresh API or custom OAuth app |
 | Google Drive | Yes | Yes | Yes | Supports online refresh API or custom OAuth app |
 | Aliyun Drive | Yes | Yes | Yes | Uses Aliyun Open API style token refresh |
@@ -128,7 +128,7 @@ npm run preview
 | `DB` | Yes | D1 binding | Cloudflare D1 database binding |
 | `ADMIN_USERNAME` | Yes | `admin` | Admin login username |
 | `ADMIN_PASSWORD` | Yes | `change-me` | Admin login password |
-| `SITE_TITLE` | No | `CList` | Site title shown in the UI |
+| `SITE_TITLE` | No | `Starx` | Site title shown in the UI |
 | `SITE_ANNOUNCEMENT` | No | `Welcome` | Announcement text shown to visitors |
 | `CHUNK_SIZE_MB` | No | `10` | Browser upload chunk size |
 | `WEBDAV_ENABLED` | No | `true` | Enables the WebDAV server endpoint |
@@ -140,7 +140,7 @@ npm run preview
 
 ## WebDAV
 
-When `WEBDAV_ENABLED` is set to `"true"`, CList exposes storage backends through WebDAV:
+When `WEBDAV_ENABLED` is set to `"true"`, Starx exposes storage backends through WebDAV:
 
 ```text
 https://your-domain.example/dav/0/            # all storages
@@ -152,17 +152,15 @@ Important details:
 - WebDAV URLs should end with a trailing slash.
 - Use Basic Auth with `WEBDAV_USERNAME` / `WEBDAV_PASSWORD`.
 - Desktop clients such as Windows WebDAV, macOS Finder, Cyberduck, RaiDrive, NetDrive, and many mobile file managers can connect directly.
-- CList supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `COPY`, and `MOVE`.
-
-More details: [docs/webdav.md](./docs/webdav.md)
+- Starx supports `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `COPY`, and `MOVE`.
 
 ## Drive Configuration Notes
 
-CList follows the OpenList-style driver flow for cloud drive token refresh:
+Starx follows the OpenList-style driver flow for cloud drive token refresh:
 
 - Online refresh API is enabled by default for OneDrive, Google Drive, Aliyun Drive, and Baidu Netdisk.
-- Existing OpenList-style `api_url_address` values are accepted alongside CList's `api_address`.
-- If no local `client_id` and `client_secret` are configured, CList automatically falls back to the online refresh API.
+- Existing OpenList-style `api_url_address` values are accepted alongside Starx's `api_address`.
+- If no local `client_id` and `client_secret` are configured, Starx automatically falls back to the online refresh API.
 - Refreshed tokens are persisted into storage state so repeated browsing does not require re-login.
 
 ## Development
@@ -217,4 +215,4 @@ public/              static assets
 
 ## License
 
-CList is released under the [MIT License](./LICENSE).
+Starx is released under the [MIT License](./LICENSE).

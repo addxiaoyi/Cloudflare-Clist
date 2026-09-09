@@ -9,6 +9,7 @@ export default [
   route("api/audit", "routes/api.audit.ts"),
   route("api/shares", "routes/api.shares.ts"),
   route("api/gdrive-oauth", "routes/api.gdrive-oauth.ts"),
+  route("api/onedrive-oauth", "routes/api.onedrive-oauth.ts"),
   route("setup", "routes/setup.tsx"),
   route("share", "routes/share.tsx"),
   route("dav/:storageId/*", "routes/dav.$storageId.$.ts"),

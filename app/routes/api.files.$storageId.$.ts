@@ -848,7 +848,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       // Fetch the remote file
       const remoteResponse = await fetch(parsedUrl.href, {
         headers: {
-          "User-Agent": "CList/1.0",
+          "User-Agent": "Mozilla/5.0 (compatible)",
         },
       });
 

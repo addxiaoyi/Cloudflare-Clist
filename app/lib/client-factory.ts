@@ -45,6 +45,28 @@ export function createClient(
       basePath: storage.basePath,
     });
   }
+  if (storage.type === "tigris") {
+    const cfg = storage.config || {};
+    return new S3Client({
+      endpoint: cfg.endpoint || "https://fly.storage",
+      region: cfg.region || "us-east-1",
+      accessKeyId: cfg.access_key_id || storage.accessKeyId || "",
+      secretAccessKey: cfg.secret_access_key || storage.secretAccessKey || "",
+      bucket: cfg.bucket || storage.bucket || "",
+      basePath: cfg.root_folder_path || storage.basePath || "/",
+    });
+  }
+  if (storage.type === "qiniu") {
+    const cfg = storage.config || {};
+    return new S3Client({
+      endpoint: `https://s3.${cfg.region || "z0"}.qiniucs.com`,
+      region: cfg.region || "z0",
+      accessKeyId: cfg.access_key || storage.accessKeyId || "",
+      secretAccessKey: cfg.secret_key || storage.secretAccessKey || "",
+      bucket: cfg.bucket || storage.bucket || "",
+      basePath: cfg.root_folder_path || storage.basePath || "/",
+    });
+  }
   if (storage.type === "webdev") {
     return new WebdevClient({
       endpoint: storage.endpoint,

@@ -127,7 +127,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           userAgent: meta.userAgent,
           detail: { username },
         });
-        const adminUser = (context.cloudflare.env as Record<string, string | undefined>).ADMIN_USERNAME;
+        const adminUser = (context.cloudflare.env as unknown as Record<string, string | undefined>).ADMIN_USERNAME;
         const hasAdminVar =
           adminUser !== undefined && adminUser !== null && adminUser !== "";
         return Response.json(

@@ -77,8 +77,6 @@ export function shouldUseOnlineApi(config: Record<string, any>): boolean {
   if (!hasLocalClient) {
     return true;
   }
-  if (config.use_online_api === undefined || config.use_online_api === null) {
-    return true;
-  }
+  // 配置了本地客户端凭据时默认走官方接口刷新，仅当显式开启在线 API 才使用聚合接口
   return config.use_online_api === true || config.use_online_api === "true" || config.use_online_api === 1;
 }

@@ -141,7 +141,7 @@ function createUnauthorizedResponse(): Response {
   return new Response("Unauthorized", {
     status: 401,
     headers: {
-      "WWW-Authenticate": 'Basic realm="CList WebDAV"',
+      "WWW-Authenticate": 'Basic realm="Starx WebDAV"',
       "Content-Type": "text/plain",
     },
   });
@@ -258,7 +258,7 @@ export async function handleWebdavRequest(
       <D:propstat>
         <D:prop>
           <D:resourcetype><D:collection/></D:resourcetype>
-          <D:displayname>CList Storages</D:displayname>
+          <D:displayname>Starx Storages</D:displayname>
         </D:prop>
         <D:status>HTTP/1.1 200 OK</D:status>
       </D:propstat>

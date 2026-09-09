@@ -1,4 +1,4 @@
-# CList - Cloud Storage Aggregation Service
+# Starx - Cloud Storage Aggregation Service
 
 A cloud storage aggregation service deployed on Cloudflare Workers with D1 database support.
 
@@ -13,6 +13,7 @@ A cloud storage aggregation service deployed on Cloudflare Workers with D1 datab
 - File preview capabilities
 - Multi-storage backend support
 - **WebDAV server support** - Access your storages via WebDAV protocol
+- **Starx 存储支持** - 通过 WebDAV 协议访问您的存储
 
 ## Quick Start
 

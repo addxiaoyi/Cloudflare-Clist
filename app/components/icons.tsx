@@ -132,6 +132,12 @@ export const Pause = (p: IconProps) => (
 export const Lock = (p: IconProps) => (
   <Svg {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></Svg>
 );
+export const Eye = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></Svg>
+);
+export const EyeClosed = (p: IconProps) => (
+  <Svg {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 9.9a4 4 0 0 1 4.2 4.2" /><line x1="1" y1="1" x2="23" y2="23" /></Svg>
+);
 export const BarChart3 = (p: IconProps) => (
   <Svg {...p}><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></Svg>
 );

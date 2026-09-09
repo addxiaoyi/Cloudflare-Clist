@@ -1,21 +1,40 @@
-import type { Route } from "./+types/api.gdrive-oauth";
+import type { Route } from "./+types/api.onedrive-oauth";
 import { initDatabase, getStorageById, updateStorage } from "~/lib/storage";
 import { requireAuth } from "~/lib/auth";
 
-// Google Drive 原生 OAuth 流：
-// 1. 管理员在存储表单点「通过 Google 授权」→ POST action=start → 返回授权 URL
-// 2. 浏览器跳转 Google 授权页 → Google 重定向回本路由的 loader（GET，公开）
+// OneDrive 原生 OAuth 流：
+// 1. 管理员在存储表单点「通过 Microsoft 授权」→ POST action=start → 返回授权 URL
+// 2. 浏览器跳转 Microsoft 授权页 → 重定向回本路由的 loader（GET，公开）
 // 3. 回调校验 state 签名后换 code → 存 refresh_token 到该存储的 config/saving
 
-const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+const ONEDRIVE_OAUTH_ENDPOINTS: Record<string, { oauth: string; token: string; scope: string }> = {
+  global: {
+    oauth: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    token: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    scope: "Files.ReadWrite.All offline_access",
+  },
+  cn: {
+    oauth: "https://login.chinacloudapi.cn/common/oauth2/v2.0/authorize",
+    token: "https://login.chinacloudapi.cn/common/oauth2/v2.0/token",
+    scope: "Files.ReadWrite.All offline_access",
+  },
+  us: {
+    oauth: "https://login.microsoftonline.us/common/oauth2/v2.0/authorize",
+    token: "https://login.microsoftonline.us/common/oauth2/v2.0/token",
+    scope: "Files.ReadWrite.All offline_access",
+  },
+  de: {
+    oauth: "https://login.microsoftonline.de/common/oauth2/v2.0/authorize",
+    token: "https://login.microsoftonline.de/common/oauth2/v2.0/token",
+    scope: "Files.ReadWrite.All offline_access",
+  },
+};
 
 function getOAuthConfig(env: Env) {
   return {
-    clientId: env.GOOGLE_CLIENT_ID?.trim() || "",
-    clientSecret: env.GOOGLE_CLIENT_SECRET?.trim() || "",
-    redirectUri: env.GOOGLE_REDIRECT_URI?.trim() || "",
+    clientId: env.ONEDRIVE_CLIENT_ID?.trim() || "",
+    clientSecret: env.ONEDRIVE_CLIENT_SECRET?.trim() || "",
+    redirectUri: env.ONEDRIVE_REDIRECT_URI?.trim() || "",
   };
 }
 
@@ -33,34 +52,34 @@ async function hmacHex(secret: string, message: string): Promise<string> {
     .join("");
 }
 
-async function signState(secret: string, storageId: number): Promise<string> {
-  const sig = await hmacHex(secret, `gdrive:${storageId}`);
-  return `${storageId}.${sig}`;
+async function signState(secret: string, storageId: number, region: string): Promise<string> {
+  const sig = await hmacHex(secret, `onedrive:${region}:${storageId}`);
+  return `${storageId}.${region}.${sig}`;
 }
 
-async function verifyState(secret: string, state: string): Promise<number | null> {
-  const dot = state.indexOf(".");
-  if (dot < 1) {
+async function verifyState(secret: string, state: string): Promise<{ storageId: number; region: string } | null> {
+  const parts = state.split(".");
+  if (parts.length < 3) {
     return null;
   }
-  const storageId = parseInt(state.slice(0, dot), 10);
-  const sig = state.slice(dot + 1);
-  if (!Number.isFinite(storageId) || storageId <= 0) {
+  const storageId = parseInt(parts[0], 10);
+  const region = parts[1];
+  const sig = parts.slice(2).join(".");
+  if (!Number.isFinite(storageId) || storageId <= 0 || !region) {
     return null;
   }
-  const expected = await hmacHex(secret, `gdrive:${storageId}`);
+  const expected = await hmacHex(secret, `onedrive:${region}:${storageId}`);
   if (sig.length !== expected.length) {
     return null;
   }
-  // 恒定时间比较，避免时序侧信道
   let diff = 0;
   for (let i = 0; i < expected.length; i++) {
     diff |= sig.charCodeAt(i) ^ expected.charCodeAt(i);
   }
-  return diff === 0 ? storageId : null;
+  return diff === 0 ? { storageId, region } : null;
 }
 
-// GET：Google 授权回调（公开）
+// GET：Microsoft 授权回调（公开）
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
   await initDatabase(db);
@@ -74,13 +93,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
   async function redirectHome(ok: boolean, reason?: string): Promise<Response> {
     const params = new URLSearchParams();
-    params.set("oauth", ok ? "google-success" : "google-error");
+    params.set("oauth", ok ? "microsoft-success" : "microsoft-error");
     if (reason) {
       params.set("reason", reason);
     }
-    // 先发 postMessage 给父窗口，再在当前页面跳转
     const html = `<!DOCTYPE html><html><body><script>
-      try { window.opener.postMessage({type:'oauth',provider:'google',success:${ok}},'*'); } catch(e){}
+      try { window.opener.postMessage({type:'oauth',provider:'microsoft',success:${ok}},'*'); } catch(e){}
       window.location.href = '/?${params.toString()}';
     </script></body></html>`;
     return new Response(html, { headers: { "Content-Type": "text/html" } });
@@ -90,18 +108,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     return redirectHome(false, error || "缺少授权码");
   }
   if (!oauth.clientId || !oauth.clientSecret) {
-    return redirectHome(false, "未配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET");
+    return redirectHome(false, "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET");
   }
 
-  const storageId = await verifyState(oauth.clientSecret, state);
-  if (!storageId) {
+  const parsed = await verifyState(oauth.clientSecret, state);
+  if (!parsed) {
     return redirectHome(false, "授权状态校验失败，请重新发起");
   }
+  const { storageId, region } = parsed;
 
   const storage = await getStorageById(db, storageId);
-  if (!storage) {
+  if (!storage || storage.type !== "onedrive") {
     return redirectHome(false, "存储不存在，请刷新后重试");
   }
+
+  const host = ONEDRIVE_OAUTH_ENDPOINTS[region] || ONEDRIVE_OAUTH_ENDPOINTS.global;
 
   try {
     const formData = new URLSearchParams();
@@ -109,9 +130,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     formData.append("code", code);
     formData.append("client_id", oauth.clientId);
     formData.append("client_secret", oauth.clientSecret);
-    formData.append("redirect_uri", oauth.redirectUri || `${url.origin}/api/gdrive-oauth`);
+    formData.append("redirect_uri", oauth.redirectUri || `${url.origin}/api/onedrive-oauth`);
+    formData.append("scope", host.scope);
 
-    const res = await fetch(GOOGLE_TOKEN_URL, {
+    const res = await fetch(host.token, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: formData.toString(),
@@ -128,7 +150,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       return redirectHome(false, data.error_description || data.error || "换取令牌失败");
     }
     if (!data.access_token || !data.refresh_token) {
-      return redirectHome(false, "授权响应缺少 refresh_token，请授权后重试");
+      return redirectHome(false, "授权响应缺少 refresh_token，请重试");
     }
 
     const now = Date.now();
@@ -137,13 +159,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
         client_id: oauth.clientId,
         client_secret: oauth.clientSecret,
         refresh_token: data.refresh_token,
-        // 原生 OAuth 使用本地客户端凭据走官方接口刷新，避免依赖在线聚合 API
         use_online_api: false,
-        // 已有手动配置保留
-        ...(storage.config?.root_folder_id ? { root_folder_id: storage.config.root_folder_id } : {}),
-        ...(storage.config?.order_by ? { order_by: storage.config.order_by } : {}),
-        ...(storage.config?.order_direction ? { order_direction: storage.config.order_direction } : {}),
+        region: storage.config?.region || region,
+        is_sharepoint: storage.config?.is_sharepoint || false,
+        ...(storage.config?.site_id ? { site_id: storage.config.site_id } : {}),
+        ...(storage.config?.root_folder_path ? { root_folder_path: storage.config.root_folder_path } : {}),
         ...(storage.config?.chunk_size ? { chunk_size: storage.config.chunk_size } : {}),
+        ...(storage.config?.custom_host ? { custom_host: storage.config.custom_host } : {}),
       },
       saving: {
         access_token: data.access_token,
@@ -171,12 +193,9 @@ export async function action({ request, context }: Route.ActionArgs) {
   const body = (await request.json().catch(() => ({}))) as Record<string, any>;
   const oauth = getOAuthConfig(context.cloudflare.env);
 
-  // 查询 OAuth 是否已配置 + 当前存储的授权状态
   if (body.action === "status") {
     const storageId = Number(body.storageId || 0);
-    const storage = storageId
-      ? await getStorageById(db, storageId)
-      : null;
+    const storage = storageId ? await getStorageById(db, storageId) : null;
     return Response.json({
       configured: Boolean(oauth.clientId && oauth.clientSecret),
       authorized: Boolean(
@@ -187,35 +206,34 @@ export async function action({ request, context }: Route.ActionArgs) {
     });
   }
 
-  // 发起授权：返回 Google 授权页 URL
   if (body.action === "start") {
     const storageId = Number(body.storageId || 0);
     const storage = storageId ? await getStorageById(db, storageId) : null;
-    if (!storage || storage.type !== "gdrive") {
-      return Response.json({ error: "请先保存一个 Google Drive 类型的存储" }, { status: 400 });
+    if (!storage || storage.type !== "onedrive") {
+      return Response.json({ error: "请先保存一个 OneDrive 类型的存储" }, { status: 400 });
     }
     if (!oauth.clientId) {
       return Response.json(
-        { error: "未配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET，无法发起授权" },
+        { error: "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET，无法发起授权" },
         { status: 400 }
       );
     }
 
-    const state = await signState(oauth.clientSecret, storageId);
-    const redirectUri =
-      oauth.redirectUri || `${new URL(request.url).origin}/api/gdrive-oauth`;
+    const region = storage.config?.region || "global";
+    const host = ONEDRIVE_OAUTH_ENDPOINTS[region] || ONEDRIVE_OAUTH_ENDPOINTS.global;
+    const state = await signState(oauth.clientSecret, storageId, region);
+    const redirectUri = oauth.redirectUri || `${new URL(request.url).origin}/api/onedrive-oauth`;
 
     const params = new URLSearchParams({
       client_id: oauth.clientId,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: DRIVE_SCOPE,
-      access_type: "offline",
+      scope: host.scope,
       prompt: "consent",
       state,
     });
 
-    return Response.json({ url: `${GOOGLE_AUTH_URL}?${params.toString()}` });
+    return Response.json({ url: `${host.oauth}?${params.toString()}` });
   }
 
   return Response.json({ error: "未知操作" }, { status: 400 });

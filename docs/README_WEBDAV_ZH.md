@@ -1,8 +1,8 @@
-# CList - WebDAV 功能说明
+# Starx - WebDAV 功能说明
 
 ## 概述
 
-CList 现在完全支持 WebDAV 协议，允许你通过标准的 WebDAV 客户端访问云存储。
+Starx 现在完全支持 WebDAV 协议，允许你通过标准的 WebDAV 客户端访问云存储。
 
 ## 快速开始
 

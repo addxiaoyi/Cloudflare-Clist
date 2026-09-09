@@ -86,8 +86,16 @@ export class GoogleDriveClient {
 
   private async refreshToken(): Promise<void> {
     if (shouldUseOnlineApi(this.config)) {
-      await this.refreshTokenOnline();
-      return;
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await this.refreshTokenOnline();
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error("Google refresh failed");
     }
     await this.refreshTokenLocal();
   }

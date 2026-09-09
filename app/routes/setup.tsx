@@ -83,7 +83,7 @@ interface SetupState {
 }
 
 const emptyState: SetupState = {
-  site: { siteTitle: "CList", announcement: "", chunkSizeMb: 50, adminUsername: "", adminPassword: "" },
+  site: { siteTitle: "Starx", announcement: "", chunkSizeMb: 50, adminUsername: "", adminPassword: "" },
   cloudflare: { apiToken: "", accountId: "", workerName: "clist", compatibilityDate: "2025-04-04", observability: true },
   d1: { enabled: true, databaseName: "clist", binding: "DB" },
   r2: { enabled: false, bucketName: "clist", binding: "R2" },
@@ -143,7 +143,7 @@ function buildWranglerJson(state: SetupState): object {
     compatibility_date: cloudflare.compatibilityDate,
     observability: { enabled: cloudflare.observability },
     vars: {
-      SITE_TITLE: site.siteTitle || "CList",
+      SITE_TITLE: site.siteTitle || "Starx",
       SITE_ANNOUNCEMENT: site.announcement,
       CHUNK_SIZE_MB: String(site.chunkSizeMb || 50),
       WEBDAV_ENABLED: webdav.enabled ? "true" : "false",
@@ -539,14 +539,14 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
               <SectionTitle icon={<Megaphone className="h-4 w-4" />} title="站点与管理员账号" desc="留空则使用默认 admin / changeme，上线后请在 Cloudflare 控制台修改" />
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="站点标题">
-                  <input className={inputCls} value={state.site.siteTitle} onChange={(e) => patch("site", { siteTitle: e.target.value })} placeholder="CList" />
+                  <input className={inputCls} value={state.site.siteTitle} onChange={(e) => patch("site", { siteTitle: e.target.value })} placeholder="Starx" />
                 </Field>
                 <Field label="上传分块大小 (MB)">
                   <input className={inputCls} type="number" min={1} max={200} value={state.site.chunkSizeMb} onChange={(e) => patch("site", { chunkSizeMb: Number(e.target.value) || 50 })} />
                 </Field>
               </div>
               <Field label="站点公告（可选）">
-                <input className={inputCls} value={state.site.announcement} onChange={(e) => patch("site", { announcement: e.target.value })} placeholder="欢迎使用 CList 存储服务" />
+                <input className={inputCls} value={state.site.announcement} onChange={(e) => patch("site", { announcement: e.target.value })} placeholder="欢迎使用 Starx 存储服务" />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="管理员用户名">

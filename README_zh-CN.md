@@ -1,6 +1,6 @@
-﻿# CList — 云存储聚合服务
+﻿# Starx — 云存储聚合服务
 
-CList 是一个基于 Cloudflare Workers 与 D1 的云存储聚合平台，支持多存储后端统一管理、文件分享与 WebDAV 访问，面向团队或个人的轻量级文件门户场景。
+Starx 是一个基于 Cloudflare Workers 与 D1 的云存储聚合平台，支持多存储后端统一管理、文件分享与 WebDAV 访问，面向团队或个人的轻量级文件门户场景。
 
 [English](./README.md) | 简体中文
 
@@ -22,7 +22,7 @@ CList 是一个基于 Cloudflare Workers 与 D1 的云存储聚合平台，支�
 
 ## 项目概述
 
-CList 通过统一的 Web 界面管理多个云存储后端，提供上传、预览、分享与访问控制等能力。平台以无服务器方式运行在 Cloudflare 边缘网络上，借助 D1 数据库存储配置与元数据，兼顾部署简洁性与全球可用性。
+Starx 通过统一的 Web 界面管理多个云存储后端，提供上传、预览、分享与访问控制等能力。平台以无服务器方式运行在 Cloudflare 边缘网络上，借助 D1 数据库存储配置与元数据，兼顾部署简洁性与全球可用性。
 
 适用场景：
 
@@ -109,8 +109,8 @@ Copy-Item .\wrangler.jsonc.example .\wrangler.jsonc
 | --- | --- | --- | --- |
 | `ADMIN_USERNAME` | 是 | `admin` | 管理员用户名 |
 | `ADMIN_PASSWORD` | 是 | `changeme` | 管理员密码 |
-| `SITE_TITLE` | 否 | `CList` | 站点标题 |
-| `SITE_ANNOUNCEMENT` | 否 | `Welcome to CList storage service!` | 站点公告 |
+| `SITE_TITLE` | 否 | `Starx` | 站点标题 |
+| `SITE_ANNOUNCEMENT` | 否 | `Welcome to Starx storage service!` | 站点公告 |
 | `CHUNK_SIZE_MB` | 否 | `10` | 上传分块大小（MB） |
 | `WEBDAV_ENABLED` | 否 | `false` | 是否启用 WebDAV |
 | `WEBDAV_USERNAME` | 否 | `webdav` | WebDAV 用户名 |

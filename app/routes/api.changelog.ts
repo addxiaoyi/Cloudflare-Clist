@@ -31,7 +31,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const response = await fetch(GITHUB_API_URL, {
       headers: {
         "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "CList-App",
+        "User-Agent": "Mozilla/5.0 (compatible)",
       },
     });
 

@@ -376,7 +376,7 @@ export default function Share({ loaderData }: Route.ComponentProps) {
 
       {/* Footer */}
       <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 text-xs text-zinc-500">
-        <div>CList 分享内容</div>
+        <div>Starx 分享内容</div>
       </div>
 
       {previewFile && token && (
