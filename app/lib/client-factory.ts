@@ -58,9 +58,18 @@ export function createClient(
   }
   if (storage.type === "qiniu") {
     const cfg = storage.config || {};
+    const regionMap: Record<string, string> = {
+      z0: "cn-east-1",
+      z1: "cn-north-1",
+      z2: "cn-south-1",
+      "cn-east-2": "cn-east-2",
+      na0: "us-north-1",
+      as0: "ap-southeast-1",
+    };
+    const awsRegion = regionMap[cfg.region || "z0"] || regionMap.z0;
     return new S3Client({
-      endpoint: `https://s3.${cfg.region || "z0"}.qiniucs.com`,
-      region: cfg.region || "z0",
+      endpoint: `https://s3.${awsRegion}.qiniucs.com`,
+      region: awsRegion,
       accessKeyId: cfg.access_key || storage.accessKeyId || "",
       secretAccessKey: cfg.secret_key || storage.secretAccessKey || "",
       bucket: cfg.bucket || storage.bucket || "",
