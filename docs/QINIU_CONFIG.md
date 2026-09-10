@@ -50,3 +50,41 @@ S3 空间名（Bucket）获取方式：
 
 - [AWS S3 兼容 - 七牛云](https://developer.qiniu.com/kodo/4086/aws-s3-compatible)
 - [S3 签名认证](https://developer.qiniu.com/kodo/4093/s3-authentication)
+
+## 530/1016 详细排查
+
+错误 530 + 1016 表示 Cloudflare 代理层遇到了 DNS 或连接问题：
+
+### 步骤 1：确认空间类型
+
+进入七牛云控制台 → 对象存储 → 空间管理：
+- ✅ 看到 "S3 Compatible API" 标识 → 正确
+- ❌ 只有 KODO 标识 → 需要创建 S3 空间
+
+### 步骤 2：获取正确 S3 空间名
+
+如果 KODO 空间名已全局唯一，直接用；否则：
+```bash
+# 通过 API 获取所有 S3 空间名
+curl --get "https://rs.qiniu.com/v3/bucket" \
+  -H "Authorization: Qiniu <Access Key>:<Token>"
+```
+
+### 步骤 3：检查区域匹配
+
+确保存储配置的区域和 bucket 创建时的区域一致：
+- 华东创建的 bucket → 选 z0
+- 华北创建的 bucket → 选 z1
+
+### 步骤 4：验证连接
+
+在本地测试 S3 兼容性：
+```bash
+# 使用 AWS CLI
+aws s3 ls s3://your-bucket \
+  --endpoint-url https://s3.cn-east-1.qiniucs.com \
+  --profile qiniu
+
+# 或使用浏览器测试
+curl -I -H "Host: s3.cn-east-1.qiniucs.com" https://s3.cn-east-1.qiniucs.com/your-bucket
+```

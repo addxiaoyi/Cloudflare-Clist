@@ -104,7 +104,7 @@ type ConfigField = {
   help?: string;
 };
 
-const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean; fields: ConfigField[] }> = {
+const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean; fields: ConfigField[]; oauth?: boolean }> = {
   onedrive: {
     name: "OneDrive",
     supportsMultipart: true,
@@ -359,6 +359,23 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       },
     ],
   },
+  quark: {
+    name: "夸克网盘",
+    supportsMultipart: false,
+    fields: [
+      { key: "cookie", label: "Cookie", type: "textarea", required: true, placeholder: "登录 pan.quark.cn 后 F12 抓取完整 Cookie" },
+      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "/" },
+      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: false },
+      {
+        key: "api_address",
+        label: "在线API地址",
+        type: "text",
+        defaultValue: "https://api.oplist.org/quark/renewapi",
+        placeholder: "自建刷新接口地址",
+        show: (values) => values.use_online_api === true,
+      },
+    ],
+  },
   tigris: {
     name: "Tigris 对象存储",
     supportsMultipart: true,
@@ -431,6 +448,23 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       { key: "connection_string", label: "Hyperdrive 连接串", type: "textarea", required: true, placeholder: "mysql://user:pass@host:port/db" },
       { key: "database", label: "数据库名", type: "text", required: true, placeholder: "my_database" },
       { key: "table_prefix", label: "表前缀", type: "text", placeholder: "可选：wp_" },
+    ],
+  },
+  "r2-oauth": {
+    name: "Cloudflare R2 (OAuth)",
+    supportsMultipart: false,
+    fields: [
+      { key: "account_id", label: "Cloudflare 账户 ID", type: "text", required: true, placeholder: "e.g.: 1234567890abcdef" },
+      { key: "bucket", label: "R2 存储桶名", type: "text", required: true, placeholder: "my-r2-bucket" },
+    ],
+    oauth: true,
+  },
+  dropbox: {
+    name: "Dropbox",
+    supportsMultipart: false,
+    fields: [
+      { key: "access_token", label: "Access Token", type: "password", required: true },
+      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "" },
     ],
   },
 };
@@ -703,6 +737,7 @@ function StorageModal({
 const isS3 = formData.type === "s3";
   const isS3Like = formData.type === "s3" || formData.type === "tigris" || formData.type === "qiniu";
   const isR2 = formData.type === "r2";
+  const isR2OAuth = formData.type === "r2-oauth";
   const isFtp = formData.type === "ftp";
   const isWebdav = formData.type === "webdev" || isFtp;
   const isMysql = formData.type === "mysql";
@@ -1038,6 +1073,61 @@ const isS3 = formData.type === "s3";
     }
   };
 
+  // R2 OAuth：弹窗 + postMessage
+  const startR2OAuth = async () => {
+    setOauthLoading(true);
+    setOauthError("");
+    try {
+      let storageId = storage?.id;
+      if (!storageId) {
+        const res = await fetch("/api/storages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+        const data = (await res.json()) as { error?: string; storage?: { id?: number } };
+        if (!res.ok || !data.storage?.id) {
+          setOauthError(data.error || "保存存储失败，无法发起授权");
+          setOauthLoading(false);
+          return;
+        }
+        storageId = data.storage.id;
+        onSave();
+      }
+      const res = await fetch("/api/r2-oauth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", storageId }),
+      });
+      const data = (await res.json()) as { error?: string; url?: string };
+      if (!res.ok || !data.url) {
+        setOauthError(data.error || "发起授权失败");
+        setOauthLoading(false);
+        return;
+      }
+      const popup = window.open(data.url, "_blank", "noopener,noreferrer,width=600,height=700");
+      if (!popup) {
+        setOauthError("弹出窗口被阻止，请允许弹出窗");
+        setOauthLoading(false);
+        return;
+      }
+      const handleMessage = (e: MessageEvent) => {
+        if (e.data?.type === "oauth" && e.data.provider === "cloudflare") {
+          window.removeEventListener("message", handleMessage);
+          popup.close();
+          setOauthLoading(false);
+          setTimeout(() => {
+            onSave();
+          }, 500);
+        }
+      };
+      window.addEventListener("message", handleMessage);
+    } catch {
+      setOauthError("网络错误");
+      setOauthLoading(false);
+    }
+  };
+
   // OneDrive OAuth 配置状态查询
   useEffect(() => {
     if (formData.type !== "onedrive") {
@@ -1114,9 +1204,12 @@ const isS3 = formData.type === "s3";
                 <option value="qiniu">七牛云 KODO</option>
                 <option value="alicloud">阿里云盘</option>
                 <option value="baiduyun">百度网盘</option>
+                <option value="quark">夸克网盘</option>
                 <option value="r2">Cloudflare R2</option>
+                <option value="r2-oauth">R2 存储桶（他人 OAuth）</option>
                 <option value="ftp">FTP 文件网关</option>
                 <option value="mysql">MySQL 数据库</option>
+                <option value="dropbox">Dropbox</option>
               </select>
             </div>
             {(isS3 || isWebdav) && (
@@ -1219,6 +1312,24 @@ const isS3 = formData.type === "s3";
                   MySQL 数据库通过 Cloudflare Hyperdrive 接入。在下方填写 Hyperdrive 连接串和数据库名，
                   即可浏览虚拟主机上的数据库表和查询数据。连接串格式：<code className="text-zinc-700 dark:text-zinc-300">mysql://user:pass@host:port/db</code>
                 </div>
+              </div>
+            )}
+            {isR2OAuth && (
+              <div className="col-span-2">
+                <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
+                  通过 Cloudflare OAuth 授权访问他人的 R2 存储桶。需要在 wrangler 配置 CF_CLIENT_ID / CF_CLIENT_SECRET。
+                </div>
+                <button
+                  type="button"
+                  onClick={startR2OAuth}
+                  disabled={oauthLoading}
+                  className="mt-2 w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
+                >
+                  {oauthLoading ? "跳转中..." : "通过 Cloudflare 授权"}
+                </button>
+                {oauthError && (
+                  <div className="text-red-500 dark:text-red-400 text-xs font-medium mt-1">{oauthError}</div>
+                )}
               </div>
             )}
             {driveConfig && (
@@ -4835,7 +4946,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {/* Main */}
         <main className="flex-1 bg-zinc-50 dark:bg-zinc-900 min-w-0 overflow-hidden">
           {selectedStorage ? (
-            <FileBrowser storage={selectedStorage} isAdmin={isAdmin} isDark={isDark} chunkSizeMB={chunkSizeMB} />
+            selectedStorage.type === "mysql" ? (
+              <div className="p-4">
+                <a href={`/mysql/${selectedStorage.id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                  前往 MySQL 浏览器: {selectedStorage.name}
+                </a>
+              </div>
+            ) : (
+              <FileBrowser storage={selectedStorage} isAdmin={isAdmin} isDark={isDark} chunkSizeMB={chunkSizeMB} />
+            )
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400 dark:text-zinc-600">
               <Cloud className="h-12 w-12 text-zinc-300 dark:text-zinc-700" />

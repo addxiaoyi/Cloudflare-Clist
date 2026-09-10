@@ -5,6 +5,9 @@ import { GoogleDriveClient } from "./gdrive-client";
 import { AliyunDriveClient } from "./alicloud-client";
 import { BaiduYunClient } from "./baiduyun-client";
 import { R2Client } from "./r2-client";
+import { R2OAuthClient } from "./r2-oauth-client";
+import { QuarkClient } from "./quark-client";
+import { DropboxClient } from "./dropbox-client";
 import { MySqlClient, type MySqlConfig } from "./mysql-client";
 
 export type { MySqlConfig };
@@ -16,7 +19,10 @@ export type StorageClient =
   | GoogleDriveClient
   | AliyunDriveClient
   | BaiduYunClient
-  | R2Client;
+  | R2Client
+  | R2OAuthClient
+  | QuarkClient
+  | DropboxClient;
 
 export type StorageLike = {
   type: string;
@@ -30,7 +36,7 @@ export type StorageLike = {
   saving?: Record<string, any>;
 };
 
-export type ClientEnv = { R2?: R2Bucket; HYPERDRIVE?: any };
+export type ClientEnv = { R2?: R2Bucket; HYPERDRIVE?: { connectionString: string } };
 
 // 按存储类型构造对应客户端。r2 类型需要 worker 的 R2 binding。
 export function createClient(
@@ -101,12 +107,33 @@ export function createClient(
   if (storage.type === "baiduyun") {
     return new BaiduYunClient({ config: storage.config, saving: storage.saving });
   }
+  if (storage.type === "quark") {
+    return new QuarkClient({ config: storage.config, saving: storage.saving });
+  }
+  if (storage.type === "dropbox") {
+    return new DropboxClient({ config: storage.config, saving: storage.saving });
+  }
   if (storage.type === "ftp") {
     return new WebdevClient({
       endpoint: storage.config?.endpoint || storage.endpoint,
       username: storage.config?.username || storage.accessKeyId,
       password: storage.config?.password || storage.secretAccessKey,
       basePath: storage.config?.base_path || storage.basePath,
+    });
+  }
+  if (storage.type === "r2-oauth") {
+    const cfg = storage.config || {};
+    const accountId = cfg.cloudflare_account_id || "";
+    const bucketName = cfg.bucket || storage.bucket || "";
+    const accessToken = cfg.cloudflare_access_token || "";
+    if (!accountId || !bucketName || !accessToken) {
+      throw new Error("R2 OAuth 未授权，请先完成 Cloudflare 授权");
+    }
+    return new R2OAuthClient({
+      accountId,
+      bucketName,
+      accessToken,
+      basePath: cfg.root_folder_path || storage.basePath || "",
     });
   }
   return new S3Client({
