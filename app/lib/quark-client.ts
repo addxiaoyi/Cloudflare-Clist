@@ -1,5 +1,4 @@
 import {
-  joinRootPath,
   stripLeadingSlash,
   stripTrailingSlash,
 } from "./drive-utils";
@@ -142,8 +141,7 @@ export class QuarkClient {
     });
   }
 
-  private async listFiles(dir: string): Promise<QuarkFile[]> {
-    const pdirFid = dir === "/" || !dir ? "0" : String(await this.findFidByPath(dir));
+  private async listFilesByFid(pdirFid: string): Promise<QuarkFile[]> {
     const result: QuarkListResponse = await this.request("/1/clouddrive/file/sort", "GET", {
       pdir_fid: pdirFid,
       _page: "1",
@@ -157,14 +155,14 @@ export class QuarkClient {
     const normalized = stripTrailingSlash(stripLeadingSlash(path));
     if (!normalized) return 0;
     const parts = normalized.split("/").filter(Boolean);
-    let fid = "0";
+    let pdirFid = "0";
     for (const part of parts) {
-      const files = await this.listFiles(`/${fid === "0" ? "" : fid}`);
+      const files = await this.listFilesByFid(pdirFid);
       const found = files.find((f) => f.name === part);
       if (!found) return -1;
-      fid = String(found.fid);
+      pdirFid = String(found.fid);
     }
-    return Number(fid);
+    return Number(pdirFid);
   }
 
   async listObjects(
@@ -174,7 +172,11 @@ export class QuarkClient {
     _continuationToken?: string
   ): Promise<ListObjectsResult> {
     const targetPath = this.getFullPath(prefix || "/");
-    const files = await this.listFiles(targetPath);
+    const curFid = await this.findFidByPath(targetPath);
+    if (curFid < 0) {
+      return { objects: [], prefixes: [], isTruncated: false };
+    }
+    const files = await this.listFilesByFid(String(curFid));
     const objects: DriveObject[] = [];
     const prefixes: string[] = [];
 
@@ -209,7 +211,7 @@ export class QuarkClient {
   }
 
   private async getFidByKey(key: string): Promise<number> {
-    const fullPath = `/` + stripLeadingSlash(key);
+    const fullPath = this.getFullPath(stripLeadingSlash(key));
     return this.findFidByPath(fullPath);
   }
 
@@ -264,44 +266,65 @@ export class QuarkClient {
   async deleteObject(key: string): Promise<void> {
     const fid = await this.getFidByKey(key);
     if (fid < 0) return;
-    await this.request("/1/clouddrive/file/delete", "POST", undefined, JSON.stringify({ fid_list: [fid] }));
+    await this.request("/1/clouddrive/file/delete", "POST", undefined, JSON.stringify({
+      action_type: 2,
+      filelist: [fid],
+      exclude_fids: [],
+    }));
   }
 
   async createFolder(folderPath: string): Promise<void> {
-    const parent = joinRootPath(this.basePath, folderPath);
-    const parentId = await this.findFidByPath(parent);
-    const name = stripTrailingSlash(folderPath).split("/").pop() || "";
+    const parent = this.getFullPath(stripTrailingSlash(folderPath));
+    const dirParts = stripLeadingSlash(parent).split("/").filter(Boolean);
+    const name = dirParts.pop() || "";
     if (!name) return;
+    const parentPath = dirParts.join("/");
+    const parentId = await this.findFidByPath(parentPath);
+    if (parentId < 0) {
+      throw new Error("Quark: parent folder not found");
+    }
     await this.request("/1/clouddrive/file", "POST", undefined, JSON.stringify({
       pdir_fid: parentId,
       file_name: name,
-      file_dir: 1,
-      module_id: "1505827882588285954",
+      dir_path: `/${parentPath}/${name}`.replace(/\/+/g, "/"),
+      size: 0,
+      format_type: "application/octet-stream",
+      lcreated_at: Date.now(),
     }));
   }
 
-  async copyObject(sourceKey: string, destKey: string): Promise<void> {
-    const fid = await this.getFidByKey(sourceKey);
-    const parentPath = stripTrailingSlash(stripLeadingSlash(joinRootPath(this.basePath, destKey).replace(/[^/]*$/, "")));
-    const parentId = await this.findFidByPath(parentPath);
-    const name = stripTrailingSlash(destKey).split("/").pop() || "";
-    await this.request("/1/clouddrive/share/sharepage/token", "POST", undefined, JSON.stringify({
-      fid: fid,
-      dstParentFid: parentId,
-      fileName: name,
-      shareType: 1,
+  private async moveFid(sourceFid: number, destParentPath: string): Promise<void> {
+    const parentId = await this.findFidByPath(destParentPath);
+    if (parentId < 0) {
+      throw new Error("Quark: destination parent folder not found");
+    }
+    await this.request("/1/clouddrive/file/move", "POST", undefined, JSON.stringify({
+      action_type: 1,
+      filelist: [sourceFid],
+      to_pdir_fid: parentId,
+      exclude_fids: [],
     }));
+  }
+
+  async copyObject(_sourceKey: string, _destKey: string): Promise<void> {
+    throw new Error("Quark: copy is not supported via private API, use move instead");
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
     const fid = await this.getFidByKey(path);
-    await this.request("/1/clouddrive/file/rename", "POST", undefined, JSON.stringify({ fid, fileName: newName }));
+    if (fid < 0) {
+      throw new Error("Quark: file not found");
+    }
+    await this.request("/1/clouddrive/file/update/name", "POST", undefined, JSON.stringify({ fid, file_name: newName }));
   }
 
   async moveObject(path: string, newPath: string): Promise<void> {
-    // 夸克没有直接 move，copy后delete
-    await this.copyObject(path, newPath);
-    await this.deleteObject(path);
+    const fid = await this.getFidByKey(path);
+    if (fid < 0) {
+      throw new Error("Quark: source file not found");
+    }
+    const destParent = this.getFullPath(stripTrailingSlash(newPath).replace(/\/[^/]*$/, ""));
+    await this.moveFid(fid, destParent);
   }
 
   // Multipart upload：直接抛错，引导使用站内代理

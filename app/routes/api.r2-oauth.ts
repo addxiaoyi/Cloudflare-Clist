@@ -86,8 +86,9 @@ export async function action({ request, context }: { request: Request; context: 
 
   const state = await signState(oauth.clientSecret || "default-secret", storageId);
   const scope = CF_R2_SCOPES.join(" ");
-  const redirectUri = encodeURI(oauth.redirectUri || window.location.origin + "/api/r2-oauth");
-  const url = `${CF_OAUTH_ENDPOINTS.oauth}?client_id=${encodeURI(oauth.clientId)}&redirect_uri=${redirectUri}&response_type=code&scope=${encodeURI(scope)}&state=${state}`;
+  const origin = new URL(request.url).origin;
+  const redirectUri = oauth.redirectUri || `${origin}/api/r2-oauth`;
+  const url = `${CF_OAUTH_ENDPOINTS.oauth}?client_id=${encodeURIComponent(oauth.clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
 
   return Response.json({ url, state });
 }
@@ -106,17 +107,23 @@ export async function loader({ request, context }: { request: Request; context: 
   const homeUrl = "/";
 
   async function redirectHome(ok: boolean, reason?: string): Promise<Response> {
+    const payload = { type: "oauth", provider: "cloudflare", success: ok, reason: reason || "" };
     const params = new URLSearchParams();
     params.set("oauth", ok ? "cloudflare-success" : "cloudflare-error");
     if (reason) {
       params.set("reason", reason);
     }
-    // 用 postMessage 通知 opener，兼容弹窗模式
+    const targetUrl = `${homeUrl}?${params.toString()}`;
+    // JSON.stringify 后额外转义 "<"，防止 reason 含 "</script>" 跳出脚本标签
+    const jsonSafe = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
+    // targetOrigin 使用当前站点 origin，避免向任意来源泄漏
     const html = `<!DOCTYPE html><html><body><script>
-      try { window.opener.postMessage({type:'oauth',provider:'cloudflare',success:${ok},reason:'${reason || ''}'},'*'); } catch(e){}
-      window.location.href = '${homeUrl}?${params.toString()}';
-    </script></body></html>`;
-    return new Response(html, { headers: { "Content-Type": "text/html" } });
+      try { window.opener && window.opener.postMessage(${jsonSafe(payload)}, window.location.origin); } catch(e){}
+      window.location.href = ${jsonSafe(targetUrl)};
+    </` + `script></body></html>`;
+    return new Response(html, {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
   }
 
   if (error || !code) {
