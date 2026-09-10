@@ -72,9 +72,13 @@ export class DropboxClient {
     return fullKey.replace(/^\/+/, "");
   }
 
+  private getAccessToken(): string {
+    return this.config.access_token || this.saving.access_token || "";
+  }
+
   private headers(): Record<string, string> {
     return {
-      Authorization: `Bearer ${this.saving.access_token || ""}`,
+      Authorization: `Bearer ${this.getAccessToken()}`,
       "Content-Type": "application/json",
     };
   }
@@ -159,7 +163,7 @@ export class DropboxClient {
     const content = await fetch(`${CONTENT_BASE}/2/files/download`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.saving.access_token || ""}`,
+        Authorization: `Bearer ${this.getAccessToken()}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ path }),
@@ -191,13 +195,14 @@ export class DropboxClient {
   }
 
   async putObject(key: string, body: ArrayBuffer | string, contentType: string): Promise<void> {
-    const path = `/${stripTrailingSlash(key)}`;
-    const mode = "overwrite";
+    const path = `/${stripLeadingSlash(key)}`;
+    const arg = { path, mode: "overwrite", autorename: false, mute: false };
     const result = await fetch(`${CONTENT_BASE}/2/files/upload`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.saving.access_token || ""}`,
-        "Content-Type": contentType,
+        Authorization: `Bearer ${this.getAccessToken()}`,
+        "Content-Type": "application/octet-stream",
+        "Dropbox-API-Arg": JSON.stringify(arg),
       },
       body: typeof body === "string" ? body : new Uint8Array(body),
     });
@@ -209,7 +214,7 @@ export class DropboxClient {
   }
 
   async deleteObject(key: string): Promise<void> {
-    await this.request("/2/files/delete", { path: `/${stripLeadingSlash(key)}` });
+    await this.request("/2/files/delete_v2", { path: `/${stripLeadingSlash(key)}` });
   }
 
   async createFolder(folderPath: string): Promise<void> {
@@ -218,7 +223,7 @@ export class DropboxClient {
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
-    await this.request("/2/files/copy", {
+    await this.request("/2/files/copy_v2", {
       from_path: `/${stripLeadingSlash(sourceKey)}`,
       to_path: `/${stripTrailingSlash(destKey)}`,
       autorename: false,
@@ -226,17 +231,16 @@ export class DropboxClient {
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
-    await this.request("/2/files/move", {
-      from_path: `/${stripLeadingSlash(path)}`,
-      to_path: `/${newName}`,
-      autorename: false,
+    await this.request("/2/files/update_name", {
+      path: `/${stripLeadingSlash(path)}`,
+      new_name: newName,
     });
   }
 
-  async moveObject(sourcePath: string, destPath: string): Promise<void> {
-    await this.request("/2/files/move", {
-      from_path: `/${stripLeadingSlash(sourcePath)}`,
-      to_path: `/${stripTrailingSlash(destPath)}`,
+  async moveObject(path: string, newPath: string): Promise<void> {
+    await this.request("/2/files/move_v2", {
+      from_path: `/${stripLeadingSlash(path)}`,
+      to_path: `/${stripTrailingSlash(newPath)}`,
       autorename: false,
     });
   }
