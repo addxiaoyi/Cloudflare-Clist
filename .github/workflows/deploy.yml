@@ -36,6 +36,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to Cloudflare Workers
+        if: ${{ secrets.CF_API_TOKEN != '' && secrets.CF_ACCOUNT_ID != '' }}
         uses: cloudflare/wrangler-action@v3
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
@@ -43,3 +44,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountID: ${{ secrets.CF_ACCOUNT_ID }}
+
+      - name: Skip deploy notice
+        if: ${{ secrets.CF_API_TOKEN == '' || secrets.CF_ACCOUNT_ID == '' }}
+        run: echo "::notice::CF_API_TOKEN/CF_ACCOUNT_ID 未配置，跳过 Cloudflare 部署（build 已通过）"
