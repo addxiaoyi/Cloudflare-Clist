@@ -198,14 +198,25 @@ export class R2Client {
       : "";
     const newPath = parentPath + newName + (isDirectory ? "/" : "");
     if (isDirectory) {
-      const keys = await this.listAll(cleanPath + "/");
+      const fullPrefix = this.getFullPath(cleanPath + "/");
+      const fullNewPath = this.getFullPath(newPath);
+      const keys = await this.listAll(fullPrefix);
       for (const key of keys) {
-        await this.copyObject(key, newPath + key.substring(cleanPath.length + 1));
+        const rel = key.substring(fullPrefix.length);
+        const destKey = fullNewPath + rel;
+        const src = await this.bucket.get(key);
+        if (src) {
+          await this.bucket.put(destKey, src.body, {
+            httpMetadata: src.httpMetadata,
+          });
+        }
       }
       for (const key of keys) {
-        await this.deleteObject(key);
+        await this.bucket.delete(key);
       }
-      await this.deleteObject(cleanPath + "/").catch(() => undefined);
+      await this.bucket
+        .delete(this.getFullPath(cleanPath + "/"))
+        .catch(() => undefined);
     } else {
       await this.copyObject(path, newPath);
       await this.deleteObject(path);
@@ -215,14 +226,23 @@ export class R2Client {
   async moveObject(path: string, newPath: string): Promise<void> {
     const isDirectory = path.endsWith("/");
     if (isDirectory) {
-      const keys = await this.listAll(path.replace(/\/$/, "") + "/");
+      const fullPrefix = this.getFullPath(path);
+      const fullDest = this.getFullPath(newPath);
+      const keys = await this.listAll(fullPrefix);
       for (const key of keys) {
-        await this.copyObject(key, newPath + key.substring(path.length));
+        const rel = key.substring(fullPrefix.length);
+        const destKey = fullDest + rel;
+        const src = await this.bucket.get(key);
+        if (src) {
+          await this.bucket.put(destKey, src.body, {
+            httpMetadata: src.httpMetadata,
+          });
+        }
       }
       for (const key of keys) {
-        await this.deleteObject(key);
+        await this.bucket.delete(key);
       }
-      await this.deleteObject(path).catch(() => undefined);
+      await this.bucket.delete(fullPrefix).catch(() => undefined);
     } else {
       await this.copyObject(path, newPath);
       await this.deleteObject(path);

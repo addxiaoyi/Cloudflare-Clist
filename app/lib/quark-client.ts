@@ -180,11 +180,12 @@ export class QuarkClient {
     const objects: DriveObject[] = [];
     const prefixes: string[] = [];
 
+    const parentDisplay = stripLeadingSlash(stripTrailingSlash(prefix || ""));
     for (const file of files) {
-      const key = this.getDisplayPath(`${targetPath}/${file.name}`);
       const isDir = file.type === 1 || file.is_dir === 1;
+      const childDisplay = parentDisplay ? `${parentDisplay}/${file.name}` : file.name;
       objects.push({
-        key: isDir ? `${key}/` : key,
+        key: isDir ? `${childDisplay}/` : childDisplay,
         name: file.name,
         size: file.size || 0,
         lastModified: file.modified_time
@@ -194,8 +195,9 @@ export class QuarkClient {
         etag: String(file.fid),
       });
       if (isDir) {
-        prefixes.push(key);
+        prefixes.push(childDisplay);
       }
+    }
     }
 
     return {
