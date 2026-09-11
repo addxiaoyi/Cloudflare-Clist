@@ -3,8 +3,8 @@ import { requireAuth } from "~/lib/auth";
 import { createMysqlClient } from "~/lib/client-factory";
 
 async function validateAndSetup(request: Request, env: any, storageId: number) {
-  const authResult = await requireAuth(request, env.DB);
-  if (!authResult.session) {
+  const authResult = await requireAuth(request, env.DB, "admin");
+  if (!authResult.isAdmin) {
     throw new Error("Unauthorized");
   }
   await initDatabase(env.DB);

@@ -36,7 +36,7 @@ export type StorageLike = {
   saving?: Record<string, any>;
 };
 
-export type ClientEnv = { R2?: R2Bucket; HYPERDRIVE?: { connectionString: string } };
+export type ClientEnv = { R2?: R2Bucket; HD?: { connectionString: string }; HYPERDRIVE?: { connectionString: string } };
 
 // 按存储类型构造对应客户端。r2 类型需要 worker 的 R2 binding。
 export function createClient(

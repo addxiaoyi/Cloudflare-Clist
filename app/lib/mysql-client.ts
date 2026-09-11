@@ -23,13 +23,20 @@ interface QueryResult {
   rowCount: number;
 }
 
+function escapeIdentifier(id: string): string {
+  return `\`${id.replace(/`/g, "``")}\``;
+}
+
 export class MySqlClient {
   private config: MySqlConfig;
 
-  constructor(config: MySqlConfig, env?: { HYPERDRIVE?: { connectionString: string } }) {
+  constructor(
+    config: MySqlConfig,
+    env?: { HD?: { connectionString: string }; HYPERDRIVE?: { connectionString: string } }
+  ) {
     this.config = {
       ...config,
-      connectionString: env?.HYPERDRIVE?.connectionString || config.connectionString,
+      connectionString: env?.HD?.connectionString || env?.HYPERDRIVE?.connectionString || config.connectionString,
     };
   }
 
@@ -47,7 +54,7 @@ export class MySqlClient {
 
   async getTableInfo(db: string, table: string): Promise<TableInfo | null> {
     const columnsSql = `SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position`;
-    const countSql = `SELECT COUNT(*) as count FROM \`${db}\`.\`${table}\``;
+    const countSql = `SELECT COUNT(*) as count FROM ${escapeIdentifier(db)}.${escapeIdentifier(table)}`;
 
     try {
       const columns = await this.rawQuery(columnsSql, db, table);

@@ -254,13 +254,8 @@ export class QuarkClient {
     };
   }
 
-  async putObject(key: string, body: ArrayBuffer | string, contentType?: string): Promise<void> {
-    const fid = await this.getFidByKey(stripLeadingSlash(key));
-    if (fid < 0) {
-      await this.createFolder(stripTrailingSlash(key));
-    }
-    // 上传在 initPutObject 中完成，这里只做占位
-    throw new Error("Quark: putObject requires multipart flow, use multipart upload");
+  async putObject(_key: string, _body: ArrayBuffer | string, _contentType?: string): Promise<void> {
+    throw new Error("Quark multipart upload not supported via direct API, use proxy upload");
   }
 
   async deleteObject(key: string): Promise<void> {
