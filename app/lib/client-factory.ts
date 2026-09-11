@@ -72,7 +72,7 @@ export function createClient(
       z1: "cn-north-1",
       z2: "cn-south-1",
       "cn-east-2": "cn-east-2",
-      na0: "us-north-1",
+      na0: "us-east-1",
       as0: "ap-southeast-1",
       as2: "ap-southeast-3",
     };
@@ -123,9 +123,9 @@ export function createClient(
   }
   if (storage.type === "r2-oauth") {
     const cfg = storage.config || {};
-    const accountId = cfg.cloudflare_account_id || "";
-    const bucketName = cfg.bucket || storage.bucket || "";
-    const accessToken = cfg.cloudflare_access_token || "";
+    const accountId = cfg.account_id || "";
+    const bucketName = cfg.bucket || "";
+    const accessToken = cfg.cloudflare_access_token || cfg.access_token || storage.saving?.cloudflare_access_token || storage.saving?.access_token || "";
     if (!accountId || !bucketName || !accessToken) {
       throw new Error("R2 OAuth 未授权，请先完成 Cloudflare 授权");
     }

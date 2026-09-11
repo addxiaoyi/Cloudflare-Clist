@@ -61,19 +61,17 @@ async function verifyState(secret: string, state: string): Promise<number | null
   return diff === 0 ? storageId : null;
 }
 
-// POST /api/r2-oauth?action=start → 返回授权 URL
+// POST /api/r2-oauth (JSON {action:"start", storageId}) → 返回授权 URL
 export async function action({ request, context }: { request: Request; context: { cloudflare: { env: Env } } }) {
   const db = context.cloudflare.env.DB;
   await initDatabase(db);
 
-  const formData = await request.formData();
-  const action = formData.get("action") as string;
-
-  if (action !== "start") {
+  const body = (await request.json().catch(() => ({}))) as { action?: string; storageId?: number | string };
+  if (body.action !== "start") {
     return Response.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const storageId = parseInt(formData.get("storageId") as string, 10);
+  const storageId = parseInt(String(body.storageId), 10);
   const storage = await getStorageById(db, storageId);
   if (!storage || storage.type !== "r2-oauth") {
     return Response.json({ error: "Storage not found or not r2-oauth type" }, { status: 404 });

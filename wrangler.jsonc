@@ -3,6 +3,7 @@
   "name": "clist",
   "main": "./workers/app.ts",
   "compatibility_date": "2025-04-04",
+  "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "SITE_TITLE": "Starx",
     "SITE_ANNOUNCEMENT": "Welcome to Starx storage service!",
