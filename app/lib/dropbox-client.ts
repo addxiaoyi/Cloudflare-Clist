@@ -1,5 +1,4 @@
-import { joinRootPath, stripLeadingSlash, stripTrailingSlash } from "./drive-utils";
-import { encodeUploadState, decodeUploadState } from "./drive-utils";
+import { stripLeadingSlash } from "./drive-utils";
 
 export interface DriveObject {
   key: string;
@@ -72,6 +71,15 @@ export class DropboxClient {
     return fullKey.replace(/^\/+/, "");
   }
 
+  // 把展示层 key 转成 Dropbox API 绝对路径，并加上 root_path(basePath) 前缀做沙箱隔离
+  private toApiPath(displayPath: string): string {
+    const clean = stripLeadingSlash(displayPath).replace(/\/+$/, "") || "";
+    if (!this.basePath) {
+      return clean ? `/${clean}` : "";
+    }
+    return clean ? `/${this.basePath}/${clean}` : `/${this.basePath}`;
+  }
+
   private getAccessToken(): string {
     return this.config.access_token || this.saving.access_token || "";
   }
@@ -115,17 +123,15 @@ export class DropboxClient {
     _maxKeys = 1000,
     _continuationToken?: string
   ): Promise<ListObjectsResult> {
-    const targetPath = prefix ? `/${stripLeadingSlash(prefix)}` : "";
+    const targetPath = this.toApiPath(prefix);
     const files = await this.listFiles(targetPath);
 
     const objects: DriveObject[] = [];
     const prefixes: string[] = [];
 
     for (const file of files) {
-      const isDir = file.is_folder === true || !file.size;
-      const key = isDir
-        ? this.getDisplayPath(`/dir/${file.path_lower}`)
-        : this.getDisplayPath(file.path_lower);
+      const isDir = file.is_folder === true;
+      const key = this.getDisplayPath(file.path_lower);
       objects.push({
         key: isDir ? `${key}/` : key,
         name: file.name,
@@ -154,7 +160,7 @@ export class DropboxClient {
   }
 
   async getObject(key: string): Promise<Response> {
-    const path = `/${stripLeadingSlash(key)}`;
+    const path = this.toApiPath(key);
     const result = await this.request("/2/files/get_metadata", { path });
     if (result.is_folder) {
       return new Response("Directory", { status: 400 });
@@ -164,9 +170,8 @@ export class DropboxClient {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.getAccessToken()}`,
-        "Content-Type": "application/json",
+        "Dropbox-API-Arg": JSON.stringify({ path }),
       },
-      body: JSON.stringify({ path }),
     });
 
     if (!content.ok) {
@@ -177,13 +182,13 @@ export class DropboxClient {
   }
 
   async getSignedUrl(key: string, _expiresIn: number = 3600): Promise<string> {
-    const path = `/${stripLeadingSlash(key)}`;
+    const path = this.toApiPath(key);
     const result = await this.request("/2/files/get_temporary_link", { path });
     return result.link || "";
   }
 
   async headObject(key: string): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
-    const result = await this.request("/2/files/get_metadata", { path: `/${stripLeadingSlash(key)}` });
+    const result = await this.request("/2/files/get_metadata", { path: this.toApiPath(key) });
     if (result.is_folder) return null;
     return {
       contentLength: result.size || 0,
@@ -195,7 +200,7 @@ export class DropboxClient {
   }
 
   async putObject(key: string, body: ArrayBuffer | string, contentType: string): Promise<void> {
-    const path = `/${stripLeadingSlash(key)}`;
+    const path = this.toApiPath(key);
     const arg = { path, mode: "overwrite", autorename: false, mute: false };
     const result = await fetch(`${CONTENT_BASE}/2/files/upload`, {
       method: "POST",
@@ -214,33 +219,33 @@ export class DropboxClient {
   }
 
   async deleteObject(key: string): Promise<void> {
-    await this.request("/2/files/delete_v2", { path: `/${stripLeadingSlash(key)}` });
+    await this.request("/2/files/delete_v2", { path: this.toApiPath(key) });
   }
 
   async createFolder(folderPath: string): Promise<void> {
-    const path = `/${stripTrailingSlash(folderPath)}`;
+    const path = this.toApiPath(folderPath);
     await this.request("/2/files/create_folder", { path });
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
     await this.request("/2/files/copy_v2", {
-      from_path: `/${stripLeadingSlash(sourceKey)}`,
-      to_path: `/${stripTrailingSlash(destKey)}`,
+      from_path: this.toApiPath(sourceKey),
+      to_path: this.toApiPath(destKey),
       autorename: false,
     });
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
     await this.request("/2/files/update_name", {
-      path: `/${stripLeadingSlash(path)}`,
+      path: this.toApiPath(path),
       new_name: newName,
     });
   }
 
   async moveObject(path: string, newPath: string): Promise<void> {
     await this.request("/2/files/move_v2", {
-      from_path: `/${stripLeadingSlash(path)}`,
-      to_path: `/${stripTrailingSlash(newPath)}`,
+      from_path: this.toApiPath(path),
+      to_path: this.toApiPath(newPath),
       autorename: false,
     });
   }
