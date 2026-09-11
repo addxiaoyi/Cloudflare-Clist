@@ -33,11 +33,12 @@
       "bucket_name": "clist"
     }
   ],
-  "hyperdrive": [
-    {
-      "binding": "HD",
-      "id": "REPLACE_WITH_HYPERDRIVE_ID",
-      "localConnectionString": "mysql://root:password@localhost:3306/db"
-    }
-  ]
+  // MySQL 存储需要 Hyperdrive 时，取消注释并填入真实 Hyperdrive ID：
+  // "hyperdrive": [
+  //   {
+  //     "binding": "HD",
+  //     "id": "REPLACE_WITH_HYPERDRIVE_ID",
+  //     "localConnectionString": "mysql://root:password@localhost:3306/db"
+  //   }
+  // ]
 }

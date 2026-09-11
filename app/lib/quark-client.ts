@@ -198,7 +198,6 @@ export class QuarkClient {
         prefixes.push(childDisplay);
       }
     }
-    }
 
     return {
       objects: objects.sort((a, b) => {
