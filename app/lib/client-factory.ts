@@ -8,9 +8,9 @@ import { R2Client } from "./r2-client";
 import { R2OAuthClient } from "./r2-oauth-client";
 import { QuarkClient } from "./quark-client";
 import { DropboxClient } from "./dropbox-client";
-import { MySqlClient, type MySqlConfig } from "./mysql-client";
+import { MySqlClient, type MySqlConfig, type HyperdriveLike } from "./mysql-client";
 
-export type { MySqlConfig };
+export type { MySqlConfig, HyperdriveLike };
 
 export type StorageClient =
   | S3Client
@@ -36,7 +36,7 @@ export type StorageLike = {
   saving?: Record<string, any>;
 };
 
-export type ClientEnv = { R2?: R2Bucket; HD?: { connectionString: string }; HYPERDRIVE?: { connectionString: string } };
+export type ClientEnv = { R2?: R2Bucket; HD?: HyperdriveLike; HYPERDRIVE?: HyperdriveLike };
 
 // 按存储类型构造对应客户端。r2 类型需要 worker 的 R2 binding。
 export function createClient(

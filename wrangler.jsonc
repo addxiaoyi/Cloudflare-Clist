@@ -33,7 +33,8 @@
       "bucket_name": "clist"
     }
   ],
-  // MySQL 存储需要 Hyperdrive 时，取消注释并填入真实 Hyperdrive ID：
+  // MySQL 存储必须通过 Hyperdrive 访问（Workers 无法直连公网 3306）。
+  // 使用前先在控制台创建 Hyperdrive，然后取消注释并填入真实 ID：
   // "hyperdrive": [
   //   {
   //     "binding": "HD",

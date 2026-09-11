@@ -445,9 +445,9 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "MySQL 数据库",
     supportsMultipart: false,
     fields: [
-      { key: "connection_string", label: "Hyperdrive 连接串", type: "textarea", required: true, placeholder: "mysql://user:pass@host:port/db" },
       { key: "database", label: "数据库名", type: "text", required: true, placeholder: "my_database" },
       { key: "table_prefix", label: "表前缀", type: "text", placeholder: "可选：wp_" },
+      { key: "connection_string", label: "直连连接串（可选）", type: "textarea", required: false, placeholder: "mysql://user:pass@host:port/db（未绑定 Hyperdrive 时使用）" },
     ],
   },
   "r2-oauth": {
@@ -1309,8 +1309,10 @@ const isS3 = formData.type === "s3";
             {isMysql && (
               <div className="col-span-2">
                 <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
-                  MySQL 数据库通过 Cloudflare Hyperdrive 接入。在下方填写 Hyperdrive 连接串和数据库名，
-                  即可浏览虚拟主机上的数据库表和查询数据。连接串格式：<code className="text-zinc-700 dark:text-zinc-300">mysql://user:pass@host:port/db</code>
+                  MySQL 数据库通过 Cloudflare Hyperdrive 接入：先在控制台创建 Hyperdrive 并绑定到
+                  Worker（<code className="text-zinc-700 dark:text-zinc-300">wrangler.jsonc</code> 的
+                  <code className="text-zinc-700 dark:text-zinc-300"> hyperdrive</code> 配置），然后只需填写
+                  数据库名即可浏览表和查询数据。未绑定 Hyperdrive 时可填直连连接串（仅本地/开发场景）。
                 </div>
               </div>
             )}

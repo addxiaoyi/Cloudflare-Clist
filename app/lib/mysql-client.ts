@@ -4,6 +4,16 @@ export interface MySqlConfig {
   tablePrefix?: string;
 }
 
+// Hyperdrive 绑定形状（env.HD / env.HYPERDRIVE）
+export interface HyperdriveLike {
+  connectionString: string;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+}
+
 interface TableInfo {
   name: string;
   columns: ColumnInfo[];
@@ -29,14 +39,35 @@ function escapeIdentifier(id: string): string {
 
 export class MySqlClient {
   private config: MySqlConfig;
+  private hyperdrive?: HyperdriveLike;
 
   constructor(
     config: MySqlConfig,
-    env?: { HD?: { connectionString: string }; HYPERDRIVE?: { connectionString: string } }
+    env?: { HD?: HyperdriveLike; HYPERDRIVE?: HyperdriveLike }
   ) {
-    this.config = {
-      ...config,
-      connectionString: env?.HD?.connectionString || env?.HYPERDRIVE?.connectionString || config.connectionString,
+    this.config = { ...config };
+    // 优先使用 Hyperdrive 连接（生产环境必须通过 Hyperdrive 访问 MySQL，
+    // Workers 无法直接建立到公网 3306 的 TCP 连接）
+    this.hyperdrive = env?.HD || env?.HYPERDRIVE;
+  }
+
+  // 构造 mysql2 连接参数：Hyperdrive 优先；无 Hyperdrive 时回退到存储自身
+  // 的连接串（仅本地开发/直连场景）。disableEval 是 Cloudflare 官方要求的
+  // Workers 兼容项，必须开启。
+  private buildConnectionOptions(): Record<string, unknown> {
+    if (this.hyperdrive) {
+      return {
+        host: this.hyperdrive.host,
+        port: this.hyperdrive.port,
+        user: this.hyperdrive.user,
+        password: this.hyperdrive.password,
+        database: this.hyperdrive.database,
+        disableEval: true,
+      };
+    }
+    return {
+      uri: this.config.connectionString,
+      disableEval: true,
     };
   }
 
@@ -95,7 +126,7 @@ export class MySqlClient {
 
   private async rawQuery(sql: string, ...params: any[]): Promise<any[]> {
     const { createConnection } = await import("mysql2/promise");
-    const conn = await createConnection({ uri: this.config.connectionString });
+    const conn = await createConnection(this.buildConnectionOptions());
     try {
       const [rows] = await conn.query(sql, params);
       return rows as any[];

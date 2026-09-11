@@ -83,18 +83,22 @@ export async function loader({ request, params, context }: RouteLoaderArgs) {
 export async function action({ request, params, context }: RouteLoaderArgs) {
   const env = (context as any).cloudflare.env;
   const storageId = parseInt(params.storageId || "0", 10);
-  const { client } = await validateAndSetup(request, env, storageId);
 
-  const body: Record<string, any> = await (request.json() as Promise<Record<string, any>>).catch(() => ({}));
-
-  if (!body.sql) {
-    return badRequest("Missing 'sql' field");
+  if (storageId <= 0) {
+    return badRequest("Invalid storage ID");
   }
 
-  const sql = body.sql as string;
-  const params2: any[] = body.params || [];
-
   try {
+    const { client } = await validateAndSetup(request, env, storageId);
+    const body: Record<string, any> = await (request.json() as Promise<Record<string, any>>).catch(() => ({}));
+
+    if (!body.sql) {
+      return badRequest("Missing 'sql' field");
+    }
+
+    const sql = body.sql as string;
+    const params2: any[] = body.params || [];
+
     if (/^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\s/i.test(sql)) {
       const result = await client.query(sql, params2);
       return Response.json({
