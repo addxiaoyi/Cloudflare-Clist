@@ -82,6 +82,8 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
+const escapeHtml = escapeXml;
+
 function getContentType(filename: string): string {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
   const mimeTypes: Record<string, string> = {
@@ -240,7 +242,13 @@ export async function handleWebdavRequest(
   await initDatabase(db);
 
   const storageId = parseInt(params.storageId || "0", 10);
-  const path = params["*"] || "";
+  // params["*"] 是 URL 编码态，需解码后再作为对象 key，否则非 ASCII/空格文件名被双重编码入库
+  let path = params["*"] || "";
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // 保留原始 path 以防编码损坏
+  }
 
   // Handle listing all storages at the root
   if (storageId === 0) {
@@ -359,8 +367,9 @@ export async function handleWebdavRequest(
           return new Response("Destination header required", { status: 400 });
         }
 
-        const destUrl = new URL(destinationHeader);
-        const destPath = destUrl.pathname.replace(`/dav/${storageId}/`, "");
+        const destUrl = new URL(destinationHeader, url.origin + "/");
+        let destPath = destUrl.pathname.replace(`/dav/${storageId}/`, "");
+        try { destPath = decodeURIComponent(destPath); } catch {}
 
         await withClientState(client, db, storageId, () => client.copyObject(path, destPath));
         return new Response(null, { status: 201 });
@@ -378,8 +387,9 @@ export async function handleWebdavRequest(
           return new Response("Destination header required", { status: 400 });
         }
 
-        const destUrl = new URL(destinationHeader);
-        const destPath = destUrl.pathname.replace(`/dav/${storageId}/`, "");
+        const destUrl = new URL(destinationHeader, url.origin + "/");
+        let destPath = destUrl.pathname.replace(`/dav/${storageId}/`, "");
+        try { destPath = decodeURIComponent(destPath); } catch {}
 
         const canDirectMove = typeof (client as { moveObject?: (path: string, destPath: string) => Promise<void> }).moveObject === "function";
         if (canDirectMove) {
@@ -426,17 +436,18 @@ export async function handleWebdavRequest(
       if (path.endsWith("/") || path === "") {
         // Return a simple HTML directory listing for browser access
         const result = await withClientState(client, db, storageId, () => client.listObjects(path));
+        const displayPath = path || "/";
         const html = `<!DOCTYPE html>
 <html>
-<head><title>Index of ${path || "/"}</title></head>
+<head><title>Index of ${escapeHtml(displayPath)}</title></head>
 <body>
-<h1>Index of ${path || "/"}</h1>
+<h1>Index of ${escapeHtml(displayPath)}</h1>
 <ul>
 ${path ? `<li><a href="../">../</a></li>` : ""}
 ${result.objects.map(obj => 
   obj.isDirectory 
-    ? `<li><a href="${encodeURIComponent(obj.name)}/">${obj.name}/</a></li>`
-    : `<li><a href="${encodeURIComponent(obj.name)}">${obj.name}</a> (${obj.size} bytes)</li>`
+    ? `<li><a href="${encodeURIComponent(obj.name)}/">${escapeHtml(obj.name)}/</a></li>`
+    : `<li><a href="${encodeURIComponent(obj.name)}">${escapeHtml(obj.name)}</a> (${obj.size} bytes)</li>`
 ).join("\n")}
 </ul>
 </body>
