@@ -27,17 +27,32 @@ async function hashPassword(password: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function generateRandomToken(length: number = 16): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+function generateRandomToken(length: number = 24): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const n = alphabet.length;
+  // 256 无法整除 62，拒绝 >= limit 的字节以消除取模偏置，保证均匀分布
+  const limit = 256 - (256 % n);
   let result = "";
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  while (result.length < length) {
+    const buf = new Uint8Array(length * 2);
+    crypto.getRandomValues(buf);
+    for (const byte of buf) {
+      if (byte < limit) {
+        result += alphabet[byte % n];
+        if (result.length === length) {
+          break;
+        }
+      }
+    }
   }
   return result;
 }
 
 function generateShareId(): string {
-  return `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const buf = new Uint8Array(6);
+  crypto.getRandomValues(buf);
+  const rand = [...buf].map((b) => b.toString(36).padStart(2, "0")).join("");
+  return `share_${Date.now()}_${rand}`;
 }
 
 function validateShareToken(shareToken: string): void {
