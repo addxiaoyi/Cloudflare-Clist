@@ -448,34 +448,34 @@ export class BaiduYunClient {
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
     const source = this.resolvePath(sourceKey);
-    const dest = this.resolvePath(destKey);
-    const destDir = dest.substring(0, dest.lastIndexOf("/")) || "/";
-    const newName = dest.split("/").pop() || "";
+    const destFullPath = this.resolvePath(destKey);
+    const dest = destFullPath.substring(0, destFullPath.lastIndexOf("/")) || "/";
+    const newName = destFullPath.split("/").pop() || "";
     await this.request("/xpan/file", "POST", { method: "filemanager", opera: "copy" }, {
       async: "0",
-      filelist: JSON.stringify([{ path: source, dest: destDir, newname: newName }]),
+      filelist: JSON.stringify([{ path: source, dest, newname: newName }]),
       ondup: "fail",
     });
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
     const sourcePath = this.resolvePath(path);
-    const destDir = sourcePath.substring(0, sourcePath.lastIndexOf("/"));
+    const dest = sourcePath.substring(0, sourcePath.lastIndexOf("/")) || "/";
     await this.request("/xpan/file", "POST", { method: "filemanager", opera: "rename" }, {
       async: "0",
-      filelist: JSON.stringify([{ path: sourcePath, dest: destDir, newname: newName }]),
+      filelist: JSON.stringify([{ path: sourcePath, dest, newname: newName }]),
       ondup: "fail",
     });
   }
 
   async moveObject(path: string, destPath: string): Promise<void> {
     const sourcePath = this.resolvePath(path);
-    const dest = this.resolvePath(destPath);
-    const destDir = dest.substring(0, dest.lastIndexOf("/")) || "/";
-    const fileName = dest.split("/").pop() || sourcePath.split("/").pop() || "";
+    const destFullPath = this.resolvePath(destPath);
+    const dest = destFullPath.substring(0, destFullPath.lastIndexOf("/")) || "/";
+    const fileName = destFullPath.split("/").pop() || sourcePath.split("/").pop() || "";
     await this.request("/xpan/file", "POST", { method: "filemanager", opera: "move" }, {
       async: "0",
-      filelist: JSON.stringify([{ path: sourcePath, dest: destDir, newname: fileName }]),
+      filelist: JSON.stringify([{ path: sourcePath, dest, newname: fileName }]),
       ondup: "fail",
     });
   }
