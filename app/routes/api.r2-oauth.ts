@@ -132,13 +132,13 @@ export async function loader({ request, context }: { request: Request; context: 
     return redirectHome(false, "未配置 CF_CLIENT_ID / CF_CLIENT_SECRET");
   }
 
-  const storageId = await verifyState(oauth.clientSecret || "default-secret", state);
-  if (!storageId) {
-    return redirectHome(false, "授权状态校验失败，请重新发起");
-  }
-
-  // 交换 code 为 access token
   try {
+    const storageId = await verifyState(oauth.clientSecret || "default-secret", state);
+    if (!storageId) {
+      return redirectHome(false, "授权状态校验失败，请重新发起");
+    }
+
+    const redirectUri = oauth.redirectUri || `${new URL(request.url).origin}/api/r2-oauth`;
     const tokenResponse = await fetch(CF_OAUTH_ENDPOINTS.token, {
       method: "POST",
       headers: {
@@ -148,7 +148,7 @@ export async function loader({ request, context }: { request: Request; context: 
       body: JSON.stringify({
         grant_type: "authorization_code",
         code,
-        redirect_uri: oauth.redirectUri || "",
+        redirect_uri: redirectUri,
       }),
     });
 

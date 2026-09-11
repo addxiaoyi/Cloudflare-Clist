@@ -82,13 +82,6 @@ async function verifyState(secret: string, state: string): Promise<{ storageId: 
 // GET：Microsoft 授权回调（公开）
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
-  await initDatabase(db);
-
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state") || "";
-  const error = url.searchParams.get("error");
-  const oauth = getOAuthConfig(context.cloudflare.env);
   const homeUrl = "/";
 
   async function redirectHome(ok: boolean, reason?: string): Promise<Response> {
@@ -104,27 +97,35 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     return new Response(html, { headers: { "Content-Type": "text/html" } });
   }
 
-  if (error || !code) {
-    return redirectHome(false, error || "缺少授权码");
-  }
-  if (!oauth.clientId || !oauth.clientSecret) {
-    return redirectHome(false, "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET");
-  }
-
-  const parsed = await verifyState(oauth.clientSecret, state);
-  if (!parsed) {
-    return redirectHome(false, "授权状态校验失败，请重新发起");
-  }
-  const { storageId, region } = parsed;
-
-  const storage = await getStorageById(db, storageId);
-  if (!storage || storage.type !== "onedrive") {
-    return redirectHome(false, "存储不存在，请刷新后重试");
-  }
-
-  const host = ONEDRIVE_OAUTH_ENDPOINTS[region] || ONEDRIVE_OAUTH_ENDPOINTS.global;
-
   try {
+    await initDatabase(db);
+
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state") || "";
+    const error = url.searchParams.get("error");
+    const oauth = getOAuthConfig(context.cloudflare.env);
+
+    if (error || !code) {
+      return redirectHome(false, error || "缺少授权码");
+    }
+    if (!oauth.clientId || !oauth.clientSecret) {
+      return redirectHome(false, "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET");
+    }
+
+    const parsed = await verifyState(oauth.clientSecret, state);
+    if (!parsed) {
+      return redirectHome(false, "授权状态校验失败，请重新发起");
+    }
+    const { storageId, region } = parsed;
+
+    const storage = await getStorageById(db, storageId);
+    if (!storage || storage.type !== "onedrive") {
+      return redirectHome(false, "存储不存在，请刷新后重试");
+    }
+
+    const host = ONEDRIVE_OAUTH_ENDPOINTS[region] || ONEDRIVE_OAUTH_ENDPOINTS.global;
+
     const formData = new URLSearchParams();
     formData.append("grant_type", "authorization_code");
     formData.append("code", code);
