@@ -123,7 +123,7 @@ export function createClient(
   }
   if (storage.type === "r2-oauth") {
     const cfg = storage.config || {};
-    const accountId = cfg.account_id || "";
+    const accountId = cfg.account_id || cfg.cloudflare_account_id || "";
     const bucketName = cfg.bucket || "";
     const accessToken = cfg.cloudflare_access_token || cfg.access_token || storage.saving?.cloudflare_access_token || storage.saving?.access_token || "";
     if (!accountId || !bucketName || !accessToken) {
