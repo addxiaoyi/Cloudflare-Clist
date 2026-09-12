@@ -4,10 +4,10 @@ import {
   updateStorage,
 } from "~/lib/storage";
 
-// Cloudflare OAuth 端点
+// Cloudflare OAuth 端点（官方文档：dash.cloudflare.com/oauth2/auth 与 /oauth2/token）
 const CF_OAUTH_ENDPOINTS = {
-  oauth: "https://auth.cloudflare.com/",
-  token: "https://api.cloudflare.com/client/v4/user/tokens",
+  oauth: "https://dash.cloudflare.com/oauth2/auth",
+  token: "https://dash.cloudflare.com/oauth2/token",
 };
 
 // R2 OAuth 范围
@@ -139,17 +139,19 @@ export async function loader({ request, context }: { request: Request; context: 
     }
 
     const redirectUri = oauth.redirectUri || `${new URL(request.url).origin}/api/r2-oauth`;
+    // Cloudflare OAuth 令牌端点要求 application/x-www-form-urlencoded 请求体
+    const tokenBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+    });
     const tokenResponse = await fetch(CF_OAUTH_ENDPOINTS.token, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
         Authorization: `Basic ${btoa(`${oauth.clientId}:${oauth.clientSecret}`)}`,
       },
-      body: JSON.stringify({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-      }),
+      body: tokenBody.toString(),
     });
 
     const tokenData: Record<string, any> = await tokenResponse.json();
@@ -164,12 +166,17 @@ export async function loader({ request, context }: { request: Request; context: 
         config: {
           ...storage.config,
           cloudflare_access_token: tokenData.access_token,
+          cloudflare_refresh_token: tokenData.refresh_token || storage.config?.cloudflare_refresh_token || "",
           cloudflare_account_id: tokenData.account_id || "",
         },
         saving: {
           last_oauth_time: new Date().toISOString(),
           token_type: tokenData.token_type || "bearer",
           expires_in: tokenData.expires_in || 0,
+          // access token 过期时间，供后续自动续期判断
+          access_token_expires_at: tokenData.expires_in
+            ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+            : "",
         },
       });
     }

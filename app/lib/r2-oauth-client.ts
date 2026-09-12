@@ -8,6 +8,7 @@ export class R2OAuthClient {
   private bucketName: string;
   private accessToken: string;
   private basePath: string;
+  private storageId: number;
   private apiBase = "https://api.cloudflare.com/client/v4/accounts";
 
   constructor(config: {
@@ -15,11 +16,13 @@ export class R2OAuthClient {
     bucketName: string;
     accessToken: string;
     basePath?: string;
+    storageId?: number;
   }) {
     this.accountId = config.accountId;
     this.bucketName = config.bucketName;
     this.accessToken = config.accessToken;
     this.basePath = config.basePath?.replace(/^\/|\/$/g, "") || "";
+    this.storageId = config.storageId || 0;
   }
 
   private getFullPath(path: string): string {
@@ -325,6 +328,6 @@ export class R2OAuthClient {
       .split("/")
       .map((seg) => encodeURIComponent(seg))
       .join("/");
-    return `/api/files/0/download/${encoded}?inline=1&expires=${expiresIn}`;
+    return `/api/files/${this.storageId}/download/${encoded}?inline=1&expires=${expiresIn}`;
   }
 }

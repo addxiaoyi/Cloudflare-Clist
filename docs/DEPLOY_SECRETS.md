@@ -146,17 +146,20 @@ npx wrangler deploy
 
 ### 获取 OAuth 凭证
 
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens)
-2. API Tokens → Create Token
-3. 选择 "Create Custom Token"，权限：
-   - Account / R2 / Edit（或仅 Read）
-4. 创建后获取 Client ID 和 Secret
+需要在 Cloudflare 创建 **OAuth 应用**（不是 API Token，API Token 无法用于 OAuth 授权码流程）：
 
-或者使用 [Cloudflare Workers OAuth](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/oauth/) 应用：
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Manage Account** → **OAuth clients** → **Create client**
+2. 按官方指引填写：
+   - Response type：`Code`
+   - Grant type：`Authorization Code`（建议同时勾选 `Refresh Token`，access token 过期后可自动续期）
+   - Token authentication method：`Client Secret Basic`
+   - Redirect URLs：`https://your-domain/api/r2-oauth`
+3. 权限选择 R2 相关 scope：`r2:obj_read`、`r2:obj_write`、`r2:obj_list`
+4. 创建后保存 **Client ID** 与 **Client Secret**（Secret 只显示一次）
 
-1. Cloudflare Zero Trust → Applications → Add an application
-2. 选择 OAuth 应用类型，回调地址填 `/api/r2-oauth`
-3. 获取 Client ID / Client Secret
+参考官方文档：[Create your OAuth client](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/) / [Integrate your OAuth client with Cloudflare](https://developers.cloudflare.com/fundamentals/oauth/integrate-with-cloudflare/)
+
+> 注意：回调地址必须与 `CF_REDIRECT_URI`（或未配置时站点 origin 推导出的 `/api/r2-oauth`）完全一致，否则授权会报 `redirect_uri_mismatch`。
 
 ### 使用
 

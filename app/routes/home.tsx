@@ -993,7 +993,7 @@ const isS3 = formData.type === "s3";
         setOauthLoading(false);
         return;
       }
-      const popup = window.open(data.url, "_blank", "noopener,noreferrer,width=600,height=700");
+      const popup = window.open(data.url, "_blank", "popup,width=600,height=700");
       if (!popup) {
         setOauthError("弹出窗口被阻止，请允许弹出窗");
         setOauthLoading(false);
@@ -1050,7 +1050,7 @@ const isS3 = formData.type === "s3";
         setOauthLoading(false);
         return;
       }
-      const popup = window.open(data.url, "_blank", "noopener,noreferrer,width=600,height=700");
+      const popup = window.open(data.url, "_blank", "popup,width=600,height=700");
       if (!popup) {
         setOauthError("弹出窗口被阻止，请允许弹出窗");
         setOauthLoading(false);
@@ -1105,7 +1105,7 @@ const isS3 = formData.type === "s3";
         setOauthLoading(false);
         return;
       }
-      const popup = window.open(data.url, "_blank", "noopener,noreferrer,width=600,height=700");
+      const popup = window.open(data.url, "_blank", "popup,width=600,height=700");
       if (!popup) {
         setOauthError("弹出窗口被阻止，请允许弹出窗");
         setOauthLoading(false);
@@ -4672,7 +4672,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     }
   }, [siteAnnouncement]);
 
-  // Google OAuth 回调结果提示（授权完成后 Google 重定向回首页）
+  // OAuth 回调结果提示（授权完成后各提供商重定向回首页）
+  // 弹窗内处理：显示结果后自动关闭弹窗；主窗口通过 postMessage 触发存储刷新
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauth = params.get("oauth");
@@ -4683,11 +4684,23 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       toast("Google Drive 授权成功，刷新令牌已保存", "success");
     } else if (oauth === "google-error") {
       toast(`Google Drive 授权失败：${params.get("reason") || "未知错误"}`, "error");
+    } else if (oauth === "microsoft-success") {
+      toast("OneDrive 授权成功，令牌已保存", "success");
+    } else if (oauth === "microsoft-error") {
+      toast(`OneDrive 授权失败：${params.get("reason") || "未知错误"}`, "error");
+    } else if (oauth === "cloudflare-success") {
+      toast("Cloudflare R2 授权成功，令牌已保存", "success");
+    } else if (oauth === "cloudflare-error") {
+      toast(`Cloudflare R2 授权失败：${params.get("reason") || "未知错误"}`, "error");
     }
     params.delete("oauth");
     params.delete("reason");
     const query = params.toString();
     window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+    // 该窗口若是 OAuth 弹窗（脚本打开的窗口可自关），处理完自动关闭
+    if (window.opener === null) {
+      window.close();
+    }
   }, [toast]);
 
   const toggleTheme = useCallback((event: React.MouseEvent) => {

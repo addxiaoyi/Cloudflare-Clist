@@ -134,6 +134,7 @@ export function createClient(
       bucketName,
       accessToken,
       basePath: cfg.root_folder_path || storage.basePath || "",
+      storageId: storageId || 0,
     });
   }
   return new S3Client({
