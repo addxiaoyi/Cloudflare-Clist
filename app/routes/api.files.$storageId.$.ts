@@ -51,6 +51,33 @@ function assertSafeFetchUrl(raw: string): URL {
   return parsed;
 }
 
+// ---------------------------------------------------------------------------
+// 公开下载限流：guest/share 按 IP 统计 60s 内的请求数与累计字节数，超限拒绝，
+// 防脚本高频拉取/大文件风暴造成 Worker 带宽与费用滥用。admin 不受限。
+// ---------------------------------------------------------------------------
+const DOWNLOAD_WINDOW_MS = 60_000;
+const DOWNLOAD_MAX_REQUESTS = 90;
+const DOWNLOAD_MAX_BYTES = 1024 * 1024 * 1024; // 1GB / 分钟 / IP
+const downloadTrack = new Map<string, { times: number[]; bytes: number }>();
+
+function allowPublicDownload(ip: string | null, contentLength: number): boolean {
+  const key = ip || "unknown";
+  const now = Date.now();
+  const cur = downloadTrack.get(key);
+  if (!cur) {
+    downloadTrack.set(key, { times: [now], bytes: contentLength });
+    return contentLength <= DOWNLOAD_MAX_BYTES;
+  }
+  const times = cur.times.filter((t) => now - t < DOWNLOAD_WINDOW_MS);
+  if (times.length >= DOWNLOAD_MAX_REQUESTS || cur.bytes + contentLength > DOWNLOAD_MAX_BYTES) {
+    downloadTrack.set(key, { times, bytes: cur.bytes });
+    return false;
+  }
+  times.push(now);
+  downloadTrack.set(key, { times, bytes: cur.bytes + contentLength });
+  return true;
+}
+
 
 type StatefulClient = {
   getStateUpdates: () => { config?: Record<string, any>; saving?: Record<string, any> } | null;
@@ -225,6 +252,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       const contentLength = response.headers.get("content-length");
       const fileName = path.split("/").pop() || "image";
 
+      // 公开下载限流：guest/share 按 IP 限速（admin 不限）
+      if (userType !== "admin" && !allowPublicDownload(meta.ip, Number(contentLength) || 0)) {
+        return Response.json({ error: "下载过于频繁，请稍后再试" }, { status: 429 });
+      }
+
       await logAudit(db, {
         action: "file.preview",
         userType,
@@ -263,6 +295,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       const contentLength = response.headers.get("content-length");
 
       const fileName = path.split("/").pop() || "download";
+
+      // 公开下载限流：guest/share 按 IP 限速（admin 不限）
+      if (userType !== "admin" && !allowPublicDownload(meta.ip, Number(contentLength) || 0)) {
+        return Response.json({ error: "下载过于频繁，请稍后再试" }, { status: 429 });
+      }
 
       await logAudit(db, {
         action: "file.download",
