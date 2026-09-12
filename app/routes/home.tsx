@@ -1,7 +1,7 @@
 import type { Route } from "./+types/home";
 import { requireAuth } from "~/lib/auth";
 import { getAllStorages, getPublicStorages, initDatabase } from "~/lib/storage";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { FilePreview } from "~/components/FilePreview";
 import { useToast, useConfirm } from "~/components/feedback";
 import { getFileType, isPreviewable } from "~/lib/file-utils";
@@ -3773,9 +3773,37 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       navigateTo(f.isDirectory ? f.key : (f.key.includes("/") ? f.key.slice(0, f.key.lastIndexOf("/")) : ""));
     }
   };
-  const visibleObjects = normalizedQuery
-    ? objects.filter((obj) => obj.name.toLowerCase().includes(normalizedQuery))
-    : objects;
+  // 列表排序：名称/大小/修改时间，点击表头切换键与升降序
+  const [sortKey, setSortKey] = useState<"name" | "size" | "modified">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (key: "name" | "size" | "modified") => {
+    if (sortKey === key) {
+      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortOrder(key === "name" ? "asc" : "desc");
+    }
+  };
+
+  // 目录始终排在文件前，同类别内按所选键排序
+  const visibleObjects = useMemo(() => {
+    const list = normalizedQuery
+      ? objects.filter((obj) => obj.name.toLowerCase().includes(normalizedQuery))
+      : objects;
+    const dirs = list.filter((o) => o.isDirectory);
+    const files = list.filter((o) => !o.isDirectory);
+    const compare = (a: S3Object, b: S3Object): number => {
+      if (sortKey === "size") return (a.size || 0) - (b.size || 0);
+      if (sortKey === "modified") return new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
+      return a.name.localeCompare(b.name, "zh-CN", { numeric: true, sensitivity: "base" });
+    };
+    const applyOrder = (arr: S3Object[]) => {
+      arr.sort(compare);
+      return sortOrder === "desc" ? arr.reverse() : arr;
+    };
+    return [...applyOrder(dirs), ...applyOrder(files)];
+  }, [normalizedQuery, objects, sortKey, sortOrder]);
   const allVisibleSelected = visibleObjects.length > 0 && visibleObjects.every((obj) => selectedKeys.has(obj.key));
 
   // 键盘流：j/k 选行 h 上级 g 根目录 r 刷新 / 搜索 Esc 取消选中（输入框聚焦时不拦截）
@@ -4259,9 +4287,24 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                     />
                   </th>
                 )}
-                <th className="text-left py-2.5 px-4 font-medium uppercase tracking-wider">名称</th>
-                <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-28">大小</th>
-                <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-44">修改时间</th>
+                <th
+                  className="text-left py-2.5 px-4 font-medium uppercase tracking-wider cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
+                  onClick={() => handleSort("name")}
+                >
+                  名称{sortKey === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
+                </th>
+                <th
+                  className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-28 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
+                  onClick={() => handleSort("size")}
+                >
+                  大小{sortKey === "size" && (sortOrder === "asc" ? " ▲" : " ▼")}
+                </th>
+                <th
+                  className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-44 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
+                  onClick={() => handleSort("modified")}
+                >
+                  修改时间{sortKey === "modified" && (sortOrder === "asc" ? " ▲" : " ▼")}
+                </th>
                 <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-36">操作</th>
               </tr>
             </thead>

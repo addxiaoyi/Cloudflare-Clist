@@ -332,6 +332,20 @@ function useFileEditor(opts: {
 }
 
 // Video Player Component
+// 视频进度记忆：24h 内的进度自动续播，播放中每 5 秒落盘一次
+const PROGRESS_TTL_MS = 24 * 60 * 60 * 1000;
+const PROGRESS_SAVE_MS = 5_000;
+
+function progressStorageKey(url: string): string {
+  // 用简单哈希生成稳定短 key，避免 URL 过长或含非 ASCII 时 btoa 抛错
+  let hash = 0;
+  for (let i = 0; i < url.length; i++) {
+    hash = (hash << 5) - hash + url.charCodeAt(i);
+    hash |= 0;
+  }
+  return `video_progress_${hash.toString(36)}`;
+}
+
 function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -499,6 +513,56 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
     };
   }, []);
 
+  // 视频进度记忆：24h 内的进度自动续播，播放中每 5 秒落盘一次
+  const saveProgressRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    const key = progressStorageKey(url);
+    let cancelled = false;
+
+    const save = () => {
+      const v = videoRef.current;
+      if (!v || Number.isNaN(v.currentTime)) return;
+      try {
+        localStorage.setItem(key, JSON.stringify({ position: v.currentTime, lastUpdated: Date.now() }));
+      } catch {
+        /* localStorage 不可用（隐私模式等）时静默降级 */
+      }
+    };
+    saveProgressRef.current = save;
+
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const data = JSON.parse(saved) as { position: number; lastUpdated: number };
+        if (data.position > 0 && Date.now() - data.lastUpdated < PROGRESS_TTL_MS) {
+          const seek = () => {
+            const v = videoRef.current;
+            if (v && !cancelled) {
+              v.currentTime = data.position;
+              setCurrentTime(data.position);
+            }
+          };
+          // 元数据未就绪时等 loadedmetadata 后再定位
+          if (videoRef.current?.readyState >= 1) seek();
+          else videoRef.current?.addEventListener("loadedmetadata", seek, { once: true });
+        }
+      }
+    } catch {
+      /* 损坏的存档直接忽略 */
+    }
+
+    const timer = setInterval(() => {
+      const v = videoRef.current;
+      if (v && !v.paused) save();
+    }, PROGRESS_SAVE_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      save(); // 关闭预览/切文件时保存最终进度
+    };
+  }, [url]);
+
   const progress = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
 
@@ -516,7 +580,7 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+        onPause={() => { setIsPlaying(false); saveProgressRef.current(); }}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
         onCanPlay={() => setIsLoading(false)}
