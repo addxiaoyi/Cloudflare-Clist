@@ -543,7 +543,8 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
             }
           };
           // 元数据未就绪时等 loadedmetadata 后再定位
-          if (videoRef.current?.readyState >= 1) seek();
+          const readyState = videoRef.current?.readyState;
+          if (readyState !== undefined && readyState >= 1) seek();
           else videoRef.current?.addEventListener("loadedmetadata", seek, { once: true });
         }
       }
