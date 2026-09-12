@@ -333,6 +333,10 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // Get signed URL
   if (action === "signed-url") {
     try {
+      // 与公开下载共用限流预算，防批量生成直链绕过 Worker 带宽限制（guest/share）
+      if (userType !== "admin" && !allowPublicDownload(meta.ip, 0)) {
+        return Response.json({ error: "操作过于频繁，请稍后再试" }, { status: 429 });
+      }
       const signedUrl = await withClientState(client, db, storageId, () => client.getSignedUrl(path));
       await logAudit(db, {
         action: "file.signed_url",
