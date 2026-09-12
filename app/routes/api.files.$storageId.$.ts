@@ -385,6 +385,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       const body = await request.json() as { contentType?: string; size?: number; chunkSize?: number };
       const contentType = body.contentType || "application/octet-stream";
+      // 参数上限校验，防存储/CPU 滥用：单文件 ≤ 50GB，分片 1MB-5GB（S3 限制 5MB-5GB，放宽下限兼容小分片）
+      const MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024;
+      const MIN_CHUNK_SIZE = 1 * 1024 * 1024;
+      const MAX_CHUNK_SIZE = 5 * 1024 * 1024 * 1024;
+      if (body.size !== undefined && (body.size <= 0 || body.size > MAX_FILE_SIZE)) {
+        return Response.json({ error: "文件大小超出允许范围（最大 50GB）" }, { status: 400 });
+      }
+      if (body.chunkSize !== undefined && (body.chunkSize < MIN_CHUNK_SIZE || body.chunkSize > MAX_CHUNK_SIZE)) {
+        return Response.json({ error: "分片大小需在 1MB-5GB 之间" }, { status: 400 });
+      }
       const uploadId = await withClientState(
         client,
         db,
@@ -420,8 +430,16 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       if (!body.uploadId || !body.partNumbers || body.partNumbers.length === 0) {
         return Response.json({ error: "uploadId and partNumbers are required" }, { status: 400 });
       }
+      // 分片号去重并限制数量/范围，防一次请求生成海量签名 URL 耗尽 CPU
+      const partNumbers = Array.from(new Set(body.partNumbers))
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 10000);
+      if (partNumbers.length === 0) {
+        return Response.json({ error: "分片号必须为 1-10000 的整数" }, { status: 400 });
+      }
+      if (partNumbers.length > 2000) {
+        return Response.json({ error: "单次最多请求 2000 个分片签名" }, { status: 400 });
+      }
       const uploadId = body.uploadId;
-      const partNumbers = body.partNumbers;
 
       const urls = await withClientState(client, db, storageId, async () => {
         const result: Record<number, string> = {};

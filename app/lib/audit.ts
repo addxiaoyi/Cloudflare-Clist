@@ -50,7 +50,40 @@ function normalizeDetail(detail: AuditLogEntry["detail"]): string | null {
   }
 }
 
+// 公开读取操作：guest/share 高频访问时若每笔都写审计，D1 行数会被刷爆（存储计费 + 查询变慢）。
+// 用 isolate 级内存计数按 IP 限速，超限静默丢弃成功日志；管理员与失败/写操作不受影响。
+const THROTTLED_READ_ACTIONS = new Set([
+  "file.list",
+  "file.preview",
+  "file.download",
+  "share.view",
+  "share.list",
+]);
+const READ_THROTTLE_WINDOW_MS = 60_000;
+const READ_THROTTLE_MAX = 30;
+const readThrottle = new Map<string, number[]>();
+
+function isReadThrottled(entry: AuditLogEntry): boolean {
+  if (entry.userType !== "guest" && entry.userType !== "share") return false;
+  if (!entry.action || !THROTTLED_READ_ACTIONS.has(entry.action)) return false;
+  const ip = entry.ip || "unknown";
+  const now = Date.now();
+  const timestamps = readThrottle.get(ip) || [];
+  const recent = timestamps.filter((t) => now - t < READ_THROTTLE_WINDOW_MS);
+  if (recent.length >= READ_THROTTLE_MAX) {
+    readThrottle.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  readThrottle.set(ip, recent);
+  return false;
+}
+
 export async function logAudit(db: D1Database, entry: AuditLogEntry): Promise<void> {
+  // 公开读取的高频日志按 IP 限速丢弃，防止恶意请求灌爆审计表
+  if (isReadThrottled(entry)) {
+    return;
+  }
   const detail = normalizeDetail(entry.detail);
   await db
     .prepare(

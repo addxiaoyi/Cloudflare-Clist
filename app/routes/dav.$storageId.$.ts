@@ -2,6 +2,7 @@ import type { Route } from "./+types/dav.$storageId.$";
 import { getStorageById, getAllStorages, initDatabase, updateStorage } from "~/lib/storage";
 import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
 import { fileResponseHeaders, isUnsafeInlineType } from "~/lib/file-utils";
+import { getRequestMeta, logAudit, isRateLimited } from "~/lib/audit";
 
 // 路径穿越防护：拒绝包含 ".." 段、空段路径或控制字符的路径（与 api.files 同规则）
 function assertSafePath(path: string): void {
@@ -236,9 +237,6 @@ export async function handleWebdavRequest(
         DAV: "1, 2",
         Allow: "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE",
         "MS-Author-Via": "DAV",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type, Depth, Destination, Overwrite",
       },
     });
   }
@@ -257,13 +255,23 @@ export async function handleWebdavRequest(
     return new Response("WebDAV is disabled", { status: 403 });
   }
 
-  // Validate authentication
+  await initDatabase(db);
+
+  // Validate authentication（失败记审计 + IP 限流，防 Basic Auth 爆破）
   const isAuthenticated = await validateWebdavAuth(request, env);
   if (!isAuthenticated) {
+    const meta = getRequestMeta(request);
+    if (await isRateLimited(db, meta.ip, "webdav.auth_failed")) {
+      return new Response("Too many failed attempts", { status: 429 });
+    }
+    await logAudit(db, {
+      action: "webdav.auth_failed",
+      userType: "guest",
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
     return createUnauthorizedResponse();
   }
-
-  await initDatabase(db);
 
   const storageId = parseInt(params.storageId || "0", 10);
   // params["*"] 是 URL 编码态，需解码后再作为对象 key，否则非 ASCII/空格文件名被双重编码入库
