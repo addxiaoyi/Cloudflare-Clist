@@ -96,6 +96,29 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  // Helper: retrieve object and handle Range requests
+  function handleGetObject(obj, req, res) {
+    const range = req.headers["range"];
+    if (range && obj.data.length > 0) {
+      const match = range.match(/bytes=(\d*)-(\d*)/);
+      if (match) {
+        const start = match[1] ? parseInt(match[1]) : 0;
+        const end = match[2] ? parseInt(match[2]) : obj.data.length - 1;
+        const chunk = obj.data.slice(start, end + 1);
+        res.writeHead(206, {
+          "Content-Type": obj.contentType,
+          "Content-Length": chunk.length,
+          "Content-Range": `bytes ${start}-${end}/${obj.data.length}`,
+          "Accept-Ranges": "bytes",
+          ETag: `"mock-get"`,
+        });
+        res.end(chunk);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // 初始化分片上传
   if (req.method === "POST" && params.get("uploads") === "") {
     const uploadId = `mock-upload-${uploadIdSeq++}`;
@@ -178,10 +201,13 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" || req.method === "HEAD") {
     const obj = objects.get(storeKey);
     if (!obj) return send(res, 404, "");
+    // Handle Range requests for video seek support
+    if (req.method === "GET" && handleGetObject(obj, req, res)) return;
     const head = {
       "Content-Type": obj.contentType,
       "Content-Length": obj.data.length,
       "Last-Modified": obj.lastModified,
+      "Accept-Ranges": "bytes",
       ETag: `"mock-get"`,
     };
     if (req.method === "HEAD") return send(res, 200, "", head);
