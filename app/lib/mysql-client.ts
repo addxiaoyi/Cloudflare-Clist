@@ -121,7 +121,9 @@ export class MySqlClient {
 
   async exec(sql: string, params?: any[]): Promise<{ affectedRows: number }> {
     const results = await this.rawQuery(sql, ...(params || []));
-    return { affectedRows: results.length };
+    // INSERT/UPDATE/DELETE 返回 ResultSetHeader，受影响行数在 affectedRows 字段
+    const header = results as unknown as { affectedRows?: number };
+    return { affectedRows: typeof header?.affectedRows === "number" ? header.affectedRows : 0 };
   }
 
   private async rawQuery(sql: string, ...params: any[]): Promise<any[]> {
