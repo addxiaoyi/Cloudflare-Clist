@@ -28,7 +28,7 @@ import {
   SESSION_REMEMBER_HOURS,
 } from "~/lib/auth";
 import { getRequestMeta, logAudit } from "~/lib/audit";
-import { createClient } from "~/lib/client-factory";
+import { createClient, createMysqlClient } from "~/lib/client-factory";
 
 // 仅 HTTPS 才给 cookie 加 Secure；http 开发环境加 Secure 会被浏览器拒收
 function isSecureRequest(request: Request): boolean {
@@ -269,6 +269,12 @@ export async function action({ request, context }: Route.ActionArgs) {
         const startedAt = Date.now();
         let client;
         try {
+          if (type === "mysql") {
+            // MySQL 走 Hyperdrive / 直连串，与文件存储客户端不同
+            const mysql = createMysqlClient(storageLike, context.cloudflare.env);
+            await mysql.listDatabases();
+            return Response.json({ ok: true, latencyMs: Date.now() - startedAt, items: 0 });
+          }
           client = createClient(storageLike, context.cloudflare.env, Number(cfg.storageId || 0));
         } catch (error) {
           return Response.json({

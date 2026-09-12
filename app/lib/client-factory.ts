@@ -153,9 +153,14 @@ export function createMysqlClient(
   env?: ClientEnv
 ): MySqlClient {
   const cfg = storage.config || {};
+  const connectionString = cfg.connection_string || cfg.endpoint || storage.endpoint || "";
+  // 生产环境必须绑定 Hyperdrive；本地无 Hyperdrive 时必须提供直连串，否则启动即失败
+  if (!connectionString && !env?.HD && !env?.HYPERDRIVE) {
+    throw new Error("MySQL 需先绑定 Cloudflare Hyperdrive（或本地填直连连接串）");
+  }
   return new MySqlClient(
     {
-      connectionString: cfg.connection_string || cfg.endpoint || storage.endpoint || "",
+      connectionString,
       database: cfg.database || storage.bucket,
       tablePrefix: cfg.table_prefix,
     },

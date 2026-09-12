@@ -5,7 +5,7 @@ import { requireAuth } from "~/lib/auth";
 import { Database, TableIcon as Table, RefreshCw, Play as Execute, ChevronLeft } from "~/components/icons";
 
 interface LoaderData {
-  storage: { id: number; name: string; config: any };
+  storage?: { id: number; name: string; config: any };
   databases?: string[];
   selectedDb?: string;
   tables?: string[];
@@ -91,6 +91,32 @@ export async function action({ request, params }: any) {
 export default function MySqlPage() {
   const data = useLoaderData() as LoaderData;
   const navigate = useNavigate();
+
+  // loader 未返回存储（不存在/非 MySQL/未登录）时给出友好提示，避免 data.storage 解构崩溃
+  if (!data.storage) {
+    return (
+      <div className="p-4 max-w-6xl mx-auto">
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            onClick={() => navigate("/")}
+            aria-label="返回首页"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <Database className="h-6 w-6 text-blue-500" />
+          <h1 className="text-lg font-semibold">MySQL 数据库</h1>
+        </div>
+        <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded p-3">
+          <p className="text-red-700 dark:text-red-200">
+            {data.error === "Unauthorized"
+              ? "请先登录管理员账号后再访问 MySQL 管理页面"
+              : data.error || "MySQL 存储不存在或类型不正确，请检查存储配置"}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
