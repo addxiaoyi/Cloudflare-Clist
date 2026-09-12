@@ -3,8 +3,54 @@ import { getStorageById, initDatabase, updateStorage } from "~/lib/storage";
 import { requireAuth } from "~/lib/auth";
 import { getShareByToken, verifySharePassword } from "~/lib/shares";
 import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
-import { getRequestMeta, logAudit } from "~/lib/audit";
-import { getFileType, getMimeType } from "~/lib/file-utils";
+import { getRequestMeta, logAudit, isRateLimited } from "~/lib/audit";
+import { getFileType, getMimeType, fileResponseHeaders, isUnsafeInlineType } from "~/lib/file-utils";
+
+// ---------------------------------------------------------------------------
+// 安全守卫
+// ---------------------------------------------------------------------------
+
+// 路径穿越防护：拒绝包含 ".." 段、空段路径或控制字符的路径
+function assertSafePath(path: string): void {
+  if (!path) return;
+  if (/[\u0000-\u001f]/.test(path)) {
+    throw new Error("路径包含非法控制字符");
+  }
+  if (path.split("/").some((seg) => seg === ".." || seg === ".")) {
+    throw new Error("路径不能包含 .. 或 . 段");
+  }
+}
+
+// 内网/回环/链路本地/保留地址段（含 IPv6），用于防 SSRF
+const PRIVATE_IP_RE =
+  /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|::1$|::ffff:127\.|fc|fd)/i;
+
+function isPrivateHostname(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost")) return true;
+  if (lower.endsWith(".internal") || lower.endsWith(".local")) return true;
+  // IPv6 去掉作用域
+  const addr = lower.replace(/^\[|\]$/g, "").split("%")[0];
+  return PRIVATE_IP_RE.test(addr);
+}
+
+// 校验离线下载 URL：仅允许 http/https，且不能指向内网/回环地址
+function assertSafeFetchUrl(raw: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("Invalid URL");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("仅支持 http/https 协议的下载链接");
+  }
+  if (isPrivateHostname(parsed.hostname)) {
+    throw new Error("不允许下载内网或本地地址");
+  }
+  return parsed;
+}
+
 
 type StatefulClient = {
   getStateUpdates: () => { config?: Record<string, any>; saving?: Record<string, any> } | null;
@@ -61,6 +107,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   const storageId = parseInt(params.storageId || "0", 10);
   const path = params["*"] || "";
 
+  try {
+    assertSafePath(path);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "非法路径" },
+      { status: 400 }
+    );
+  }
+
   const storage = await getStorageById(db, storageId);
   if (!storage) {
     return Response.json({ error: "Storage not found" }, { status: 404 });
@@ -86,9 +141,21 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       }
       // 若分享设了访问密码，必须校验通过
       if (shareVerified && share.passwordHash) {
+        // 防爆破：同一 IP 15 分钟内密码失败达 10 次则暂时拒绝
+        if (await isRateLimited(db, meta.ip, "share.password_failed")) {
+          return Response.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
+        }
         const password = url.searchParams.get("password") || undefined;
         const ok = await verifySharePassword(db, shareToken, password);
         if (!ok) {
+          await logAudit(db, {
+            action: "share.password_failed",
+            userType: "share",
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+            storageId: share.storageId,
+            path: share.filePath,
+          });
           return Response.json({ error: "需要访问密码或密码错误" }, { status: 403 });
         }
       }
@@ -168,10 +235,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         detail: { fileName, contentLength, contentType },
       });
 
+      // 危险类型（HTML/SVG/XML/JS/CSS）即使走图片直链也强制附件下载，防同源脚本执行
+      const unsafeInline = isUnsafeInlineType(contentType);
+      const disposition = unsafeInline ? "attachment" : "inline";
+
       return new Response(response.body, {
         headers: {
           "Content-Type": contentType,
-          "Content-Disposition": `inline; filename="${encodeURIComponent(fileName)}"`,
+          "Content-Disposition": `${disposition}; filename="${encodeURIComponent(fileName)}"`,
+          ...fileResponseHeaders(contentType, !unsafeInline),
           ...(contentLength ? { "Content-Length": contentLength } : {}),
         },
       });
@@ -202,11 +274,14 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
         detail: { fileName, contentLength },
       });
 
-      const inline = url.searchParams.get("inline") === "1";
+      const wantsInline = url.searchParams.get("inline") === "1";
+      // 危险类型即使请求 inline 也强制附件下载
+      const inline = wantsInline && !isUnsafeInlineType(contentType);
       return new Response(response.body, {
         headers: {
           "Content-Type": contentType,
           "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`,
+          ...fileResponseHeaders(contentType, inline),
           ...(contentLength ? { "Content-Length": contentLength } : {}),
         },
       });
@@ -265,6 +340,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
   const storageId = parseInt(params.storageId || "0", 10);
   const path = params["*"] || "";
+
+  try {
+    assertSafePath(path);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "非法路径" },
+      { status: 400 }
+    );
+  }
 
   const storage = await getStorageById(db, storageId);
   if (!storage) {
@@ -837,26 +921,86 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         return Response.json({ error: "URL is required" }, { status: 400 });
       }
 
-      // Validate URL
+      // 防 SSRF：仅 http/https，且禁止内网/回环/链路本地地址
       let parsedUrl: URL;
       try {
-        parsedUrl = new URL(remoteUrl);
-      } catch {
-        return Response.json({ error: "Invalid URL" }, { status: 400 });
+        parsedUrl = assertSafeFetchUrl(remoteUrl);
+      } catch (error) {
+        return Response.json(
+          { error: error instanceof Error ? error.message : "Invalid URL" },
+          { status: 400 }
+        );
       }
 
-      // Fetch the remote file
-      const remoteResponse = await fetch(parsedUrl.href, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible)",
-        },
-      });
-
+      // 手动跟随重定向并逐跳校验，防止公网 URL 302 跳转到内网/云元数据（SSRF 重定向绕过）
+      const MAX_REDIRECTS = 5;
+      const MAX_DOWNLOAD_SIZE = 200 * 1024 * 1024; // 200MB，防超大文件拖垮 Workers 内存
+      const controller = typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+        ? AbortSignal.timeout(60_000)
+        : undefined;
+      let currentUrl = parsedUrl;
+      let remoteResponse: Response | null = null;
+      for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+        const hopRes = await fetch(currentUrl.href, {
+          redirect: "manual",
+          signal: controller,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible)",
+          },
+        });
+        if (hopRes.status >= 300 && hopRes.status < 400) {
+          const location = hopRes.headers.get("location");
+          if (!location) {
+            return Response.json({ error: "重定向缺少 Location 头" }, { status: 400 });
+          }
+          // 相对地址按当前 URL 解析后再校验
+          const next = new URL(location, currentUrl.href);
+          try {
+            currentUrl = assertSafeFetchUrl(next.href);
+          } catch {
+            return Response.json({ error: "不允许跳转到内网或本地地址" }, { status: 400 });
+          }
+          continue;
+        }
+        remoteResponse = hopRes;
+        break;
+      }
+      if (!remoteResponse) {
+        return Response.json({ error: "重定向次数过多" }, { status: 400 });
+      }
       if (!remoteResponse.ok) {
         return Response.json(
           { error: `Failed to fetch: ${remoteResponse.status} ${remoteResponse.statusText}` },
           { status: 400 }
         );
+      }
+
+      // Content-Length 超限直接拒绝，未提供长度时按字节流读取并中断
+      const declaredLength = Number(remoteResponse.headers.get("content-length") || "0");
+      if (declaredLength > MAX_DOWNLOAD_SIZE) {
+        return Response.json({ error: "文件过大，超出下载上限" }, { status: 413 });
+      }
+      const reader = remoteResponse.body?.getReader();
+      if (!reader) {
+        return Response.json({ error: "无法读取远程内容" }, { status: 400 });
+      }
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_DOWNLOAD_SIZE) {
+          await reader.cancel().catch(() => {});
+          return Response.json({ error: "文件过大，超出下载上限" }, { status: 413 });
+        }
+        chunks.push(value);
+      }
+      const bodyBuffer = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bodyBuffer.set(chunk, offset);
+        offset += chunk.byteLength;
       }
 
       // Get filename from URL or Content-Disposition header or use provided filename
@@ -877,12 +1021,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       // Get content type
       const contentType = remoteResponse.headers.get("content-type") || "application/octet-stream";
 
-      // Read the body as ArrayBuffer
-      const bodyBuffer = await remoteResponse.arrayBuffer();
-
       // Upload to S3
       const uploadPath = path ? `${path}/${finalFilename}` : finalFilename;
-      await withClientState(client, db, storageId, () => client.putObject(uploadPath, bodyBuffer, contentType));
+      await withClientState(client, db, storageId, () => client.putObject(uploadPath, bodyBuffer.buffer as ArrayBuffer, contentType));
       await logAudit(db, {
         action: "file.fetch",
         userType,

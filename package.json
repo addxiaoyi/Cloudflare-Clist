@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@types/qrcode": "^1.5.6",
+		"dompurify": "^3.4.15",
 		"highlight.js": "^11.11.1",
 		"isbot": "^5.1.31",
 		"jszip": "^3.10.1",

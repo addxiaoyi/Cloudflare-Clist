@@ -10,7 +10,7 @@ import {
   cleanExpiredShares,
   verifySharePassword,
 } from "~/lib/shares";
-import { getRequestMeta, logAudit } from "~/lib/audit";
+import { getRequestMeta, logAudit, isRateLimited } from "~/lib/audit";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
@@ -104,12 +104,27 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!token) {
       return Response.json({ error: "token 为必填项" }, { status: 400 });
     }
+    // 防爆破：同一 IP 15 分钟内密码失败达 10 次则暂时拒绝
+    if (await isRateLimited(db, meta.ip, "share.password_failed")) {
+      return Response.json({ error: "尝试过于频繁，请稍后再试" }, { status: 429 });
+    }
     const share = await getShareByToken(db, token);
     if (!share) {
       return Response.json({ error: "分享不存在或已过期" }, { status: 404 });
     }
     const ok = await verifySharePassword(db, token, password);
-    return Response.json({ success: ok });
+    if (!ok) {
+      await logAudit(db, {
+        action: "share.password_failed",
+        userType: "share",
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+        storageId: share.storageId,
+        path: share.filePath,
+      });
+      return Response.json({ success: false });
+    }
+    return Response.json({ success: true });
   }
 
   // 其余操作需要管理员

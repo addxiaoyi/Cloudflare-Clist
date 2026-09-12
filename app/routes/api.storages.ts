@@ -27,7 +27,7 @@ import {
   SESSION_DEFAULT_HOURS,
   SESSION_REMEMBER_HOURS,
 } from "~/lib/auth";
-import { getRequestMeta, logAudit } from "~/lib/audit";
+import { getRequestMeta, logAudit, isRateLimited } from "~/lib/audit";
 import { createClient, createMysqlClient } from "~/lib/client-factory";
 
 // 仅 HTTPS 才给 cookie 加 Secure；http 开发环境加 Secure 会被浏览器拒收
@@ -117,6 +117,15 @@ export async function action({ request, context }: Route.ActionArgs) {
     // Login action
     if (actionType === "login") {
       const { username, password, remember } = body as { username: string; password: string; remember?: boolean };
+
+      // 防爆破：同一 IP 15 分钟内失败达 10 次则暂时拒绝
+      if (await isRateLimited(db, meta.ip, "auth.login_failed")) {
+        return Response.json(
+          { error: "登录尝试过于频繁，请稍后再试" },
+          { status: 429 }
+        );
+      }
+
       const isValid = await validateAdmin(username, password, context.cloudflare.env as { ADMIN_USERNAME: string; ADMIN_PASSWORD: string });
 
       if (!isValid) {

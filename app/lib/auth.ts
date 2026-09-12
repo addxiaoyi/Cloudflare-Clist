@@ -125,12 +125,24 @@ export function deleteSessionCookie(): string {
   return "session=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0";
 }
 
+// 恒定时间比较，防时序侧信道泄露凭据长度/前缀信息
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
+}
+
 export async function validateAdmin(
   username: string,
   password: string,
   env: { ADMIN_USERNAME: string; ADMIN_PASSWORD: string }
 ): Promise<boolean> {
-  return username === env.ADMIN_USERNAME && password === env.ADMIN_PASSWORD;
+  return timingSafeEqual(username, env.ADMIN_USERNAME) && timingSafeEqual(password, env.ADMIN_PASSWORD);
 }
 
 export async function requireAuth(

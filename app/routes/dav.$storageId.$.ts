@@ -1,6 +1,7 @@
 import type { Route } from "./+types/dav.$storageId.$";
 import { getStorageById, getAllStorages, initDatabase, updateStorage } from "~/lib/storage";
 import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
+import { fileResponseHeaders, isUnsafeInlineType } from "~/lib/file-utils";
 
 // WebDAV server endpoint - provides WebDAV access to storages
 
@@ -133,10 +134,22 @@ async function validateWebdavAuth(
     const webdavUsername = env.WEBDAV_USERNAME || env.ADMIN_USERNAME || "admin";
     const webdavPassword = env.WEBDAV_PASSWORD || env.ADMIN_PASSWORD || "changeme";
 
-    return username === webdavUsername && password === webdavPassword;
+    // 恒定时间比较，防时序侧信道
+    return timingSafeEqual(username, webdavUsername) && timingSafeEqual(password, webdavPassword);
   } catch {
     return false;
   }
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  if (aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
 }
 
 function createUnauthorizedResponse(): Response {
@@ -461,12 +474,17 @@ ${result.objects.map(obj =>
       const response = await withClientState(client, db, storageId, () => client.getObject(path));
       const contentType = response.headers.get("content-type") || getContentType(path);
       const contentLength = response.headers.get("content-length");
+      // 危险类型（HTML/SVG/XML/JS/CSS）强制附件下载 + nosniff，防同源脚本执行
+      const unsafeInline = isUnsafeInlineType(contentType);
+      const disposition = unsafeInline ? "attachment" : "inline";
 
       if (method === "HEAD") {
         return new Response(null, {
           status: 200,
           headers: {
             "Content-Type": contentType,
+            "Content-Disposition": `${disposition}; filename="${encodeURIComponent(path.split("/").pop() || "download")}"`,
+            ...fileResponseHeaders(contentType, !unsafeInline),
             ...(contentLength ? { "Content-Length": contentLength } : {}),
           },
         });
@@ -476,6 +494,8 @@ ${result.objects.map(obj =>
         status: 200,
         headers: {
           "Content-Type": contentType,
+          "Content-Disposition": `${disposition}; filename="${encodeURIComponent(path.split("/").pop() || "download")}"`,
+          ...fileResponseHeaders(contentType, !unsafeInline),
           ...(contentLength ? { "Content-Length": contentLength } : {}),
         },
       });

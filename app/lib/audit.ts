@@ -108,3 +108,21 @@ export async function getAuditLogs(
   const result = await db.prepare(query).bind(...bindings).all<AuditLogRow>();
   return result.results || [];
 }
+
+// 通用限流：统计某动作在时间窗口内同 IP 的失败次数，达到阈值则拒绝（登录/分享密码防爆破）
+export async function isRateLimited(
+  db: D1Database,
+  ip: string | null,
+  action: string,
+  { windowMinutes = 15, maxFailures = 10 } = {}
+): Promise<boolean> {
+  if (!ip) return false;
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) as cnt FROM audit_logs
+       WHERE action = ? AND ip = ? AND created_at >= datetime('now', ?)`
+    )
+    .bind(action, ip, `-${windowMinutes} minutes`)
+    .first<{ cnt: number }>();
+  return (row?.cnt || 0) >= maxFailures;
+}

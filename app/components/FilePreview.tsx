@@ -4,6 +4,7 @@ import { apiFileUrl } from "~/lib/api-path";
 import { useToast } from "~/components/feedback";
 import hljs from "highlight.js";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { X, Download, Play, Pause, RefreshCw, AlertCircle, Pencil, Check } from "~/components/icons";
 
 interface FilePreviewProps {
@@ -1116,7 +1117,8 @@ function MarkdownViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { 
         };
 
         const html = await marked(text, { renderer });
-        setRenderedHtml(html);
+        // 净化 HTML，防止恶意 Markdown 内嵌脚本/事件处理器（存储型 XSS）
+        setRenderedHtml(DOMPurify.sanitize(html));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load file");
       } finally {
@@ -1420,7 +1422,7 @@ function DocxViewer({ url }: { url: string }) {
         const arrayBuffer = await res.arrayBuffer();
         const mammoth = (await import("mammoth")).default;
         const result = await mammoth.convertToHtml({ arrayBuffer });
-        if (!cancelled) setHtml(result.value || "<p style='color:#999'>（空文档）</p>");
+        if (!cancelled) setHtml(DOMPurify.sanitize(result.value || "<p style='color:#999'>（空文档）</p>"));
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "解析 docx 失败");
       } finally {

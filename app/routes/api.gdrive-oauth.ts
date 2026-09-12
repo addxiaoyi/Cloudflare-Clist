@@ -78,9 +78,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     if (reason) {
       params.set("reason", reason);
     }
-    // 先发 postMessage 给父窗口，再在当前页面跳转
+    // 先发 postMessage 给父窗口，再在当前页面跳转；targetOrigin 限定当前站点
     const html = `<!DOCTYPE html><html><body><script>
-      try { window.opener.postMessage({type:'oauth',provider:'google',success:${ok}},'*'); } catch(e){}
+      try { window.opener.postMessage({type:'oauth',provider:'google',success:${ok}}, window.location.origin); } catch(e){}
       window.location.href = '/?${params.toString()}';
     </script></body></html>`;
     return new Response(html, { headers: { "Content-Type": "text/html" } });

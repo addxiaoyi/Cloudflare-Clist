@@ -91,7 +91,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       params.set("reason", reason);
     }
     const html = `<!DOCTYPE html><html><body><script>
-      try { window.opener.postMessage({type:'oauth',provider:'microsoft',success:${ok}},'*'); } catch(e){}
+      try { window.opener.postMessage({type:'oauth',provider:'microsoft',success:${ok}}, window.location.origin); } catch(e){}
       window.location.href = '/?${params.toString()}';
     </script></body></html>`;
     return new Response(html, { headers: { "Content-Type": "text/html" } });

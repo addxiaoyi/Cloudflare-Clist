@@ -158,3 +158,20 @@ export function formatDuration(seconds: number): string {
   }
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
+
+// 同源内联渲染可能执行脚本的危险类型：上传的 HTML/SVG/XML/JS/CSS 必须强制附件下载
+export const UNSAFE_INLINE_TYPES =
+  /^(text\/html|text\/xml|application\/xml|image\/svg\+xml|application\/javascript|text\/javascript|text\/css)/i;
+
+export function isUnsafeInlineType(contentType: string): boolean {
+  return UNSAFE_INLINE_TYPES.test(contentType);
+}
+
+// 文件响应安全头：nosniff 防 MIME 嗅探；内联渲染套 CSP sandbox 沙箱，直接打开 URL 也无法执行脚本
+export function fileResponseHeaders(contentType: string, inline: boolean): Record<string, string> {
+  const headers: Record<string, string> = { "X-Content-Type-Options": "nosniff" };
+  if (inline && !isUnsafeInlineType(contentType)) {
+    headers["Content-Security-Policy"] = "sandbox";
+  }
+  return headers;
+}

@@ -20,10 +20,82 @@ interface ShareRow {
   password_hash: string | null;
 }
 
-/** SHA-256 → hex，用于密码哈希（Cloudflare Workers Web Crypto） */
+/** 分享密码哈希：PBKDF2-SHA256（100k 次迭代 + 随机盐）。旧的无盐 SHA-256 哈希仍可校验（向后兼容）。 */
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_PREFIX = "pbkdf2$";
+// 密码长度上限：PBKDF2 计算成本随输入长度增长，防超大密码拖垮 Workers
+const MAX_PASSWORD_LEN = 256;
+
+function toBase64(buf: ArrayBuffer): string {
+  let bin = "";
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) {
+    bin += String.fromCharCode(bytes[i]);
+  }
+  return btoa(bin);
+}
+
+function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return bytes;
+}
+
 async function hashPassword(password: string): Promise<string> {
-  const data = new TextEncoder().encode(password);
-  const digest = await crypto.subtle.digest("SHA-256", data);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    keyMaterial,
+    256
+  );
+  return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}$${toBase64(salt.buffer)}$${toBase64(bits)}`;
+}
+
+// 恒定时间比较，防时序侧信道
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  if (stored.startsWith(PBKDF2_PREFIX)) {
+    const [, iterStr, saltB64, hashB64] = stored.split("$");
+    const iterations = parseInt(iterStr, 10) || PBKDF2_ITERATIONS;
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
+    const bits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt: fromBase64(saltB64), iterations, hash: "SHA-256" },
+      keyMaterial,
+      256
+    );
+    return timingSafeEqualHex(toBase64(bits), hashB64);
+  }
+  // 旧格式：无盐 SHA-256（仅兼容存量分享，新分享不再使用）
+  const hash = await sha256Hex(password);
+  return timingSafeEqualHex(hash, stored);
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -103,7 +175,11 @@ export async function createShare(
   const id = generateShareId();
   const shareToken = customShareToken?.trim() || generateRandomToken();
   const createdAt = new Date().toISOString();
-  const passwordHash = password && password.trim() ? await hashPassword(password.trim()) : null;
+  const trimmedPassword = password?.trim() || "";
+  if (trimmedPassword.length > MAX_PASSWORD_LEN) {
+    throw new Error(`分享密码不能超过 ${MAX_PASSWORD_LEN} 个字符`);
+  }
+  const passwordHash = trimmedPassword ? await hashPassword(trimmedPassword) : null;
 
   validateShareToken(shareToken);
   if (await shareTokenExists(db, shareToken)) {
@@ -171,8 +247,9 @@ export async function verifySharePassword(
   if (!row) return false;
   if (!row.password_hash) return true; // 未设密码
   if (!password) return false;
-  const hash = await hashPassword(password);
-  return hash === row.password_hash;
+  // 超长密码直接拒绝，避免 PBKDF2 高成本计算被滥用（DoS）
+  if (password.length > MAX_PASSWORD_LEN) return false;
+  return verifyPassword(password, row.password_hash);
 }
 
 export async function deleteShare(db: D1Database, id: string): Promise<void> {

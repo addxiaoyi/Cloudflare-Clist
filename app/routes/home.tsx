@@ -7,6 +7,7 @@ import { useToast, useConfirm } from "~/components/feedback";
 import { getFileType, isPreviewable } from "~/lib/file-utils";
 import { apiFileUrl } from "~/lib/api-path";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import {
   X, Plus, Search, Sun, Moon, SlidersHorizontal, LogIn, LogOut, ShieldCheck, Cloud,
   ChevronRight, ArrowLeft, ArrowRightLeft, RefreshCw, PanelLeft,
@@ -2611,7 +2612,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         const text = await res.text();
         marked.setOptions({ gfm: true, breaks: true });
         const html = await marked(text);
-        if (!cancelled) setReadme(html);
+        // 净化 HTML，防止恶意 README 内嵌脚本（存储型 XSS）
+        if (!cancelled) setReadme(DOMPurify.sanitize(html));
       } catch {
         /* ignore */
       }
