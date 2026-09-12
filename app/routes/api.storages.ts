@@ -35,13 +35,21 @@ function isSecureRequest(request: Request): boolean {
   return new URL(request.url).protocol === "https:";
 }
 
-// 下发给浏览器的存储对象需脱敏：config 里的 OAuth 客户端密钥/令牌不给前端
+// 下发给浏览器的存储对象需脱敏：config 里的 OAuth 客户端密钥/令牌/会话 Cookie 不给前端
 const SENSITIVE_CONFIG_KEYS = new Set([
   "client_secret",
   "refresh_token",
   "access_token",
   "cloudflare_access_token",
   "cloudflare_refresh_token",
+  "cookie",
+  "bduss",
+  "stoken",
+  // qiniu/tigris 等把 S3 密钥放在 config
+  "access_key_id",
+  "secret_access_key",
+  "access_key",
+  "secret_key",
 ]);
 
 function sanitizeStorageForClient<T extends { config?: Record<string, any> }>(storage: T): T {

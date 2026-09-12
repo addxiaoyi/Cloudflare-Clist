@@ -24,6 +24,40 @@ export function meta({ data }: Route.MetaArgs) {
   ];
 }
 
+// 下发给浏览器的存储 config 需脱敏：OAuth 密钥/令牌/会话 Cookie 不给前端
+const SENSITIVE_CONFIG_KEYS = new Set([
+  "client_secret",
+  "refresh_token",
+  "access_token",
+  "cloudflare_access_token",
+  "cloudflare_refresh_token",
+  "cookie",
+  "bduss",
+  "stoken",
+  "access_key_id",
+  "secret_access_key",
+  "access_key",
+  "secret_key",
+]);
+
+function sanitizeConfigForClient(config: Record<string, any> | undefined): Record<string, any> {
+  if (!config) return {};
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(config)) {
+    out[k] = SENSITIVE_CONFIG_KEYS.has(k) ? "***" : v;
+  }
+  return out;
+}
+
+// 剔除服务端脱敏占位符 "***"，防止未改动的密钥被回写覆盖
+function stripMaskedConfig(config: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(config)) {
+    if (v !== "***") out[k] = v;
+  }
+  return out;
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
   const siteTitle = context.cloudflare.env.SITE_TITLE || "Starx";
@@ -59,7 +93,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       accessKeyId: s.accessKeyId,
       bucket: s.bucket,
       basePath: s.basePath,
-      config: isAdmin ? s.config : undefined,
+      config: isAdmin ? sanitizeConfigForClient(s.config) : undefined,
       isPublic: s.isPublic,
       guestList: s.guestList,
       guestDownload: s.guestDownload,
@@ -858,6 +892,12 @@ const isS3 = formData.type === "s3";
     try {
       const method = storage ? "PUT" : "POST";
       const configToSend = { ...(formData.config || {}) };
+      // 服务端脱敏占位符 "***"：用户未改动的敏感字段不回传，避免覆盖真实密钥
+      for (const [k, v] of Object.entries(configToSend)) {
+        if (v === "***") {
+          delete configToSend[k];
+        }
+      }
       if (configToSend.api_address && !configToSend.api_url_address) {
         configToSend.api_url_address = configToSend.api_address;
       }
@@ -913,7 +953,7 @@ const isS3 = formData.type === "s3";
           secretAccessKey: formData.secretAccessKey,
           bucket: formData.bucket,
           basePath: formData.basePath,
-          config: formData.config || {},
+          config: stripMaskedConfig(formData.config || {}),
         }),
       });
       const data = (await res.json()) as { ok?: boolean; latencyMs?: number; items?: number; error?: string };
