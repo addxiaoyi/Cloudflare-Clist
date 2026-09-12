@@ -30,7 +30,34 @@
 上线后请在 **Cloudflare 控制台 → Worker → Settings → Variables and Secrets** 中：
 
 - 将 `ADMIN_PASSWORD` 改为自定义强密码（Secret）。
-- 启用 WebDAV / Google Drive 时，把 `WEBDAV_USERNAME`、`WEBDAV_PASSWORD`、`GOOGLE_CLIENT_SECRET` 等敏感项添加为 Secret。
+- 启用 WebDAV / Google Drive / OneDrive / R2 OAuth 时，把 `WEBDAV_USERNAME`、`WEBDAV_PASSWORD`、`GOOGLE_CLIENT_SECRET`、`ONEDRIVE_CLIENT_SECRET`、`CF_CLIENT_SECRET` 等敏感项添加为 Secret。
+
+### 启用 MySQL 存储（可选）
+
+MySQL 存储必须通过 Cloudflare **Hyperdrive** 访问（Workers 无法直接建立到公网 3306 的 TCP 连接）：
+
+1. 在 Cloudflare 控制台 → **Hyperdrive** → **创建**，指向你的 MySQL 数据库（或使用 CLI）：
+
+   ```bash
+   npx wrangler hyperdrive create clist-mysql --connection-string="mysql://user:pass@host:3306/dbname"
+   ```
+
+2. 将返回的 **Hyperdrive ID** 填入 `wrangler.jsonc`（取消注释并替换占位符）：
+
+   ```json
+   "hyperdrive": [
+     {
+       "binding": "HD",
+       "id": "你的-Hyperdrive-ID",
+       "localConnectionString": "mysql://root:password@localhost:3306/db"
+     }
+   ]
+   ```
+
+3. 提交并推送，触发重新部署。
+4. 在「存储管理」中添加 **MySQL 数据库** 类型存储，只需填写**数据库名**即可；连接自动走已绑定的 Hyperdrive（连接串为运行时动态值，无需手填）。
+
+> 未绑定 Hyperdrive 时，存储表单可填「直连连接串」作为回退，但仅适用于本地/开发场景。
 
 ## 方式二：本地 CLI 部署
 

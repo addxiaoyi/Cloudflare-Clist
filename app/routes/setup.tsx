@@ -141,6 +141,7 @@ function buildWranglerJson(state: SetupState): object {
     name: cloudflare.workerName,
     main: "./workers/app.ts",
     compatibility_date: cloudflare.compatibilityDate,
+    compatibility_flags: ["nodejs_compat"], // 数据库驱动（mysql2）运行必需
     observability: { enabled: cloudflare.observability },
     vars: {
       SITE_TITLE: site.siteTitle || "Starx",

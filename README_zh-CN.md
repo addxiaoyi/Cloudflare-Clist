@@ -187,6 +187,8 @@ npm run typecheck
 
 5. 保存后，推送代码即自动部署。首次部署自动创建 D1 数据库与 R2 桶，应用首次访问自动建表。
 
+> MySQL 存储需额外创建并绑定 Hyperdrive，步骤见 [部署指南](docs/deployment.md#启用-mysql-存储可选)。
+
 > 详细步骤见 [部署指南](docs/deployment.md)。
 
 ### 命令行部署（可选）
