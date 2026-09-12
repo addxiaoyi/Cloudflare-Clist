@@ -8,6 +8,7 @@ import { R2Client } from "./r2-client";
 import { R2OAuthClient } from "./r2-oauth-client";
 import { QuarkClient } from "./quark-client";
 import { DropboxClient } from "./dropbox-client";
+import { GithubClient } from "./github-client";
 import { MySqlClient, type MySqlConfig, type HyperdriveLike } from "./mysql-client";
 
 export type { MySqlConfig, HyperdriveLike };
@@ -22,7 +23,8 @@ export type StorageClient =
   | R2Client
   | R2OAuthClient
   | QuarkClient
-  | DropboxClient;
+  | DropboxClient
+  | GithubClient;
 
 export type StorageLike = {
   type: string;
@@ -112,6 +114,9 @@ export function createClient(
   }
   if (storage.type === "dropbox") {
     return new DropboxClient({ config: storage.config, saving: storage.saving });
+  }
+  if (storage.type === "github") {
+    return new GithubClient({ config: storage.config, saving: storage.saving });
   }
   if (storage.type === "ftp") {
     return new WebdevClient({

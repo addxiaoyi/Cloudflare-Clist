@@ -29,6 +29,7 @@ const SENSITIVE_CONFIG_KEYS = new Set([
   "client_secret",
   "refresh_token",
   "access_token",
+  "token",  // GitHub PAT
   "cloudflare_access_token",
   "cloudflare_refresh_token",
   "cookie",
@@ -500,6 +501,17 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     fields: [
       { key: "access_token", label: "Access Token", type: "password", required: true },
       { key: "root_path", label: "根目录路径", type: "text", defaultValue: "" },
+    ],
+  },
+  github: {
+    name: "GitHub 仓库",
+    supportsMultipart: false,
+    fields: [
+      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo", help: "GitHub 仓库，格式 owner/repo" },
+      { key: "token", label: "Personal Access Token", type: "password", required: true, placeholder: "ghp_... / github_pat_...", help: "需要 contents:read+write 权限的令牌" },
+      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main" },
+      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "可选：docs/assets，留空为仓库根" },
+      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "GitHub Enterprise 自建地址", help: "留空或默认使用 api.github.com" },
     ],
   },
 };
@@ -1251,6 +1263,7 @@ const isS3 = formData.type === "s3";
                 <option value="ftp">FTP 文件网关</option>
                 <option value="mysql">MySQL 数据库</option>
                 <option value="dropbox">Dropbox</option>
+                <option value="github">GitHub 仓库</option>
               </select>
             </div>
             {(isS3 || isWebdav) && (
