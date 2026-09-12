@@ -129,12 +129,18 @@ export function createClient(
     if (!accountId || !bucketName || !accessToken) {
       throw new Error("R2 OAuth 未授权，请先完成 Cloudflare 授权");
     }
+    const expiresAtStr = storage.saving?.access_token_expires_at;
     return new R2OAuthClient({
       accountId,
       bucketName,
       accessToken,
       basePath: cfg.root_folder_path || storage.basePath || "",
       storageId: storageId || 0,
+      // 自动续期凭据：refresh_token 存 config，client_id/secret 优先取 config，回退环境变量
+      refreshToken: cfg.cloudflare_refresh_token || "",
+      clientId: cfg.client_id || (env as Record<string, string | undefined>)?.CF_CLIENT_ID || "",
+      clientSecret: cfg.client_secret || (env as Record<string, string | undefined>)?.CF_CLIENT_SECRET || "",
+      expiresAt: expiresAtStr ? new Date(expiresAtStr).getTime() : 0,
     });
   }
   return new S3Client({

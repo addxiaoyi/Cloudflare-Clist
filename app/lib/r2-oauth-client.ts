@@ -2,7 +2,7 @@ import { getMimeType } from "./file-utils";
 import { type R2ObjectItem, type ListObjectsResult } from "./r2-client";
 
 // 通过 Cloudflare API 访问其他账户的 R2 存储桶
-// 使用用户授权的 access token
+// 使用用户授权的 access token；过期时用 refresh_token 自动续期并回写存储配置
 export class R2OAuthClient {
   private accountId: string;
   private bucketName: string;
@@ -10,6 +10,12 @@ export class R2OAuthClient {
   private basePath: string;
   private storageId: number;
   private apiBase = "https://api.cloudflare.com/client/v4/accounts";
+  private tokenEndpoint = "https://dash.cloudflare.com/oauth2/token";
+  private refreshToken: string;
+  private clientId: string;
+  private clientSecret: string;
+  private expiresAt: number;
+  private tokenDirty = false;
 
   constructor(config: {
     accountId: string;
@@ -17,12 +23,75 @@ export class R2OAuthClient {
     accessToken: string;
     basePath?: string;
     storageId?: number;
+    refreshToken?: string;
+    clientId?: string;
+    clientSecret?: string;
+    expiresAt?: number;
   }) {
     this.accountId = config.accountId;
     this.bucketName = config.bucketName;
     this.accessToken = config.accessToken;
     this.basePath = config.basePath?.replace(/^\/|\/$/g, "") || "";
     this.storageId = config.storageId || 0;
+    this.refreshToken = config.refreshToken || "";
+    this.clientId = config.clientId || "";
+    this.clientSecret = config.clientSecret || "";
+    this.expiresAt = config.expiresAt || 0;
+  }
+
+  // 刷新后把新令牌回写，由路由层 persistClientState 落库
+  getStateUpdates(): { config?: Record<string, any>; saving?: Record<string, any> } | null {
+    if (!this.tokenDirty) {
+      return null;
+    }
+    return {
+      config: { cloudflare_access_token: this.accessToken },
+      saving: { access_token_expires_at: new Date(this.expiresAt).toISOString() },
+    };
+  }
+
+  private isExpired(): boolean {
+    if (!this.expiresAt) {
+      return true;
+    }
+    // 提前 5 分钟视为过期，避免边缘竞态
+    return Date.now() >= this.expiresAt - 5 * 60 * 1000;
+  }
+
+  // 每次 API 调用前确保 access_token 有效；无 refresh 能力时只检查是否存在
+  private async ensureAccessToken(): Promise<void> {
+    if (this.accessToken && !this.isExpired()) {
+      return;
+    }
+    if (!this.refreshToken || !this.clientId || !this.clientSecret) {
+      throw new Error("R2 OAuth 访问令牌已过期，请重新授权");
+    }
+
+    const formData = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: this.refreshToken,
+    });
+    const res = await fetch(this.tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${this.clientId}:${this.clientSecret}`)}`,
+      },
+      body: formData.toString(),
+    });
+    if (!res.ok) {
+      throw new Error(`R2 OAuth 令牌刷新失败（${res.status}），请重新授权`);
+    }
+    const data: Record<string, any> = await res.json();
+    if (!data.access_token) {
+      throw new Error("R2 OAuth 令牌刷新返回空 access_token，请重新授权");
+    }
+    this.accessToken = data.access_token;
+    this.expiresAt = Date.now() + (data.expires_in ? data.expires_in * 1000 : 3600 * 1000);
+    if (data.refresh_token) {
+      this.refreshToken = data.refresh_token;
+    }
+    this.tokenDirty = true;
   }
 
   private getFullPath(path: string): string {
@@ -52,6 +121,7 @@ export class R2OAuthClient {
     maxKeys: number = 1000,
     continuationToken?: string
   ): Promise<ListObjectsResult> {
+    await this.ensureAccessToken();
     let normalizedPrefix = prefix;
     if (normalizedPrefix && !normalizedPrefix.endsWith("/")) {
       normalizedPrefix += "/";
@@ -127,6 +197,7 @@ export class R2OAuthClient {
   }
 
   async getObject(key: string): Promise<Response> {
+    await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
@@ -149,6 +220,7 @@ export class R2OAuthClient {
   async headObject(
     key: string
   ): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
+    await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
@@ -166,6 +238,7 @@ export class R2OAuthClient {
   }
 
   async putObject(key: string, body: ArrayBuffer | string, contentType?: string): Promise<void> {
+    await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
@@ -183,6 +256,7 @@ export class R2OAuthClient {
   }
 
   async deleteObject(key: string): Promise<void> {
+    await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
@@ -195,6 +269,7 @@ export class R2OAuthClient {
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
+    await this.ensureAccessToken();
     const src = await this.getObject(sourceKey);
     if (!src.ok) {
       throw new Error("R2 CopyObject failed: source not found");
@@ -259,6 +334,7 @@ export class R2OAuthClient {
   }
 
   private async listAllKeys(prefix: string): Promise<string[]> {
+    await this.ensureAccessToken();
     const keys: string[] = [];
     let cursor: string | undefined;
     do {
