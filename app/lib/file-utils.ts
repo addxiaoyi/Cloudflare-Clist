@@ -175,3 +175,43 @@ export function fileResponseHeaders(contentType: string, inline: boolean): Recor
   }
   return headers;
 }
+
+export type ByteRange = { start: number; end?: number };
+
+// Range 仅支持单区间；bytes=-N 表示末尾 N 字节，用负 start 表达
+export function parseByteRange(header: string | null | undefined): ByteRange | null {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim().toLowerCase());
+  if (!match || (!match[1] && !match[2])) return null;
+  return match[1]
+    ? { start: Number(match[1]), end: match[2] ? Number(match[2]) : undefined }
+    : { start: -Number(match[2]) };
+}
+
+// 越界或无法满足的区间返回 null，调用方按完整响应处理
+export function resolveByteRange(
+  range: ByteRange | null,
+  size: number
+): { start: number; end: number } | null {
+  if (!range || size <= 0) return null;
+  const start = range.start < 0 ? Math.max(0, size + range.start) : range.start;
+  if (start >= size) return null;
+  const end = range.end === undefined ? size - 1 : Math.min(range.end, size - 1);
+  return end >= start ? { start, end } : null;
+}
+
+// 浏览器拖动进度条时请求 bytes=<offset>-，透传给支持 Range 的存储换回 206 分段内容
+export function contentRangeHeader(start: number, end: number, size: number): string {
+  return `bytes ${start}-${end}/${size}`;
+}
+
+// 透传分段响应的 Accept-Ranges 与 Content-Range
+export function makeRangeResponseHeaders(upstream: Headers): Record<string, string> {
+  const headers: Record<string, string> = { "Accept-Ranges": "bytes" };
+  const contentRange = upstream.get("content-range");
+  if (contentRange) {
+    headers["Content-Range"] = contentRange;
+  }
+  return headers;
+}
+

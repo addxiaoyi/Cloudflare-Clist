@@ -159,7 +159,7 @@ export class DropboxClient {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const path = this.toApiPath(key);
     const result = await this.request("/2/files/get_metadata", { path });
     if (result.is_folder) {
@@ -171,10 +171,11 @@ export class DropboxClient {
       headers: {
         Authorization: `Bearer ${this.getAccessToken()}`,
         "Dropbox-API-Arg": JSON.stringify({ path }),
+        ...(options?.range ? { Range: options.range } : {}),
       },
     });
 
-    if (!content.ok) {
+    if (!content.ok && content.status !== 206) {
       const text = await content.text();
       throw new Error(`Dropbox download error: ${content.status} ${text}`);
     }

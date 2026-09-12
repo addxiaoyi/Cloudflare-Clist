@@ -1,4 +1,4 @@
-import { getMimeType } from "./file-utils";
+import { getMimeType, parseByteRange, resolveByteRange, contentRangeHeader } from "./file-utils";
 
 export interface R2ObjectItem {
   key: string;
@@ -119,8 +119,38 @@ export class R2Client {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
-    const obj = await this.bucket.get(this.getFullPath(key));
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+    const fullPath = this.getFullPath(key);
+    const range = parseByteRange(options?.range);
+    const total = range ? (await this.bucket.head(fullPath))?.size ?? 0 : 0;
+    const slice = resolveByteRange(range, total);
+
+    if (slice) {
+      const offset = slice.start;
+      const length = slice.end - slice.start + 1;
+      const obj = await this.bucket.get(fullPath, { range: { offset, length } });
+      if (!obj) {
+        return new Response("Not Found", { status: 404 });
+      }
+      const headers = new Headers();
+      const contentType = obj.httpMetadata?.contentType || getMimeType(key);
+      if (contentType) {
+        headers.set("Content-Type", contentType);
+      }
+      headers.set("Content-Length", String(obj.size));
+      if (obj.etag) {
+        headers.set("ETag", obj.etag);
+      }
+      headers.set("Accept-Ranges", "bytes");
+      headers.set("Content-Range", contentRangeHeader(slice.start, slice.start + obj.size - 1, total));
+      const lastModified = obj.uploaded?.toUTCString();
+      if (lastModified) {
+        headers.set("Last-Modified", lastModified);
+      }
+      return new Response(obj.body, { headers, status: 206 });
+    }
+
+    const obj = await this.bucket.get(fullPath);
     if (!obj) {
       return new Response("Not Found", { status: 404 });
     }
@@ -133,6 +163,7 @@ export class R2Client {
     if (obj.etag) {
       headers.set("ETag", obj.etag);
     }
+    headers.set("Accept-Ranges", "bytes");
     const lastModified = obj.uploaded?.toUTCString();
     if (lastModified) {
       headers.set("Last-Modified", lastModified);

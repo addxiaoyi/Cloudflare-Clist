@@ -409,7 +409,7 @@ export class AliyunDriveClient {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, _options?: { range?: string }): Promise<Response> {
     const fileId = await this.findFileIdByPath(stripLeadingSlash(key));
     if (!fileId) {
       throw new Error("Aliyun file not found");
@@ -424,6 +424,7 @@ export class AliyunDriveClient {
     if (!url) {
       throw new Error("Aliyun download URL missing");
     }
+    // 阿里云盘下载 URL 不支持自定义 Range 透传，_options 仅保持签名一致
     return fetch(url);
   }
 

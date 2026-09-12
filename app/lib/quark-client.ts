@@ -216,7 +216,7 @@ export class QuarkClient {
     return this.findFidByPath(fullPath);
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const fid = await this.getFidByKey(key);
     if (fid < 0) {
       return new Response("Not Found", { status: 404 });
@@ -229,7 +229,12 @@ export class QuarkClient {
     }
 
     const downloadUrl = downloadInfo.url || downloadInfo;
-    return fetch(downloadUrl, { headers: { Referer: API_BASE } });
+    return fetch(downloadUrl, {
+      headers: {
+        Referer: API_BASE,
+        ...(options?.range ? { Range: options.range } : {}),
+      },
+    });
   }
 
   async getSignedUrl(key: string, _expiresIn: number = 3600): Promise<string> {

@@ -304,7 +304,7 @@ export class BaiduYunClient {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const file = await this.findFileByPath(key);
     if (!file) {
       throw new Error("Baidu file not found");
@@ -324,6 +324,7 @@ export class BaiduYunClient {
       headers: {
         "User-Agent": "pan.baidu.com",
         "Referer": "https://pan.baidu.com/",
+        ...(options?.range ? { Range: options.range } : {}),
       },
     });
   }

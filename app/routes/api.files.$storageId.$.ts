@@ -4,7 +4,7 @@ import { requireAuth } from "~/lib/auth";
 import { getShareByToken, verifySharePassword } from "~/lib/shares";
 import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
 import { getRequestMeta, logAudit, isRateLimited } from "~/lib/audit";
-import { getFileType, getMimeType, fileResponseHeaders, isUnsafeInlineType } from "~/lib/file-utils";
+import { getFileType, getMimeType, fileResponseHeaders, isUnsafeInlineType, makeRangeResponseHeaders } from "~/lib/file-utils";
 
 // ---------------------------------------------------------------------------
 // 安全守卫
@@ -244,7 +244,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // Inline image preview via direct file URL, e.g. /api/files/7/images/1.jpg
   if (isInlineImageRequest) {
     try {
-      const response = await withClientState(client, db, storageId, () => client.getObject(path));
+      const rangeHeader = request.headers.get("range") || undefined;
+      const response = await withClientState(client, db, storageId, () => client.getObject(path, rangeHeader ? { range: rangeHeader } : undefined));
       const upstreamContentType = response.headers.get("content-type") || "";
       const contentType = upstreamContentType.startsWith("image/")
         ? upstreamContentType
@@ -271,13 +272,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       const unsafeInline = isUnsafeInlineType(contentType);
       const disposition = unsafeInline ? "attachment" : "inline";
 
+      const status = response.status;
+      const rangeHeaders = makeRangeResponseHeaders(response.headers);
+
       return new Response(response.body, {
         headers: {
           "Content-Type": contentType,
           "Content-Disposition": `${disposition}; filename="${encodeURIComponent(fileName)}"`,
           ...fileResponseHeaders(contentType, !unsafeInline),
           ...(contentLength ? { "Content-Length": contentLength } : {}),
+          ...rangeHeaders,
         },
+        status,
       });
     } catch (error) {
       return Response.json(
@@ -290,7 +296,8 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // Download file
   if (action === "download") {
     try {
-      const response = await withClientState(client, db, storageId, () => client.getObject(path));
+      const rangeHeader = request.headers.get("range") || undefined;
+      const response = await withClientState(client, db, storageId, () => client.getObject(path, rangeHeader ? { range: rangeHeader } : undefined));
       const contentType = response.headers.get("content-type") || "application/octet-stream";
       const contentLength = response.headers.get("content-length");
 
@@ -314,13 +321,19 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       const wantsInline = url.searchParams.get("inline") === "1";
       // 危险类型即使请求 inline 也强制附件下载
       const inline = wantsInline && !isUnsafeInlineType(contentType);
+
+      const status = response.status;
+      const rangeHeaders = makeRangeResponseHeaders(response.headers);
+
       return new Response(response.body, {
         headers: {
           "Content-Type": contentType,
           "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`,
           ...fileResponseHeaders(contentType, inline),
           ...(contentLength ? { "Content-Length": contentLength } : {}),
+          ...rangeHeaders,
         },
+        status,
       });
     } catch (error) {
       return Response.json(

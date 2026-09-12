@@ -366,13 +366,14 @@ export class OneDriveClient {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const item = await this.getItemByPath(`/${stripLeadingSlash(key)}`);
     const url = item["@microsoft.graph.downloadUrl"];
     if (!url) {
       throw new Error("OneDrive download URL missing");
     }
-    return fetch(url);
+    // Graph 直链支持 Range，拖动进度条时可直接分段取流
+    return fetch(url, { headers: options?.range ? { Range: options.range } : undefined });
   }
 
   async getSignedUrl(key: string, _expiresIn: number = 3600): Promise<string> {

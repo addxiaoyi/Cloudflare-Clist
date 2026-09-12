@@ -196,13 +196,14 @@ export class R2OAuthClient {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
+        ...(options?.range ? { Range: options.range } : {}),
       },
     });
 
@@ -214,7 +215,9 @@ export class R2OAuthClient {
     if (!headers.get("Content-Type")) {
       headers.set("Content-Type", getMimeType(key));
     }
-    return new Response(res.body, { headers, status: res.status });
+    const status = res.status;
+    const body = res.body;
+    return new Response(body, { headers, status });
   }
 
   async headObject(

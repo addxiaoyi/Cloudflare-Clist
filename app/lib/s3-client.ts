@@ -332,15 +332,24 @@ export class S3Client {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const fullKey = this.getFullPath(key);
     const path = `/${this.config.bucket}/${fullKey}`;
-    const headers = await this.signRequest("GET", path);
+    const signHeaders: Record<string, string> = {};
+    if (options?.range) {
+      signHeaders.Range = options.range;
+    }
+    const headers = await this.signRequest("GET", path, {}, signHeaders);
     const encodedPath = encodeS3Path(path);
+
+    const fetchHeaders = new Headers(headers);
+    if (options?.range) {
+      fetchHeaders.set("Range", options.range);
+    }
 
     const response = await fetch(`${this.config.endpoint}${encodedPath}`, {
       method: "GET",
-      headers,
+      headers: fetchHeaders,
     });
 
     if (!response.ok) {

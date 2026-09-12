@@ -319,7 +319,7 @@ export class GoogleDriveClient {
     };
   }
 
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, _options?: { range?: string }): Promise<Response> {
     const fileId = await this.findFileIdByPath(stripLeadingSlash(key));
     if (!fileId) {
       throw new Error("Google Drive file not found");

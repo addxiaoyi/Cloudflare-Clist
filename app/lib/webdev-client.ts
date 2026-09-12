@@ -275,7 +275,7 @@ export class WebdevClient {
       nextContinuationToken: undefined,
     };
   }
-  async getObject(key: string): Promise<Response> {
+  async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const url = this.buildUrl(key);
 
     try {
@@ -283,10 +283,11 @@ export class WebdevClient {
         method: "GET",
         headers: {
           Authorization: this.getBasicAuth(),
+          ...(options?.range ? { Range: options.range } : {}),
         },
       });
 
-      if (!response.ok) {
+      if (!response.ok && response.status !== 206) {
         throw new Error(`WebDAV GetObject failed: ${response.status}`);
       }
 
