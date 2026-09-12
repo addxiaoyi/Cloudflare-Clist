@@ -3,6 +3,17 @@ import { getStorageById, getAllStorages, initDatabase, updateStorage } from "~/l
 import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
 import { fileResponseHeaders, isUnsafeInlineType } from "~/lib/file-utils";
 
+// 路径穿越防护：拒绝包含 ".." 段、空段路径或控制字符的路径（与 api.files 同规则）
+function assertSafePath(path: string): void {
+  if (!path) return;
+  if (/[\u0000-\u001f]/.test(path)) {
+    throw new Error("路径包含非法控制字符");
+  }
+  if (path.split("/").some((seg) => seg === ".." || seg === ".")) {
+    throw new Error("路径不能包含 .. 或 . 段");
+  }
+}
+
 // WebDAV server endpoint - provides WebDAV access to storages
 
 function generatePropfindResponse(
@@ -263,6 +274,14 @@ export async function handleWebdavRequest(
     // 保留原始 path 以防编码损坏
   }
 
+  // 防路径穿越：任何方法都不允许 .. / . 段
+  if (path && /[\u0000-\u001f]/.test(path)) {
+    return new Response("路径包含非法控制字符", { status: 400 });
+  }
+  if (path && path.split("/").some((seg) => seg === ".." || seg === ".")) {
+    return new Response("路径不能包含 .. 或 . 段", { status: 400 });
+  }
+
   // Handle listing all storages at the root
   if (storageId === 0) {
     if (method === "PROPFIND") {
@@ -383,6 +402,10 @@ export async function handleWebdavRequest(
         const destUrl = new URL(destinationHeader, url.origin + "/");
         let destPath = destUrl.pathname.replace(`/dav/${storageId}/`, "");
         try { destPath = decodeURIComponent(destPath); } catch {}
+        // 防穿越：目标路径同样拒绝 .. / . 段
+        if (destPath.split("/").some((seg) => seg === ".." || seg === ".") || /[\u0000-\u001f]/.test(destPath)) {
+          return new Response("目标路径不能包含 .. 或 . 段", { status: 400 });
+        }
 
         await withClientState(client, db, storageId, () => client.copyObject(path, destPath));
         return new Response(null, { status: 201 });
@@ -403,6 +426,10 @@ export async function handleWebdavRequest(
         const destUrl = new URL(destinationHeader, url.origin + "/");
         let destPath = destUrl.pathname.replace(`/dav/${storageId}/`, "");
         try { destPath = decodeURIComponent(destPath); } catch {}
+        // 防穿越：目标路径同样拒绝 .. / . 段
+        if (destPath.split("/").some((seg) => seg === ".." || seg === ".") || /[\u0000-\u001f]/.test(destPath)) {
+          return new Response("目标路径不能包含 .. 或 . 段", { status: 400 });
+        }
 
         const canDirectMove = typeof (client as { moveObject?: (path: string, destPath: string) => Promise<void> }).moveObject === "function";
         if (canDirectMove) {

@@ -36,6 +36,10 @@ export default async function handleRequest(
   }
 
   responseHeaders.set("Content-Type", "text/html");
+  // 基础安全头：防点击劫持/同源 iframe 受限、防 MIME 嗅探、限制 Referrer 泄露
+  responseHeaders.set("X-Frame-Options", "SAMEORIGIN");
+  responseHeaders.set("X-Content-Type-Options", "nosniff");
+  responseHeaders.set("Referrer-Policy", "strict-origin-when-cross-origin");
   return new Response(body, {
     headers: responseHeaders,
     status: responseStatusCode,

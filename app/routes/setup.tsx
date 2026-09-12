@@ -109,6 +109,22 @@ function isHttpsUrl(v: string): boolean {
   }
 }
 
+// 草稿只存非敏感字段，密码/令牌不落 localStorage（防同源脚本/本机进程窃取）
+const SENSITIVE_DRAFT_FIELDS = [
+  ["site", "adminPassword"],
+  ["cloudflare", "apiToken"],
+  ["gdrive", "clientSecret"],
+  ["webdav", "password"],
+] as const;
+
+function stripSensitiveDraft(state: SetupState): Partial<SetupState> {
+  const copy = JSON.parse(JSON.stringify(state)) as SetupState;
+  for (const [section, field] of SENSITIVE_DRAFT_FIELDS) {
+    (copy[section] as unknown as Record<string, string>)[field] = "";
+  }
+  return copy;
+}
+
 function loadDraft(): SetupState {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
@@ -333,7 +349,7 @@ export default function Setup({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(stripSensitiveDraft(state)));
       } catch {
         /* 存储不可用时忽略 */
       }

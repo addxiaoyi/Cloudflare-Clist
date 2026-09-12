@@ -35,6 +35,26 @@ function isSecureRequest(request: Request): boolean {
   return new URL(request.url).protocol === "https:";
 }
 
+// 下发给浏览器的存储对象需脱敏：config 里的 OAuth 客户端密钥/令牌不给前端
+const SENSITIVE_CONFIG_KEYS = new Set([
+  "client_secret",
+  "refresh_token",
+  "access_token",
+  "cloudflare_access_token",
+  "cloudflare_refresh_token",
+]);
+
+function sanitizeStorageForClient<T extends { config?: Record<string, any> }>(storage: T): T {
+  if (!storage.config) return storage;
+  const config = { ...storage.config };
+  for (const key of Object.keys(config)) {
+    if (SENSITIVE_CONFIG_KEYS.has(key)) {
+      config[key] = "***";
+    }
+  }
+  return { ...storage, config };
+}
+
 // S3/WebDAV 的 endpoint 必须是非空的有效 URL；缺协议头时自动补 https://
 function normalizeEndpoint(type: string, endpoint: unknown): string {
   if (type !== "s3" && type !== "webdev") return "";
@@ -74,11 +94,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     const storages = await getAllStorages(db);
     return Response.json(
       {
-        storages: storages.map((s) => ({
-          ...s,
-          secretAccessKey: "***",
-          saving: {},
-        })),
+        storages: storages.map((s) =>
+          sanitizeStorageForClient({
+            ...s,
+            secretAccessKey: "***",
+            saving: {},
+          })
+        ),
         isAdmin: true,
       },
       { headers }
@@ -331,7 +353,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           guestUpload: storage.guestUpload,
         },
       });
-      return Response.json({ storage: { ...safeStorage, secretAccessKey: "***" } });
+      return Response.json({ storage: sanitizeStorageForClient({ ...safeStorage, secretAccessKey: "***" }) });
     } catch (error) {
       return Response.json(
         { error: error instanceof Error ? error.message : "Failed to create storage" },
@@ -372,7 +394,7 @@ export async function action({ request, context }: Route.ActionArgs) {
           guestUpload: storage.guestUpload,
         },
       });
-      return Response.json({ storage: { ...safeStorage, secretAccessKey: "***" } });
+      return Response.json({ storage: sanitizeStorageForClient({ ...safeStorage, secretAccessKey: "***" }) });
     } catch (error) {
       return Response.json(
         { error: error instanceof Error ? error.message : "Failed to update storage" },

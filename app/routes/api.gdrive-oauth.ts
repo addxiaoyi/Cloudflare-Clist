@@ -194,7 +194,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!storage || storage.type !== "gdrive") {
       return Response.json({ error: "请先保存一个 Google Drive 类型的存储" }, { status: 400 });
     }
-    if (!oauth.clientId) {
+    if (!oauth.clientId || !oauth.clientSecret) {
       return Response.json(
         { error: "未配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET，无法发起授权" },
         { status: 400 }

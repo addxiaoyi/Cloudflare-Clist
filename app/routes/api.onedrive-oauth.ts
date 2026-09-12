@@ -213,7 +213,7 @@ export async function action({ request, context }: Route.ActionArgs) {
     if (!storage || storage.type !== "onedrive") {
       return Response.json({ error: "请先保存一个 OneDrive 类型的存储" }, { status: 400 });
     }
-    if (!oauth.clientId) {
+    if (!oauth.clientId || !oauth.clientSecret) {
       return Response.json(
         { error: "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET，无法发起授权" },
         { status: 400 }

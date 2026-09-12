@@ -3,6 +3,7 @@ import {
   getStorageById,
   updateStorage,
 } from "~/lib/storage";
+import { requireAuth } from "~/lib/auth";
 
 // Cloudflare OAuth 端点（官方文档：dash.cloudflare.com/oauth2/auth 与 /oauth2/token）
 const CF_OAUTH_ENDPOINTS = {
@@ -66,6 +67,12 @@ export async function action({ request, context }: { request: Request; context: 
   const db = context.cloudflare.env.DB;
   await initDatabase(db);
 
+  // 必须管理员登录，防匿名用户为任意存储发起 OAuth 并用自己令牌覆盖配置
+  const { isAdmin } = await requireAuth(request, db);
+  if (!isAdmin) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = (await request.json().catch(() => ({}))) as { action?: string; storageId?: number | string };
   if (body.action !== "start") {
     return Response.json({ error: "Invalid action" }, { status: 400 });
@@ -78,11 +85,12 @@ export async function action({ request, context }: { request: Request; context: 
   }
 
   const oauth = getOAuthConfig(context.cloudflare.env);
-  if (!oauth.clientId) {
-    return Response.json({ error: "CF_CLIENT_ID 未配置" }, { status: 500 });
+  if (!oauth.clientId || !oauth.clientSecret) {
+    return Response.json({ error: "CF_CLIENT_ID / CF_CLIENT_SECRET 未配置" }, { status: 500 });
   }
 
-  const state = await signState(oauth.clientSecret || "default-secret", storageId);
+  // state 必须用真实 clientSecret 签名；无密钥时不回退默认常量（否则签名可预测）
+  const state = await signState(oauth.clientSecret, storageId);
   const scope = CF_R2_SCOPES.join(" ");
   const origin = new URL(request.url).origin;
   const redirectUri = oauth.redirectUri || `${origin}/api/r2-oauth`;
@@ -133,7 +141,7 @@ export async function loader({ request, context }: { request: Request; context: 
   }
 
   try {
-    const storageId = await verifyState(oauth.clientSecret || "default-secret", state);
+    const storageId = await verifyState(oauth.clientSecret, state);
     if (!storageId) {
       return redirectHome(false, "授权状态校验失败，请重新发起");
     }
