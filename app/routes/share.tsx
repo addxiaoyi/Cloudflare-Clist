@@ -157,11 +157,31 @@ export default function Share({ loaderData }: Route.ComponentProps) {
     setPath(newPath.replace(/^\//, "").replace(/\/$/, ""));
   };
 
-  const downloadFile = (key: string) => {
-    window.open(
-      `${apiFileUrl(storage!.id, key)}?action=download&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ""}`,
-      "_blank"
-    );
+  const downloadFile = async (key: string) => {
+    const query = `action=download&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ""}`;
+    try {
+      const res = await fetch(`${apiFileUrl(storage!.id, key)}?${query}`);
+      if (res.status === 429) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        alert(data?.error || "下载过于频繁，请稍后再试");
+        return;
+      }
+      if (!res.ok) {
+        alert("下载失败，请稍后再试");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = key.split("/").pop() || "download";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      alert("网络错误");
+    }
   };
 
   const verifyPassword = async () => {

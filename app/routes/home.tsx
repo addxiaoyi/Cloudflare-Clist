@@ -2691,8 +2691,36 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     setPath(parts.join("/"));
   };
 
+  // 统一下载：先探测 429 限流并给出友好提示，成功则转 blob 保存
+  const triggerDownload = async (key: string) => {
+    try {
+      const res = await fetch(`${apiFileUrl(storage.id, key)}?action=download`);
+      if (res.status === 429) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        toast(data?.error || "下载过于频繁，请稍后再试", "error");
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        toast(data?.error || "下载失败", "error");
+        return;
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = key.split("/").pop() || "download";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      toast("网络错误", "error");
+    }
+  };
+
   const downloadFile = (key: string) => {
-    window.open(`${apiFileUrl(storage.id, key)}?action=download`, "_blank");
+    triggerDownload(key);
   };
 
   const deleteFile = async (key: string) => {
@@ -3116,6 +3144,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         for (const item of collected) {
           try {
             const res = await fetch(`${apiFileUrl(storage.id, item.key)}?action=download`);
+            if (res.status === 429) {
+              toast("下载过于频繁，部分文件被跳过", "error");
+              break;
+            }
             if (!res.ok) continue;
             zip.file(item.name, await res.blob());
           } catch {
@@ -3139,9 +3171,12 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     }
 
     // 纯文件直下，间隔触发避免浏览器拦截多窗口
-    files.forEach((f, i) => {
-      setTimeout(() => window.open(`${apiFileUrl(storage.id, f.key)}?action=download`, "_blank"), i * 400);
-    });
+    let delay = 0;
+    for (const f of files) {
+      const key = f.key;
+      setTimeout(() => triggerDownload(key), delay);
+      delay += 400;
+    }
   };
 
   const isFavorite = (key: string) => favorites.some((f) => f.storageId === storage.id && f.key === key);

@@ -786,6 +786,7 @@ function AudioPlayer({ url, fileName, onInfo }: { url: string; fileName: string;
 function ImageViewer({ url, fileName, onInfo }: { url: string; fileName: string; onInfo?: (info: MediaInfo) => void }) {
   const [scale, setScale] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [imgError, setImgError] = useState(false);
 
   const zoomIn = () => setScale((s) => Math.min(s + 0.25, 3));
   const zoomOut = () => setScale((s) => Math.max(s - 0.25, 0.5));
@@ -808,12 +809,19 @@ function ImageViewer({ url, fileName, onInfo }: { url: string; fileName: string;
             <span className="text-zinc-400 font-mono">加载中...</span>
           </div>
         )}
+        {imgError && !loading && (
+          <div className="flex flex-col items-center justify-center gap-2 w-64 h-64 text-zinc-400">
+            <AlertCircle className="h-8 w-8" />
+            <span className="text-sm font-mono">图片加载失败（可能下载过于频繁）</span>
+          </div>
+        )}
         <img
           src={url}
           alt={fileName}
           className="transition-transform"
-          style={{ transform: `scale(${scale})`, display: loading ? 'none' : 'block' }}
-          onLoad={(e) => { setLoading(false); onInfo?.({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight }); }}
+          style={{ transform: `scale(${scale})`, display: (loading || imgError) ? 'none' : 'block' }}
+          onLoad={(e) => { setLoading(false); setImgError(false); onInfo?.({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight }); }}
+          onError={() => { setLoading(false); setImgError(true); }}
         />
       </div>
     </div>
