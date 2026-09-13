@@ -52,6 +52,12 @@ const DEFAULT_BRANCH = "main";
 const CONTENTS_PAGE_SIZE = 100;
 const REPO_MAX_FILE_BYTES = 100 * 1024 * 1024;
 
+// Git core.quotePath 简易转义表：\\"t → \t, \\n → \n 等；八进制 \nnn 在 decodeTreePath 里逐位处理。
+const SIMPLE_ESCAPES: Record<string, number> = {
+  a: 0x07, b: 0x08, t: 0x09, n: 0x0a, r: 0x0d,
+  f: 0x0c, v: 0x0b, "\\": 0x5c, '"': 0x22,
+};
+
 export class GithubClient {
   readonly config?: Record<string, any>;
   readonly saving?: Record<string, any>;
@@ -127,6 +133,42 @@ export class GithubClient {
 
   private encodePathInRepo(repoPath: string): string {
     return repoPath.split("/").map(encodeURIComponent).join("/");
+  }
+
+  // Git Trees / Blobs 等底层 API 默认按 core.quotePath 输出：非 ASCII、控制字符、
+  // 引号、反斜杠等会被包成 "..." 并用八进制转义（如 文档.txt → "\346\226\207\346\241\243.txt"）。
+  // 递归列表拿到的 path 必须还原成真实 UTF-8，否则与 Contents API 的 key 对不齐，
+  // 前缀匹配和后续按 key 读写的操作都会错乱。
+  private decodeTreePath(raw: string): string {
+    if (raw.length < 2 || !raw.startsWith('"') || !raw.endsWith('"')) return raw;
+    const inner = raw.slice(1, -1);
+    if (inner.indexOf("\\") === -1) return inner;
+    const bytes: number[] = [];
+    for (let i = 0; i < inner.length; i++) {
+      const ch = inner[i];
+      if (ch !== "\\") {
+        bytes.push(inner.charCodeAt(i));
+        continue;
+      }
+      const next = inner[++i];
+      if (next === undefined) break;
+      const simple = SIMPLE_ESCAPES[next];
+      if (simple !== undefined) {
+        bytes.push(simple);
+        continue;
+      }
+      if (next >= "0" && next <= "7") {
+        let oct = next;
+        while (oct.length < 3 && i + 1 < inner.length && inner[i + 1] >= "0" && inner[i + 1] <= "7") {
+          oct += inner[++i];
+        }
+        bytes.push(parseInt(oct, 8) & 0xff);
+        continue;
+      }
+      // 未知转义按字面保留，避免吞字符
+      bytes.push(next.charCodeAt(0));
+    }
+    return new TextDecoder("utf-8").decode(Uint8Array.from(bytes));
   }
 
   private base64FromBytes(bytes: Uint8Array | ArrayBuffer): string {
@@ -261,7 +303,10 @@ export class GithubClient {
       const text = await res.text();
       throw new Error(this.describeApiError(res.status, text));
     }
-    return res.json() as Promise<GitTree>;
+    const tree = (await res.json()) as GitTree;
+    // 还原 core.quotePath，统一使用真实 UTF-8 路径；目录条目和 blob 条目都要处理
+    tree.tree = tree.tree.map((entry) => ({ ...entry, path: this.decodeTreePath(entry.path) }));
+    return tree;
   }
 
   private parseRange(header: string, size: number): { start: number; end: number } | null {
@@ -352,6 +397,17 @@ export class GithubClient {
     return { objects, prefixes: [], isTruncated: false };
   }
 
+  // 按 blob sha 取原始内容：Git Blobs API 支持到 100MB，绕开 Contents API 的 1MB 限制；
+  // sha 为十六进制串，无路径分段编码问题
+  private async fetchBlobRaw(sha: string): Promise<ArrayBuffer> {
+    const res = await this.gh(`/repos/${this.owner}/${this.repo}/git/blobs/${sha}`, {}, true);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(this.describeApiError(res.status, text));
+    }
+    return res.arrayBuffer();
+  }
+
   async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const repoPath = this.toRepoPath(key);
     const meta = await this.fetchContentsMeta(repoPath);
@@ -360,12 +416,7 @@ export class GithubClient {
     if (dir) throw new Error(`GitHub 路径为目录而非文件：${key}`);
     if (!sha) throw new Error(`GitHub 文件元信息不完整：${key}`);
 
-    const encoded = this.encodePathInRepo(repoPath);
-    const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents/${encoded}?ref=${encodeURIComponent(this.branch)}`, {}, true);
-    if (!res.ok) {
-      throw new Error(`GitHub 下载失败 ${key}：${res.status}`);
-    }
-    const buf = await res.arrayBuffer();
+    const buf = await this.fetchBlobRaw(sha);
     const sizeBytes = buf.byteLength;
     const contentType = getMimeType(key) || "application/octet-stream";
 
