@@ -63,18 +63,33 @@ export class GithubClient {
   private headSha = "";
   private commitDate = "";
 
+  static parseRepo(input: unknown): { owner: string; repo: string } | null {
+    const s = typeof input === "string" ? input.trim() : "";
+    if (!s) return null;
+    const cleaned = s
+      .replace(/^(?:https?:\/\/|git@)/i, "")
+      .replace(/^github\.com[:/]/i, "")
+      .replace(/\.git$/i, "")
+      .replace(/\/+$/i, "");
+    const m = /^([^/]+)\/([^/]+)$/.exec(cleaned);
+    if (!m) return null;
+    const owner = m[1].trim();
+    const repo = m[2].trim();
+    if (!owner || !repo) return null;
+    return { owner, repo };
+  }
+
   constructor(options: { config?: Record<string, any>; saving?: Record<string, any> }) {
     const cfg = options.config || {};
     this.config = options.config;
     this.saving = options.saving;
 
-    const repo = typeof cfg.repo === "string" ? cfg.repo.trim() : "";
-    const m = /^([^/]+)\/([^/]+)$/.exec(repo);
-    if (!m) {
-      throw new Error("GitHub 存储需填写仓库（格式 owner/repo）");
+    const parsed = GithubClient.parseRepo(cfg.repo);
+    if (!parsed) {
+      throw new Error("GitHub 存储需填写仓库，支持 owner/repo、完整仓库 URL、或含 .git 的形式");
     }
-    this.owner = m[1];
-    this.repo = m[2];
+    this.owner = parsed.owner;
+    this.repo = parsed.repo;
 
     this.token = typeof cfg.token === "string" && cfg.token.length > 0 ? cfg.token : "";
     if (!this.token) {

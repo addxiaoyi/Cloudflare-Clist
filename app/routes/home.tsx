@@ -510,7 +510,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "GitHub 仓库",
     supportsMultipart: false,
     fields: [
-      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo", help: "形如 owner/repo 的仓库标识，如 octocat/Hello-World", pattern: "[^/]+/[^/]+", patternHint: "需为 owner/repo 格式，不能包含空格" },
+      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo 或 https://github.com/owner/repo", help: "支持 owner/repo 或完整 GitHub URL，粘贴自浏览器地址栏即可" },
       { key: "token", label: "Personal Access Token", type: "password", required: true, placeholder: "ghp_xxx 或 github_pat_xxx", help: "Classic Token 请勾选 repo 范围；Fine-grained 需授予 Contents: Read/Write", link: { url: "https://github.com/settings/tokens/new?description=Sandbox%20Storage&scopes=repo", text: "前往 GitHub 生成 Token →" } },
       { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
       { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
@@ -595,9 +595,11 @@ interface PasswordInputProps {
   required?: boolean;
   help?: string;
   link?: { url: string; text: string };
+  pattern?: string;
+  patternHint?: string;
 }
 
-function PasswordInput({ value, onChange, label, required, help, link }: PasswordInputProps) {
+function PasswordInput({ value, onChange, label, required, help, link, pattern, patternHint }: PasswordInputProps) {
   const [showValue, setShowValue] = useState(false);
 
   return (
@@ -622,6 +624,8 @@ function PasswordInput({ value, onChange, label, required, help, link }: Passwor
           onChange={(e) => onChange(e.target.value)}
           className="w-full field"
           required={required}
+          pattern={pattern}
+          title={patternHint}
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
           <button
@@ -869,6 +873,7 @@ const isS3 = formData.type === "s3";
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          {field.help && <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>}
         </div>
       );
     }
@@ -899,6 +904,8 @@ const isS3 = formData.type === "s3";
           required={field.required}
           help={field.help}
           link={field.link}
+          pattern={field.pattern}
+          patternHint={field.patternHint}
         />
       );
     }
@@ -945,6 +952,14 @@ const isS3 = formData.type === "s3";
       for (const [k, v] of Object.entries(configToSend)) {
         if (v === "***") {
           delete configToSend[k];
+        }
+      }
+      // 被 show 条件隐藏的字段（如关闭 custom_api_base 后的 api_base）不应发送到后端
+      if (driveConfig) {
+        for (const field of driveConfig.fields) {
+          if (field.show && !field.show(configToSend)) {
+            delete configToSend[field.key];
+          }
         }
       }
       if (configToSend.api_address && !configToSend.api_url_address) {
