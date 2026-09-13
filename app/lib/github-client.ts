@@ -48,6 +48,8 @@ interface GitHubRef {
 }
 
 const DEFAULT_BRANCH = "main";
+// GitHub Contents API 单目录单次返回上限 1000 条，但每页最大 per_page 为 100
+const CONTENTS_PAGE_SIZE = 100;
 const REPO_MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 export class GithubClient {
@@ -137,8 +139,18 @@ export class GithubClient {
     return btoa(bin);
   }
 
-  private async gh(path: string, init?: RequestInit, rawMedia = false): Promise<Response> {
-    const url = `${this.apiBase}${path}`;
+  // 提取 GitHub 分页 Link 头中 rel="next" 的绝对 URL；若已到末页返回 null
+  static nextLinkUrl(header: string | null): string | null {
+    if (!header) return null;
+    const parts = header.split(",");
+    for (const raw of parts) {
+      const m = /<([^>]+)>;\s*rel="next"/i.exec(raw.trim());
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  private requestWithHeaders(url: string, init?: RequestInit, rawMedia = false): Promise<Response> {
     return fetch(url, {
       ...init,
       headers: {
@@ -147,6 +159,10 @@ export class GithubClient {
         ...(init?.headers || {}),
       },
     });
+  }
+
+  private async gh(path: string, init?: RequestInit, rawMedia = false): Promise<Response> {
+    return this.requestWithHeaders(`${this.apiBase}${path}`, init, rawMedia);
   }
 
   private describeApiError(status: number, body: string): string {
@@ -188,9 +204,10 @@ export class GithubClient {
     this.commitDate = "";
   }
 
-  private async fetchDirectory(repoPath: string): Promise<ContentsEntry[] | null> {
+  private async fetchDirectory(repoPath: string, collectAll = false, maxItems?: number): Promise<ContentsEntry[] | null> {
     const encoded = repoPath ? `/${this.encodePathInRepo(repoPath)}` : "";
-    const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents${encoded}?ref=${encodeURIComponent(this.branch)}`);
+    const query = `?ref=${encodeURIComponent(this.branch)}${collectAll ? `&per_page=${CONTENTS_PAGE_SIZE}` : ""}`;
+    const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents${encoded}${query}`);
     if (res.status === 404) return null;
     if (!res.ok) {
       const text = await res.text();
@@ -200,7 +217,26 @@ export class GithubClient {
     if (!Array.isArray(raw)) {
       return null;
     }
-    return raw as ContentsEntry[];
+    const items = raw as ContentsEntry[];
+    // 目录内容超出一页：跟随 Link 头 rel="next" 聚合，保证大目录不丢项
+    let nextUrl = GithubClient.nextLinkUrl(res.headers.get("Link"));
+    while (nextUrl) {
+      // 超过上限则提前停止，避免拉取不必要的数据
+      if (maxItems && items.length >= maxItems) break;
+      const pageRes = await this.requestWithHeaders(nextUrl);
+      if (!pageRes.ok) {
+        const text = await pageRes.text();
+        throw new Error(this.describeApiError(pageRes.status, text));
+      }
+      const pageRaw = await pageRes.json();
+      if (!Array.isArray(pageRaw)) break;
+      items.push(...(pageRaw as ContentsEntry[]));
+      nextUrl = GithubClient.nextLinkUrl(pageRes.headers.get("Link"));
+    }
+    if (maxItems) {
+      return items.slice(0, maxItems);
+    }
+    return items;
   }
 
   private async fetchTreeRecursive(): Promise<GitTree | null> {
@@ -243,7 +279,7 @@ export class GithubClient {
     const repoPath = this.toRepoPath(prefix);
 
     if (delimiter === "/") {
-      const items = await this.fetchDirectory(repoPath);
+      const items = await this.fetchDirectory(repoPath, true, _maxKeys > 0 ? _maxKeys : undefined);
       if (!items) {
         return { objects: [], prefixes: [], isTruncated: false };
       }
@@ -269,7 +305,9 @@ export class GithubClient {
         if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-      return { objects, prefixes, isTruncated: false };
+      // GitHub Contents API 拉取时已决定是否拉完或止于 maxKeys；若 items 超过 maxKeys 说明被截断
+      const isTruncated = _maxKeys > 0 && items.length >= _maxKeys;
+      return { objects, prefixes, isTruncated };
     }
 
     // Recursive / bulk mode (delimiter != "/") — return blobs only
