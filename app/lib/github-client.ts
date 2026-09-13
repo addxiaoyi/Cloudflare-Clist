@@ -526,10 +526,9 @@ export class GithubClient {
     // 静默返回会让上层的 copy + delete 回退在源缺失时误删数据，这里必须显式失败
     if (!meta) throw new Error("GitHub copy: 源文件不存在");
     if (meta.dir) throw new Error("GitHub copy: 不支持复制目录对象，请逐文件复制");
-    const srcEncoded = this.encodePathInRepo(srcRepoPath);
-    const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents/${srcEncoded}?ref=${encodeURIComponent(this.branch)}`, {}, true);
-    if (!res.ok) throw new Error(`GitHub copy: 源文件下载失败 ${res.status}`);
-    const buf = await res.arrayBuffer();
+    // Contents API /contents/{path} 的 raw 端点受 1MB raw 限制；已通过 fetchBlobRaw 统一到
+    // Git Blobs API，支持到 100MB 且不依赖路径编码。
+    const buf = await this.fetchBlobRaw(meta.sha);
     await this.putObject(destKey, buf, getMimeType(sourceKey) || "application/octet-stream");
   }
 
