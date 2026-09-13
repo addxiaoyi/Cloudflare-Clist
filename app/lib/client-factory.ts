@@ -160,6 +160,18 @@ export function createClient(
       expiresAt: expiresAtStr ? new Date(expiresAtStr).getTime() : 0,
     });
   }
+  if (storage.type === "s3") {
+    const cfg = storage.config || {};
+    return new S3Client({
+      endpoint: storage.endpoint || cfg.endpoint || "",
+      region: storage.region || cfg.region || "us-east-1",
+      accessKeyId: storage.accessKeyId || cfg.access_key_id || "",
+      secretAccessKey: storage.secretAccessKey || cfg.secret_access_key || "",
+      bucket: storage.bucket || cfg.bucket || "",
+      basePath: storage.basePath || cfg.root_folder_path || cfg.base_path || "/",
+      usePathStyle: cfg.path_style === true || cfg.use_path_style === true ? true : (cfg.path_style === false || cfg.use_path_style === false ? false : undefined),
+    });
+  }
   return new S3Client({
     endpoint: storage.endpoint,
     region: storage.region,

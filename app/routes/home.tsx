@@ -824,7 +824,7 @@ function StorageModal({
     name: storage?.name || "",
     type: storage?.type || "s3",
     endpoint: storage?.endpoint || "",
-    region: storage?.region || "auto",
+    region: storage?.region || "us-east-1",
     accessKeyId: storage?.accessKeyId || "",
     secretAccessKey: "",
     bucket: storage?.bucket || "",
@@ -1396,6 +1396,23 @@ const isS3 = formData.type === "s3";
                   placeholder="my-bucket"
                   required={isS3}
                 />
+              </div>
+            )}
+            {isS3 && (
+              <div className="col-span-2 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.config?.path_style !== false}
+                    onChange={(e) => updateConfigValue("path_style", e.target.checked)}
+                    className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+                  />
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">路径风格访问 (Path Style)</span>
+                </label>
+                <p className="text-xs text-zinc-500">
+                  签名算法固定为 AWS4-HMAC-SHA256 (SigV4)。自建/MinIO/R2 兼容端点通常需要勾选路径风格；
+                  虚拟主机风格按 <code className="text-zinc-700 dark:text-zinc-300">bucket.endpoint/key</code> 访问。
+                </p>
               </div>
             )}
             {(isS3 || isWebdav) && (
