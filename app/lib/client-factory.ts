@@ -8,8 +8,9 @@ import { R2Client } from "./r2-client";
 import { R2OAuthClient } from "./r2-oauth-client";
 import { QuarkClient } from "./quark-client";
 import { DropboxClient } from "./dropbox-client";
-import { GithubClient } from "./github-client";
+import { GithubClient, GitRepositoryClient } from "./github-client";
 import { MySqlClient, type MySqlConfig, type HyperdriveLike } from "./mysql-client";
+import { GIT_TYPES, getAdapter } from "./git/registry";
 
 export type { MySqlConfig, HyperdriveLike };
 
@@ -24,7 +25,8 @@ export type StorageClient =
   | R2OAuthClient
   | QuarkClient
   | DropboxClient
-  | GithubClient;
+  | GithubClient
+  | GitRepositoryClient;
 
 export type StorageLike = {
   type: string;
@@ -40,7 +42,6 @@ export type StorageLike = {
 
 export type ClientEnv = { R2?: R2Bucket; HD?: HyperdriveLike; HYPERDRIVE?: HyperdriveLike };
 
-// 按存储类型构造对应客户端。r2 类型需要 worker 的 R2 binding。
 export function createClient(
   storage: StorageLike,
   env?: ClientEnv,
@@ -118,6 +119,18 @@ export function createClient(
   if (storage.type === "github") {
     return new GithubClient({ config: storage.config, saving: storage.saving });
   }
+  if (GIT_TYPES.has(storage.type)) {
+    const adapter = getAdapter(storage.type);
+    if (!adapter) {
+      throw new Error(`不支持的 Git 存储类型：${storage.type}`);
+    }
+    const conn = adapter.buildConnection(storage.config);
+    return new GitRepositoryClient(
+      { config: storage.config, saving: storage.saving },
+      adapter,
+      conn
+    );
+  }
   if (storage.type === "ftp") {
     return new WebdevClient({
       endpoint: storage.config?.endpoint || storage.endpoint,
@@ -141,7 +154,6 @@ export function createClient(
       accessToken,
       basePath: cfg.root_folder_path || storage.basePath || "",
       storageId: storageId || 0,
-      // 自动续期凭据：refresh_token 存 config，client_id/secret 优先取 config，回退环境变量
       refreshToken: cfg.cloudflare_refresh_token || "",
       clientId: cfg.client_id || (env as Record<string, string | undefined>)?.CF_CLIENT_ID || "",
       clientSecret: cfg.client_secret || (env as Record<string, string | undefined>)?.CF_CLIENT_SECRET || "",
@@ -158,14 +170,12 @@ export function createClient(
   });
 }
 
-// MySQL 通过 Hyperdrive 访问，接口与文件存储不同，单独构造
 export function createMysqlClient(
   storage: StorageLike,
   env?: ClientEnv
 ): MySqlClient {
   const cfg = storage.config || {};
   const connectionString = cfg.connection_string || cfg.endpoint || storage.endpoint || "";
-  // 生产环境必须绑定 Hyperdrive；本地无 Hyperdrive 时必须提供直连串，否则启动即失败
   if (!connectionString && !env?.HD && !env?.HYPERDRIVE) {
     throw new Error("MySQL 需先绑定 Cloudflare Hyperdrive（或本地填直连连接串）");
   }

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { FilePreview } from "~/components/FilePreview";
 import { useToast, useConfirm } from "~/components/feedback";
 import { getFileType, isPreviewable } from "~/lib/file-utils";
+import { GIT_TYPES, getGitMaxFileBytes, getGitMaxFileLabel } from "~/lib/git/registry";
 import { apiFileUrl } from "~/lib/api-path";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -516,6 +517,42 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
       { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "https://api.github.com", help: "GitHub Enterprise 才需修改；公共 GitHub 保持默认即可", show: (v) => v.custom_api_base === true },
       { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，GitHub Enterprise 自建站点才需要" },
+    ],
+  },
+  gitlab: {
+    name: "GitLab 仓库",
+    supportsMultipart: false,
+    fields: [
+      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "namespace/project 或 https://gitlab.com/group/subgroup/project", help: "支持 namespace/project 或完整 GitLab URL；嵌套分组会自动拼接" },
+      { key: "token", label: "Private Access Token", type: "password", required: true, placeholder: "glpat-xxx", help: "需授予 read_repository/write_repository 权限", link: { url: "https://gitlab.com/-/user_settings/personal_access_tokens", text: "前往 GitLab 生成 Token →" } },
+      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
+      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
+      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://gitlab.com/api/v4", placeholder: "https://gitlab.com/api/v4", help: "自建 GitLab 才需修改；公共 GitLab 保持默认即可", show: (v) => v.custom_api_base === true },
+      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，自建 GitLab 实例才需要" },
+    ],
+  },
+  gitea: {
+    name: "Gitea / Forgejo 仓库",
+    supportsMultipart: false,
+    fields: [
+      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo 或 https://gitea.example.com/owner/repo", help: "支持 owner/repo 或完整仓库 URL" },
+      { key: "token", label: "Access Token", type: "password", required: true, placeholder: "gitea_token 或带上 API 地址", help: "在 Gitea/Forgejo 个人设置中生成 API Token", link: { url: "https://gitea.com/user/settings/applications", text: "前往生成 Token →" } },
+      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
+      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
+      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://gitea.com/api/v1", placeholder: "https://gitea.com/api/v1", help: "自建 Gitea/Forgejo 实例才需修改；公共 Gitea 保持默认即可", show: (v) => v.custom_api_base === true },
+      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，自建实例才需要" },
+    ],
+  },
+  gitee: {
+    name: "Gitee 仓库",
+    supportsMultipart: false,
+    fields: [
+      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo 或 https://gitee.com/owner/repo", help: "支持 owner/repo 或完整仓库 URL" },
+      { key: "token", label: "私人令牌", type: "password", required: true, placeholder: "gitee_xxx（Access Token）", help: "作为 access_token 查询参数传入，确保 token 拥有仓库读写权限", link: { url: "https://gitee.com/profile/personal_access_tokens", text: "前往 Gitee 生成令牌 →" } },
+      { key: "branch", label: "分支", type: "text", defaultValue: "master", placeholder: "master", help: "Gitee 默认分支一般为 master" },
+      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
+      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://gitee.com/api/v5", placeholder: "https://gitee.com/api/v5", help: "默认走官方 API；一般无需修改", show: (v) => v.custom_api_base === true },
+      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段" },
     ],
   },
 };
@@ -1316,6 +1353,9 @@ const isS3 = formData.type === "s3";
                 <option value="mysql">MySQL 数据库</option>
                 <option value="dropbox">Dropbox</option>
                 <option value="github">GitHub 仓库</option>
+                <option value="gitlab">GitLab 仓库</option>
+                <option value="gitea">Gitea / Forgejo 仓库</option>
+                <option value="gitee">Gitee 仓库</option>
               </select>
             </div>
             {(isS3 || isWebdav) && (
@@ -3385,9 +3425,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const uploadFiles = async (fileList: File[]) => {
     if (fileList.length === 0) return;
     const CHUNK_SIZE = chunkSizeMB * 1024 * 1024;
-    // GitHub 单文件 100MB 上限，其余存储 50GB 上限
-    const maxBytes = storage.type === "github" ? 100 * 1024 * 1024 : 50 * 1024 * 1024 * 1024;
-    const maxLabel = storage.type === "github" ? "100MB" : "50GB";
+    const maxBytes = GIT_TYPES.has(storage.type) ? getGitMaxFileBytes(storage.type) : 50 * 1024 * 1024 * 1024;
+    const maxLabel = GIT_TYPES.has(storage.type) ? getGitMaxFileLabel(storage.type) : "50GB";
     for (const file of fileList) {
       try {
         if (file.size > maxBytes) {

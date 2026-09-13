@@ -1,3 +1,4 @@
+import type { GitConnection, GitPlatformAdapter, GitDirEntry, GitCommitMeta, GitFileStat } from "../types";
 import { parseRepoSegments, requireTwoSegments } from "../repo-ref";
 import { encodePathRepo, base64FromBytes, nextLinkUrl, rateLimitWait, describeError, decodeGitPath } from "../helpers";
 
@@ -104,7 +105,7 @@ export const githubAdapter: GitPlatformAdapter = {
   buildConnection(config) {
     const cfg = config || {};
     const ref = parseRepoSegments(cfg.repo, /^github\.com[:/]/i);
-    const two = ref ? requireTwoSegments(ref) : null;
+    const two = requireTwoSegments(ref);
     if (!two) throw new Error("GitHub 存储需填写仓库，支持 owner/repo、完整仓库 URL、或含 .git 的形式");
     const token = typeof cfg.token === "string" && cfg.token ? cfg.token : "";
     if (!token) throw new Error("GitHub 存储需填写 Personal Access Token");
@@ -112,7 +113,7 @@ export const githubAdapter: GitPlatformAdapter = {
     const apiBase = rawApiBase.replace(/\/+$/, "");
     const branch = typeof cfg.branch === "string" && cfg.branch ? cfg.branch : DEFAULT_BRANCH;
     const rootPath = typeof cfg.root_path === "string" ? cfg.root_path.replace(/^\/+/, "").replace(/\/+$/, "") : "";
-    return { repo: two.segments, token, apiBase, branch, rootPath };
+    return { repo: two, token, apiBase, branch, rootPath };
   },
 
   async ping(conn) {

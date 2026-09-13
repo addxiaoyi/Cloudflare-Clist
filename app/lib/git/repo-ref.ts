@@ -1,5 +1,3 @@
-import type { GitRepoRef } from "./types";
-
 // 从多种书写形式提取仓库路径段：
 //   "owner/repo"
 //   "https://host/owner/repo"
@@ -25,22 +23,18 @@ export function parseRepoSegments(
   return segments;
 }
 
-export function repoRef(segments: string[]): GitRepoRef {
-  return { segments };
-}
-
 // GitHub / Gitea / Gitee 只接受 owner/repo 两段；多或少都判为无效。
-export function requireTwoSegments(segments: string[]): GitRepoRef | null {
-  if (segments.length !== 2) return null;
-  return repoRef(segments);
+export function requireTwoSegments(segments: string[] | null): string[] | null {
+  if (!segments || segments.length !== 2) return null;
+  return segments;
 }
 
 // GitLab 用 URL 编码后的 "group%2Fsub%2Fproject" 作为 API 中的项目标识。
-export function encodedIdPath(ref: GitRepoRef): string {
-  return ref.segments.map(encodeURIComponent).join("%2F");
+export function encodedIdPath(segments: string[]): string {
+  return segments.map(encodeURIComponent).join("%2F");
 }
 
 // 直接拼进路径的 owner/repo（GitHub 风格）。
-export function plainIdPath(ref: GitRepoRef): string {
-  return ref.segments.map(encodeURIComponent).join("/");
+export function plainIdPath(segments: string[]): string {
+  return segments.map(encodeURIComponent).join("/");
 }

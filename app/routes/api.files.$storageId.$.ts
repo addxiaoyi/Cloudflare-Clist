@@ -3,6 +3,7 @@ import { getStorageById, initDatabase, updateStorage } from "~/lib/storage";
 import { requireAuth } from "~/lib/auth";
 import { getShareByToken, verifySharePassword } from "~/lib/shares";
 import { createClient, type StorageClient, type ClientEnv } from "~/lib/client-factory";
+import { GIT_TYPES, getGitMaxFileBytes, getGitMaxFileLabel } from "~/lib/git/registry";
 import { getRequestMeta, logAudit, isRateLimited } from "~/lib/audit";
 import { getFileType, getMimeType, fileResponseHeaders, isUnsafeInlineType, makeRangeResponseHeaders } from "~/lib/file-utils";
 
@@ -439,9 +440,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       const body = await request.json() as { contentType?: string; size?: number; chunkSize?: number };
       const contentType = body.contentType || "application/octet-stream";
-      const isGitHub = storage.type === "github";
-      if (isGitHub) {
-        return Response.json({ error: "GitHub 存储不支持分片上传（单文件最大 100MB）" }, { status: 400 });
+      if (GIT_TYPES.has(storage.type)) {
+        return Response.json(
+          { error: `${storage.type} 存储不支持分片上传（单文件最大 ${getGitMaxFileLabel(storage.type)}）` },
+          { status: 400 }
+        );
       }
       // 参数上限校验，防存储/CPU 滥用：单文件 ≤ 50GB，分片 1MB-5GB（S3 限制 5MB-5GB，放宽下限兼容小分片）
       const MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024;
@@ -1129,11 +1132,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (method === "POST" || method === "PUT") {
     const contentType = request.headers.get("content-type") || "application/octet-stream";
 
-    // 上传前按存储类型预检大小，GitHub 100MB 上限提前拒绝，避免读完大包才报错
+    // 上传前按存储类型预检大小，Git 类平台（GitHub 100MB / GitLab 10MB / Gitee 10MB）提前拒绝，避免读完大包才报错
     const declared = parseInt(request.headers.get("content-length") || "0", 10);
-    const maxBytes = storage.type === "github" ? 100 * 1024 * 1024 : 50 * 1024 * 1024 * 1024;
+    const maxBytes = GIT_TYPES.has(storage.type) ? getGitMaxFileBytes(storage.type) : 50 * 1024 * 1024 * 1024;
+    const maxLabel = GIT_TYPES.has(storage.type) ? getGitMaxFileLabel(storage.type) : "50GB";
     if (declared > 0 && declared > maxBytes) {
-      const maxLabel = storage.type === "github" ? "100MB" : "50GB";
       return Response.json({ error: `文件大小超出 ${storage.type} 上限（最大 ${maxLabel}）` }, { status: 413 });
     }
 
@@ -1144,7 +1147,6 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         return Response.json({ error: "未提供文件内容" }, { status: 400 });
       }
       if (bodyBuffer.byteLength > maxBytes) {
-        const maxLabel = storage.type === "github" ? "100MB" : "50GB";
         return Response.json({ error: `文件大小超出 ${storage.type} 上限（最大 ${maxLabel}）` }, { status: 413 });
       }
       await withClientState(client, db, storageId, () => client.putObject(path, bodyBuffer, contentType));

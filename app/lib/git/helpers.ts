@@ -1,5 +1,3 @@
-import type { Headers } from "@cloudflare/workers-types";
-
 // Git core.quotePath 简易转义表，回退处理八进制转义。
 const SIMPLE_ESCAPES: Record<string, number> = {
   a: 0x07, b: 0x08, t: 0x09, n: 0x0a, r: 0x0d,
