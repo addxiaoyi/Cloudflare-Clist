@@ -511,7 +511,8 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       { key: "token", label: "Personal Access Token", type: "password", required: true, placeholder: "ghp_xxx 或 github_pat_xxx", help: "Classic Token 请勾选 repo 范围；Fine-grained 需授予 Contents: Read/Write" },
       { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
       { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
-      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "https://api.github.com", help: "GitHub Enterprise 才需修改；公共 GitHub 保持默认即可" },
+      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "https://api.github.com", help: "GitHub Enterprise 才需修改；公共 GitHub 保持默认即可", show: (v) => v.custom_api_base === true },
+      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，GitHub Enterprise 自建站点才需要" },
     ],
   },
 };

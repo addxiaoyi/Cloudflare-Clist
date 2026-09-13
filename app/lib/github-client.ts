@@ -134,11 +134,22 @@ export class GithubClient {
     });
   }
 
+  private describeApiError(status: number, body: string): string {
+    if (status === 401) return "GitHub 认证失败（401）：Token 无效或已过期，请检查 Personal Access Token";
+    if (status === 403) {
+      const hint = /rate limit/i.test(body) ? "请等待后重试或提高配额" : "请确认 Token 已授权 Contents 读写权限";
+      return `GitHub 访问被拒（403）：${hint}`;
+    }
+    if (status === 404) return "GitHub 未找到目标（404）：仓库、分支或路径可能不存在，请确认仓库格式为 owner/repo 且分支正确";
+    if (status === 422) return `GitHub 校验失败（422）：${body || "请求体不合法，常见于路径或 base64 编码异常"}`;
+    return `GitHub API error: ${status} ${body}`;
+  }
+
   private async ghJson<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await this.gh(path, init);
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GitHub API error: ${res.status} ${text}`);
+      throw new Error(this.describeApiError(res.status, text));
     }
     if (res.status === 204) return {} as T;
     return res.json() as T;
@@ -162,7 +173,7 @@ export class GithubClient {
     if (res.status === 404) return null;
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GitHub API error: ${res.status} ${text}`);
+      throw new Error(this.describeApiError(res.status, text));
     }
     const raw = await res.json();
     if (!Array.isArray(raw)) {
@@ -177,7 +188,7 @@ export class GithubClient {
     if (res.status === 404) return null;
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GitHub API error: ${res.status} ${text}`);
+      throw new Error(this.describeApiError(res.status, text));
     }
     return res.json() as Promise<GitTree>;
   }
