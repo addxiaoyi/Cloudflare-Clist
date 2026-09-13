@@ -507,11 +507,11 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "GitHub 仓库",
     supportsMultipart: false,
     fields: [
-      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo", help: "GitHub 仓库，格式 owner/repo" },
-      { key: "token", label: "Personal Access Token", type: "password", required: true, placeholder: "ghp_... / github_pat_...", help: "需要 contents:read+write 权限的令牌" },
-      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main" },
-      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "可选：docs/assets，留空为仓库根" },
-      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "GitHub Enterprise 自建地址", help: "留空或默认使用 api.github.com" },
+      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo", help: "形如 owner/repo 的仓库标识，如 octocat/Hello-World" },
+      { key: "token", label: "Personal Access Token", type: "password", required: true, placeholder: "ghp_xxx 或 github_pat_xxx", help: "Classic Token 请勾选 repo 范围；Fine-grained 需授予 Contents: Read/Write" },
+      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
+      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
+      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "https://api.github.com", help: "GitHub Enterprise 才需修改；公共 GitHub 保持默认即可" },
     ],
   },
 };
