@@ -182,9 +182,15 @@ export class GithubClient {
     return { sha, date: commit.commit.author.date };
   }
 
+  // 每次写操作都会产生新提交，缓存的 HEAD 会立刻过期
+  private invalidateHeadCache(): void {
+    this.headSha = "";
+    this.commitDate = "";
+  }
+
   private async fetchDirectory(repoPath: string): Promise<ContentsEntry[] | null> {
     const encoded = repoPath ? `/${this.encodePathInRepo(repoPath)}` : "";
-    const res = await this.gh(`${encoded}?ref=${encodeURIComponent(this.branch)}`);
+    const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents${encoded}?ref=${encodeURIComponent(this.branch)}`);
     if (res.status === 404) return null;
     if (!res.ok) {
       const text = await res.text();
@@ -381,6 +387,7 @@ export class GithubClient {
         ...(sha ? { sha } : {}),
       }),
     });
+    this.invalidateHeadCache();
   }
 
   async deleteObject(key: string): Promise<void> {
@@ -395,34 +402,29 @@ export class GithubClient {
         sha: meta.sha,
       }),
     });
+    this.invalidateHeadCache();
   }
 
   async createFolder(folderPath: string): Promise<void> {
     const normalized = stripTrailingSlash(stripLeadingSlash(folderPath));
     if (!normalized) return;
-    const fileName = normalized.split("/").pop() || ".gitkeep";
-    const dir = normalized.split("/").slice(0, -1).join("/");
-    const target = dir ? `${dir}/${fileName}` : fileName;
-    await this.putObject(target, "", "application/octet-stream");
+    // Git 不存空目录，用 .gitkeep 占位；已有内容则不重复塞占位文件
+    const existing = await this.fetchDirectory(this.toRepoPath(normalized));
+    if (existing && existing.length > 0) return;
+    await this.putObject(`${normalized}/.gitkeep`, "", "application/octet-stream");
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
     const srcRepoPath = this.toRepoPath(sourceKey);
     const meta = await this.fetchContentsMeta(srcRepoPath);
-    if (!meta || meta.dir) return;
+    // 静默返回会让上层的 copy + delete 回退在源缺失时误删数据，这里必须显式失败
+    if (!meta) throw new Error("GitHub copy: 源文件不存在");
+    if (meta.dir) throw new Error("GitHub copy: 不支持复制目录对象，请逐文件复制");
     const srcEncoded = this.encodePathInRepo(srcRepoPath);
     const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents/${srcEncoded}?ref=${encodeURIComponent(this.branch)}`, {}, true);
     if (!res.ok) throw new Error(`GitHub copy: 源文件下载失败 ${res.status}`);
     const buf = await res.arrayBuffer();
     await this.putObject(destKey, buf, getMimeType(sourceKey) || "application/octet-stream");
-  }
-
-  async renameObject(path: string, _newName: string): Promise<void> {
-    // GitHub 无法原地重命名：通过 copyObject + deleteObject 实现，由路由层兜底
-    throw new Error("GitHub 暂不支持 rename，使用 copy + delete 实现");
-  }
-  async moveObject(_path: string, _newPath: string): Promise<void> {
-    throw new Error("GitHub 暂不支持 move，使用 copy + delete 实现");
   }
 
   async initiateMultipartUpload(_key: string, _contentType: string, _options?: { size?: number; chunkSize?: number }): Promise<string> {
