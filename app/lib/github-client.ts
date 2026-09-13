@@ -158,6 +158,16 @@ export class GithubClient {
         Accept: rawMedia ? "application/vnd.github.raw+json" : "application/vnd.github+json",
         ...(init?.headers || {}),
       },
+    }).then((res) => {
+      // 主限流走 403（可能只带 X-RateLimit-Remaining: 0 而无 Retry-After），二级/滥用限流走 429
+      const retryAfter = res.headers.get("Retry-After");
+      const rateLimitExhausted = res.headers.get("X-RateLimit-Remaining") === "0";
+      const isRateLimited = res.status === 429 || (res.status === 403 && (rateLimitExhausted || retryAfter !== null));
+      if (isRateLimited) {
+        const waitSec = parseInt(retryAfter || "60", 10);
+        throw new Error(`GitHub 触发限流，请 ${waitSec} 秒后重试（主限流配额约 5000 次/小时）`);
+      }
+      return res;
     });
   }
 
@@ -204,39 +214,43 @@ export class GithubClient {
     this.commitDate = "";
   }
 
-  private async fetchDirectory(repoPath: string, collectAll = false, maxItems?: number): Promise<ContentsEntry[] | null> {
-    const encoded = repoPath ? `/${this.encodePathInRepo(repoPath)}` : "";
-    const query = `?ref=${encodeURIComponent(this.branch)}${collectAll ? `&per_page=${CONTENTS_PAGE_SIZE}` : ""}`;
-    const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents${encoded}${query}`);
-    if (res.status === 404) return null;
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(this.describeApiError(res.status, text));
+  // 分页拉取目录；nextUrl 非空表示后续还有页码未拉取
+  private async fetchDirectory(
+    repoPath: string,
+    maxItems?: number,
+    continuationUrl?: string
+  ): Promise<{ entries: ContentsEntry[]; nextUrl: string | null } | null> {
+    let url: string;
+    if (continuationUrl) {
+      url = continuationUrl;
+    } else {
+      const encoded = repoPath ? `/${this.encodePathInRepo(repoPath)}` : "";
+      url = `${this.apiBase}/repos/${this.owner}/${this.repo}/contents${encoded}?ref=${encodeURIComponent(this.branch)}&per_page=${CONTENTS_PAGE_SIZE}`;
     }
-    const raw = await res.json();
-    if (!Array.isArray(raw)) {
-      return null;
-    }
-    const items = raw as ContentsEntry[];
-    // 目录内容超出一页：跟随 Link 头 rel="next" 聚合，保证大目录不丢项
-    let nextUrl = GithubClient.nextLinkUrl(res.headers.get("Link"));
-    while (nextUrl) {
-      // 超过上限则提前停止，避免拉取不必要的数据
-      if (maxItems && items.length >= maxItems) break;
-      const pageRes = await this.requestWithHeaders(nextUrl);
-      if (!pageRes.ok) {
-        const text = await pageRes.text();
-        throw new Error(this.describeApiError(pageRes.status, text));
+    const entries: ContentsEntry[] = [];
+    let nextUrl: string | null = null;
+    while (true) {
+      const res = await this.requestWithHeaders(url);
+      if (res.status === 404) {
+        if (entries.length > 0) break;
+        return null;
       }
-      const pageRaw = await pageRes.json();
-      if (!Array.isArray(pageRaw)) break;
-      items.push(...(pageRaw as ContentsEntry[]));
-      nextUrl = GithubClient.nextLinkUrl(pageRes.headers.get("Link"));
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(this.describeApiError(res.status, text));
+      }
+      const raw = await res.json();
+      if (!Array.isArray(raw)) {
+        if (entries.length > 0) break;
+        return null;
+      }
+      entries.push(...(raw as ContentsEntry[]));
+      nextUrl = GithubClient.nextLinkUrl(res.headers.get("Link"));
+      if (!nextUrl) break;
+      if (maxItems && entries.length >= maxItems) break;
+      url = nextUrl;
     }
-    if (maxItems) {
-      return items.slice(0, maxItems);
-    }
-    return items;
+    return { entries, nextUrl };
   }
 
   private async fetchTreeRecursive(): Promise<GitTree | null> {
@@ -273,20 +287,20 @@ export class GithubClient {
   async listObjects(
     prefix = "",
     delimiter = "/",
-    _maxKeys = 1000,
-    _continuationToken?: string
+    maxKeys = 1000,
+    continuationToken?: string
   ): Promise<ListObjectsResult> {
     const repoPath = this.toRepoPath(prefix);
 
     if (delimiter === "/") {
-      const items = await this.fetchDirectory(repoPath, true, _maxKeys > 0 ? _maxKeys : undefined);
-      if (!items) {
+      const result = await this.fetchDirectory(repoPath, maxKeys > 0 ? maxKeys : undefined, continuationToken);
+      if (!result) {
         return { objects: [], prefixes: [], isTruncated: false };
       }
       const { date } = await this.resolveHead();
       const objects: DriveObject[] = [];
       const prefixes: string[] = [];
-      for (const item of items) {
+      for (const item of result.entries) {
         if (item.type === "symlink" || item.type === "submodule") continue;
         const display = this.toDisplayPath(item.path);
         const key = item.type === "dir" ? `${display}/` : display;
@@ -305,15 +319,18 @@ export class GithubClient {
         if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-      // GitHub Contents API 拉取时已决定是否拉完或止于 maxKeys；若 items 超过 maxKeys 说明被截断
-      const isTruncated = _maxKeys > 0 && items.length >= _maxKeys;
-      return { objects, prefixes, isTruncated };
+      // 还有下一页时把绝对 URL 作为不透明 token 交给上层 do-while 继续拉取
+      return { objects, prefixes, isTruncated: result.nextUrl !== null, nextContinuationToken: result.nextUrl ?? undefined };
     }
 
     // Recursive / bulk mode (delimiter != "/") — return blobs only
     const tree = await this.fetchTreeRecursive();
     if (!tree) {
       return { objects: [], prefixes: [], isTruncated: false };
+    }
+    if (tree.truncated) {
+      // 递归 tree 超过 GitHub 7 万条目上限会被截断且无续页接口；静默漏文件会引发批量删除/重命名丢数据，必须显式失败
+      throw new Error("GitHub 仓库条目过多，Git Trees 递归列表被截断（>7 万个条目）。请改用目录遍历或精简仓库");
     }
     const { date } = await this.resolveHead();
     const prefixTrail = repoPath ? repoPath + "/" : "";
@@ -332,28 +349,28 @@ export class GithubClient {
       });
     }
     objects.sort((a, b) => a.name.localeCompare(b.name));
-    return { objects, prefixes: [], isTruncated: tree.truncated };
+    return { objects, prefixes: [], isTruncated: false };
   }
 
   async getObject(key: string, options?: { range?: string }): Promise<Response> {
     const repoPath = this.toRepoPath(key);
     const meta = await this.fetchContentsMeta(repoPath);
-    if (!meta) throw new Error("File not found");
+    if (!meta) throw new Error(`GitHub 未找到文件：${key}`);
     const { sha, dir } = meta;
-    if (dir) return new Response("Directory", { status: 400 });
-    if (!sha) throw new Error("File not found");
+    if (dir) throw new Error(`GitHub 路径为目录而非文件：${key}`);
+    if (!sha) throw new Error(`GitHub 文件元信息不完整：${key}`);
 
     const encoded = this.encodePathInRepo(repoPath);
     const res = await this.gh(`/repos/${this.owner}/${this.repo}/contents/${encoded}?ref=${encodeURIComponent(this.branch)}`, {}, true);
     if (!res.ok) {
-      throw new Error(`GitHub download error: ${res.status}`);
+      throw new Error(`GitHub 下载失败 ${key}：${res.status}`);
     }
     const buf = await res.arrayBuffer();
-    const size = buf.byteLength;
+    const sizeBytes = buf.byteLength;
     const contentType = getMimeType(key) || "application/octet-stream";
 
     if (options?.range) {
-      const range = this.parseRange(options.range, size);
+      const range = this.parseRange(options.range, sizeBytes);
       if (range) {
         const part = buf.slice(range.start, range.end + 1);
         return new Response(part, {
@@ -361,7 +378,7 @@ export class GithubClient {
           headers: {
             "Content-Type": contentType,
             "Content-Length": String(part.byteLength),
-            "Content-Range": `bytes ${range.start}-${range.end}/${size}`,
+            "Content-Range": `bytes ${range.start}-${range.end}/${sizeBytes}`,
             "Accept-Ranges": "bytes",
           },
         });
@@ -370,7 +387,7 @@ export class GithubClient {
         status: 200,
         headers: {
           "Content-Type": contentType,
-          "Content-Length": String(size),
+          "Content-Length": String(sizeBytes),
           "Accept-Ranges": "bytes",
         },
       });
@@ -380,7 +397,7 @@ export class GithubClient {
       status: 200,
       headers: {
         "Content-Type": contentType,
-        "Content-Length": String(size),
+        "Content-Length": String(sizeBytes),
         "Accept-Ranges": "bytes",
       },
     });
@@ -408,18 +425,18 @@ export class GithubClient {
     const repoPath = this.toRepoPath(key);
     const bytes = typeof body === "string" ? new TextEncoder().encode(body) : new Uint8Array(body);
     if (bytes.length > REPO_MAX_FILE_BYTES) {
-      throw new Error(`GitHub 文件超过 100MB 上限（${bytes.length} 字节），请使用小文件或分批上传`);
+      const sizeMB = Math.round(bytes.length / (1024 * 1024) * 100) / 100;
+      throw new Error(`GitHub 文件超过 100MB 上限（${sizeMB} MB），请使用小文件或分批上传`);
     }
+    const fileName = key.split("/").pop() || "文件";
     const b64 = this.base64FromBytes(bytes);
     let sha: string | undefined;
-    try {
-      const meta = await this.fetchContentsMeta(repoPath);
-      if (meta && !meta.dir && meta.sha) sha = meta.sha;
-    } catch { /* 文件不存在则直接创建 */ }
+    const meta = await this.fetchContentsMeta(repoPath);
+    if (meta && !meta.dir && meta.sha) sha = meta.sha;
     await this.ghJson(`/repos/${this.owner}/${this.repo}/contents/${this.encodePathInRepo(repoPath)}`, {
       method: "PUT",
       body: JSON.stringify({
-        message: `上传 ${key.split("/").pop() || "文件"}`,
+        message: `上传 ${fileName}`,
         content: b64,
         branch: this.branch,
         ...(sha ? { sha } : {}),
@@ -448,7 +465,7 @@ export class GithubClient {
     if (!normalized) return;
     // Git 不存空目录，用 .gitkeep 占位；已有内容则不重复塞占位文件
     const existing = await this.fetchDirectory(this.toRepoPath(normalized));
-    if (existing && existing.length > 0) return;
+    if (existing && existing.entries.length > 0) return;
     await this.putObject(`${normalized}/.gitkeep`, "", "application/octet-stream");
   }
 
@@ -490,13 +507,9 @@ export class GithubClient {
       : `/repos/${this.owner}/${this.repo}/contents?ref=${encodeURIComponent(this.branch)}`;
     const res = await this.gh(url);
     if (res.status === 404) return null;
-    if (res.status === 403) {
-      const text = await res.text();
-      throw new Error(`GitHub API 权限不足: ${text}`);
-    }
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GitHub API error: ${res.status} ${text}`);
+      throw new Error(this.describeApiError(res.status, text));
     }
     const entry = (await res.json()) as ContentsEntry | ContentsEntry[] | { message?: string };
     if (Array.isArray(entry) || (entry as { message?: string }).message) {

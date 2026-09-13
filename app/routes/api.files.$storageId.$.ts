@@ -439,6 +439,10 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     try {
       const body = await request.json() as { contentType?: string; size?: number; chunkSize?: number };
       const contentType = body.contentType || "application/octet-stream";
+      const isGitHub = storage.type === "github";
+      if (isGitHub) {
+        return Response.json({ error: "GitHub 存储不支持分片上传（单文件最大 100MB）" }, { status: 400 });
+      }
       // 参数上限校验，防存储/CPU 滥用：单文件 ≤ 50GB，分片 1MB-5GB（S3 限制 5MB-5GB，放宽下限兼容小分片）
       const MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024;
       const MIN_CHUNK_SIZE = 1 * 1024 * 1024;
@@ -1125,11 +1129,23 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (method === "POST" || method === "PUT") {
     const contentType = request.headers.get("content-type") || "application/octet-stream";
 
+    // 上传前按存储类型预检大小，GitHub 100MB 上限提前拒绝，避免读完大包才报错
+    const declared = parseInt(request.headers.get("content-length") || "0", 10);
+    const maxBytes = storage.type === "github" ? 100 * 1024 * 1024 : 50 * 1024 * 1024 * 1024;
+    if (declared > 0 && declared > maxBytes) {
+      const maxLabel = storage.type === "github" ? "100MB" : "50GB";
+      return Response.json({ error: `文件大小超出 ${storage.type} 上限（最大 ${maxLabel}）` }, { status: 413 });
+    }
+
     try {
-      // Read body as ArrayBuffer first
+      // Read body as ArrayBuffer first（content-length 可能缺失，读后再按实际大小校验）
       const bodyBuffer = await request.arrayBuffer();
       if (bodyBuffer.byteLength === 0) {
-        return Response.json({ error: "No file body provided" }, { status: 400 });
+        return Response.json({ error: "未提供文件内容" }, { status: 400 });
+      }
+      if (bodyBuffer.byteLength > maxBytes) {
+        const maxLabel = storage.type === "github" ? "100MB" : "50GB";
+        return Response.json({ error: `文件大小超出 ${storage.type} 上限（最大 ${maxLabel}）` }, { status: 413 });
       }
       await withClientState(client, db, storageId, () => client.putObject(path, bodyBuffer, contentType));
       await logAudit(db, {
@@ -1143,10 +1159,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       });
       return Response.json({ success: true, path });
     } catch (error) {
-      return Response.json(
-        { error: error instanceof Error ? error.message : "Failed to upload file" },
-        { status: 500 }
-      );
+      const message = error instanceof Error ? error.message : "文件上传失败";
+      const isSizeError = /超过|超出|上限/i.test(message);
+      return Response.json({ error: message }, { status: isSizeError ? 413 : 500 });
     }
   }
 

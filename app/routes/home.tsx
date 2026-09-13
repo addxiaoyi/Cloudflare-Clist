@@ -3385,8 +3385,15 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const uploadFiles = async (fileList: File[]) => {
     if (fileList.length === 0) return;
     const CHUNK_SIZE = chunkSizeMB * 1024 * 1024;
+    // GitHub 单文件 100MB 上限，其余存储 50GB 上限
+    const maxBytes = storage.type === "github" ? 100 * 1024 * 1024 : 50 * 1024 * 1024 * 1024;
+    const maxLabel = storage.type === "github" ? "100MB" : "50GB";
     for (const file of fileList) {
       try {
+        if (file.size > maxBytes) {
+          toast(`文件 "${file.name}" 太大（> ${maxLabel}）`, "error");
+          continue;
+        }
         const uploadPath = path ? `${path}/${file.name}` : file.name;
         const canMultipart = supportsMultipart(storage.type);
         if (file.size >= CHUNK_SIZE && canMultipart) {
@@ -3439,13 +3446,21 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   }, []);
 
   const uploadSingle = async (file: File, uploadPath: string) => {
+    setUploadProgress({ name: file.name, progress: 0, speed: 0, loaded: 0, total: file.size });
+    let lastLoaded = 0;
+    let lastTs = Date.now();
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
           const percent = Math.round((event.loaded / event.total) * 100);
-          setUploadProgress({ name: file.name, progress: percent });
+          const now = Date.now();
+          const elapsed = (now - lastTs) / 1000;
+          const speed = elapsed > 0 ? Math.max(0, (event.loaded - lastLoaded) / elapsed) : 0;
+          lastLoaded = event.loaded;
+          lastTs = now;
+          setUploadProgress({ name: file.name, progress: percent, speed, loaded: event.loaded, total: event.total });
         }
       };
 
