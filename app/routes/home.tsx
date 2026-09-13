@@ -590,9 +590,10 @@ interface PasswordInputProps {
   onChange: (value: string) => void;
   label: string;
   required?: boolean;
+  help?: string;
 }
 
-function PasswordInput({ value, onChange, label, required }: PasswordInputProps) {
+function PasswordInput({ value, onChange, label, required, help }: PasswordInputProps) {
   const [showValue, setShowValue] = useState(false);
 
   return (
@@ -627,6 +628,7 @@ function PasswordInput({ value, onChange, label, required }: PasswordInputProps)
           )}
         </div>
       </div>
+      {help && <p className="text-xs text-zinc-500 mt-1.5">{help}</p>}
       {value && (
         <span className="text-xs text-zinc-500 mt-1 block">
           当前值：{value.slice(0, 4)}****{value.slice(-4)}
@@ -866,6 +868,7 @@ const isS3 = formData.type === "s3";
             placeholder={field.placeholder || ""}
             required={field.required}
           />
+          {field.help && <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>}
         </div>
       );
     }
@@ -878,6 +881,7 @@ const isS3 = formData.type === "s3";
           onChange={(v) => updateConfigValue(field.key, v)}
           label={field.label}
           required={field.required}
+          help={field.help}
         />
       );
     }
@@ -893,6 +897,7 @@ const isS3 = formData.type === "s3";
           placeholder={field.placeholder || ""}
           required={field.required}
         />
+        {field.help && <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>}
       </div>
     );
   };
