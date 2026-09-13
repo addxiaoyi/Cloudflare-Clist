@@ -3425,8 +3425,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const uploadFiles = async (fileList: File[]) => {
     if (fileList.length === 0) return;
     const CHUNK_SIZE = chunkSizeMB * 1024 * 1024;
-    const maxBytes = GIT_TYPES.has(storage.type) ? getGitMaxFileBytes(storage.type) : 50 * 1024 * 1024 * 1024;
-    const maxLabel = GIT_TYPES.has(storage.type) ? getGitMaxFileLabel(storage.type) : "50GB";
+    const sType = storage.type ?? "";
+    const maxBytes = GIT_TYPES.has(sType) ? getGitMaxFileBytes(sType) : 50 * 1024 * 1024 * 1024;
+    const maxLabel = GIT_TYPES.has(sType) ? getGitMaxFileLabel(sType) : "50GB";
     for (const file of fileList) {
       try {
         if (file.size > maxBytes) {

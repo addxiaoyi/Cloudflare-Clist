@@ -139,7 +139,7 @@ export const giteaAdapter: GitPlatformAdapter = {
     const res = await request(conn, withQuery(conn, `/repos/${repoId(conn)}/contents${encoded}`, { ref: conn.branch }));
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(describeError("Gitea", res.status, await res.text()));
-    const entry = await res.json();
+    const entry = (await res.json()) as Partial<ContentsItem> & { type?: string };
     if (Array.isArray(entry) || entry.type === "dir") return null;
     const e = entry as ContentsItem;
     return { sha: e.sha, size: e.size };

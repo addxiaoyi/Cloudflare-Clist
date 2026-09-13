@@ -11,7 +11,8 @@
 		"dev": "react-router dev",
 		"postinstall": "npm run cf-typegen",
 		"preview": "npm run build && vite preview",
-		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
+		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@types/qrcode": "^1.5.6",
@@ -40,6 +41,7 @@
 		"typescript": "^5.9.2",
 		"vite": "^7.1.7",
 		"vite-tsconfig-paths": "^5.1.4",
+		"vitest": "^3.2.7",
 		"wrangler": "^4.55.0"
 	}
 }
