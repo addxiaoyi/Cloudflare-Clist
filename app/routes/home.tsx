@@ -439,6 +439,16 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       { key: "session_token", label: "会话令牌", type: "password", placeholder: "可选：临时凭证" },
       { key: "use_ssl", label: "启用 SSL", type: "boolean", defaultValue: true },
       { key: "path_style", label: "路径风格访问", type: "boolean", defaultValue: false },
+      {
+        key: "signature_version",
+        label: "签名版本",
+        type: "select",
+        options: [
+          { value: "v4", label: "SigV4 (推荐)" },
+          { value: "v2", label: "SigV2 (旧版兼容)" },
+        ],
+        defaultValue: "v4",
+      },
       { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
     ],
   },
@@ -1410,9 +1420,20 @@ const isS3 = formData.type === "s3";
                   <span className="text-sm text-zinc-700 dark:text-zinc-300">路径风格访问 (Path Style)</span>
                 </label>
                 <p className="text-xs text-zinc-500">
-                  签名算法固定为 AWS4-HMAC-SHA256 (SigV4)。自建/MinIO/R2 兼容端点通常需要勾选路径风格；
-                  虚拟主机风格按 <code className="text-zinc-700 dark:text-zinc-300">bucket.endpoint/key</code> 访问。
+                  自建/MinIO/R2 兼容端点通常需要勾选路径风格；虚拟主机风格按
+                  <code className="text-zinc-700 dark:text-zinc-300">bucket.endpoint/key</code> 访问。
                 </p>
+                <div className="col-span-2">
+                  <label className="block text-xs text-zinc-500 mb-1.5">签名版本</label>
+                  <select
+                    value={formData.config?.signature_version ?? "v4"}
+                    onChange={(e) => updateConfigValue("signature_version", e.target.value)}
+                    className="w-full field"
+                  >
+                    <option value="v4">SigV4 (AWS4-HMAC-SHA256)</option>
+                    <option value="v2">SigV2 (AWS-HMAC-SHA1, 旧版兼容)</option>
+                  </select>
+                </div>
               </div>
             )}
             {(isS3 || isWebdav) && (

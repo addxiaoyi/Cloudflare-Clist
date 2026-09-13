@@ -6,6 +6,7 @@ export interface S3Config {
   bucket: string;
   basePath?: string;
   usePathStyle?: boolean;
+  signatureVersion?: "v2" | "v4";
 }
 
 export interface S3Object {
@@ -33,6 +34,29 @@ async function hmacSha256(key: ArrayBuffer, message: string): Promise<ArrayBuffe
     ["sign"]
   );
   return crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+}
+
+async function hmacSha1(keyString: string, message: string): Promise<ArrayBuffer> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(keyString),
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"]
+  );
+  return crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+}
+
+function toBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+// SigV2 signs with HMAC-SHA1 and emits a base64 (not hex) signature.
+async function hmacSha1Base64(secret: string, message: string): Promise<string> {
+  return toBase64(await hmacSha1(secret, message));
 }
 
 async function sha256(message: string): Promise<string> {
@@ -88,6 +112,30 @@ async function getSignatureKey(
 export class S3Client {
   private config: S3Config;
   private hostStyle: "path" | "vhost";
+  private signatureVersion: "v2" | "v4";
+
+  private static readonly SIGV2_SUBRESOURCES = new Set([
+    "acl",
+    "lifecycle",
+    "location",
+    "logging",
+    "notification",
+    "partNumber",
+    "policy",
+    "requestPayment",
+    "torrent",
+    "uploadId",
+    "uploads",
+    "versionId",
+    "versioning",
+    "versions",
+    "website",
+    "delete",
+    "cors",
+    "replicate",
+    "replication",
+    "tagging",
+  ]);
 
   constructor(config: S3Config) {
     const raw = config.endpoint?.trim() || "";
@@ -98,6 +146,7 @@ export class S3Client {
     const endpoint = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     this.config = { ...config, endpoint };
     this.hostStyle = config.usePathStyle === false ? "vhost" : "path";
+    this.signatureVersion = config.signatureVersion || "v4";
   }
 
   private getBaseHost(url: URL): string {
@@ -134,7 +183,87 @@ export class S3Client {
     return `${url.protocol}//${this.getBaseHost(url)}${encodeS3Path(this.objectPath(fullKey))}`;
   }
 
+  // Sign request with AWS Signature Version 2
+  // String to sign: VERB + "\nContent-MD5\nContent-Type\nDate\nCanonicalizedAmzHeaders + CanonicalizedResource"
+  // Only Date (GMT), Content-Type, Content-MD5 and x-amz-* headers are signed.
+  // The signature is a base64-encoded HMAC-SHA1 of the string to sign.
+  private async signRequestV2(
+    method: string,
+    path: string,
+    queryParams: Record<string, string> = {},
+    headers: Record<string, string> = {}
+  ): Promise<Record<string, string>> {
+    const now = new Date();
+    const dateGMT = now.toUTCString();
+
+    // Build canonical resource: callers pass the already-bucket-prefixed path
+    // (path-style: /bucket/key, vhost-style: /key), same as the signed request path
+    let canonicalResource = path;
+
+    // Only SigV2 subresources (uploadId, partNumber, ...) belong in the canonical resource;
+    // ordinary query params (prefix, delimiter, list-type...) must NOT be signed
+    const subParams = Object.entries(queryParams)
+      .filter(([key]) => S3Client.SIGV2_SUBRESOURCES.has(key))
+      .sort(([a], [b]) => a.localeCompare(b));
+    if (subParams.length > 0) {
+      canonicalResource += "?" + subParams
+        .map(([key, value]) => (value === "" ? key : `${key}=${value}`))
+        .join("&");
+    }
+
+    // Extract x-amz-* headers for canonicalization
+    const amzHeaders: Record<string, string> = {};
+    const otherHeaders: Record<string, string> = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (key.toLowerCase().startsWith("x-amz-")) {
+        amzHeaders[key.toLowerCase()] = value.trim();
+      } else {
+        otherHeaders[key] = value;
+      }
+    }
+
+    // Canonicalized x-amz-* headers: sorted alphabetically
+    const sortedAmzKeys = Object.keys(amzHeaders).sort();
+    const canonicalAmzHeaders = sortedAmzKeys.map((k) => `${k}:${amzHeaders[k]}`).join("\n");
+
+    // String to sign format for SigV2
+    // Note: Content-MD5 is typically empty unless explicitly set
+    const stringToSign = [
+      method,
+      "", // Content-MD5 (usually empty)
+      otherHeaders["Content-Type"] || "",
+      dateGMT,
+      canonicalAmzHeaders ? canonicalAmzHeaders + "\n" + canonicalResource : canonicalResource,
+    ].join("\n");
+
+    const signature = await hmacSha1Base64(this.config.secretAccessKey, stringToSign);
+
+    const signedHeaders: Record<string, string> = {
+      Date: dateGMT,
+      Authorization: `AWS ${this.config.accessKeyId}:${signature}`,
+      ...otherHeaders,
+      ...amzHeaders,
+    };
+
+    return signedHeaders;
+  }
+
+  // Unified signRequest that forwards to SigV4 or SigV2 based on config
   private async signRequest(
+    method: string,
+    path: string,
+    queryParams: Record<string, string> = {},
+    headers: Record<string, string> = {},
+    payload: string = "",
+    useUnsignedPayload: boolean = false
+  ): Promise<Record<string, string>> {
+    if (this.signatureVersion === "v2") {
+      return this.signRequestV2(method, path, queryParams, headers);
+    }
+    return this.signRequestV4(method, path, queryParams, headers, payload, useUnsignedPayload);
+  }
+
+  private async signRequestV4(
     method: string,
     path: string,
     queryParams: Record<string, string> = {},
@@ -150,8 +279,6 @@ export class S3Client {
 
     const payloadHash = useUnsignedPayload ? "UNSIGNED-PAYLOAD" : await sha256(payload);
 
-    // Headers to sign - host is included in signature but not in returned headers
-    // because fetch API sets Host header automatically
     const headersToSign: Record<string, string> = {
       host,
       "x-amz-content-sha256": payloadHash,
@@ -196,7 +323,6 @@ export class S3Client {
 
     const authorization = `AWS4-HMAC-SHA256 Credential=${this.config.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeadersStr}, Signature=${signature}`;
 
-    // Return headers to send with request (exclude host - fetch sets it automatically)
     return {
       "x-amz-content-sha256": payloadHash,
       "x-amz-date": amzDate,
@@ -371,9 +497,45 @@ export class S3Client {
     return response;
   }
 
+  // Build a SigV2 presigned (query-string authenticated) URL.
+  // StringToSign: VERB\nContent-MD5\nContent-Type\nExpires\nCanonicalizedResource
+  private async presignUrlV2(
+    method: string,
+    path: string,
+    subresources: Record<string, string>,
+    expiresIn: number
+  ): Promise<string> {
+    const url = new URL(this.config.endpoint);
+    const host = this.getBaseHost(url);
+    const encodedPath = encodeS3Path(path);
+
+    // Canonicalized resource includes only the subresource params (not AWSAccessKeyId etc.)
+    const subKeys = Object.keys(subresources).sort();
+    const subParts = subKeys.map((k) =>
+      subresources[k] === "" ? k : `${k}=${subresources[k]}`
+    );
+    const resource = subParts.length > 0 ? `${path}?${subParts.join("&")}` : path;
+
+    const expires = Math.floor(Date.now() / 1000) + expiresIn;
+    const stringToSign = [method, "", "", expires.toString(), resource].join("\n");
+    const signature = await hmacSha1Base64(this.config.secretAccessKey, stringToSign);
+
+    const params = new URLSearchParams({
+      AWSAccessKeyId: this.config.accessKeyId,
+      Expires: expires.toString(),
+      Signature: signature,
+    });
+    for (const k of subKeys) params.set(k, subresources[k]);
+
+    return `${url.protocol}//${host}${encodedPath}?${params.toString()}`;
+  }
+
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
+    if (this.signatureVersion === "v2") {
+      return this.presignUrlV2("GET", path, {}, expiresIn);
+    }
     const encodedPath = encodeS3Path(path);
     const url = new URL(this.config.endpoint);
     const host = this.getBaseHost(url);
@@ -428,6 +590,14 @@ export class S3Client {
   ): Promise<string> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
+    if (this.signatureVersion === "v2") {
+      return this.presignUrlV2(
+        "PUT",
+        path,
+        { partNumber: partNumber.toString(), uploadId },
+        expiresIn
+      );
+    }
     const encodedPath = encodeS3Path(path);
     const url = new URL(this.config.endpoint);
     const host = this.getBaseHost(url);

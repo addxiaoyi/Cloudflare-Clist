@@ -162,6 +162,8 @@ export function createClient(
   }
   if (storage.type === "s3") {
     const cfg = storage.config || {};
+    // signatureVersion: v2 for legacy self-hosted servers, v4 (default) for AWS-compatible services
+    const sv = cfg.signature_version || cfg.signatureVersion || "v4";
     return new S3Client({
       endpoint: storage.endpoint || cfg.endpoint || "",
       region: storage.region || cfg.region || "us-east-1",
@@ -170,6 +172,7 @@ export function createClient(
       bucket: storage.bucket || cfg.bucket || "",
       basePath: storage.basePath || cfg.root_folder_path || cfg.base_path || "/",
       usePathStyle: cfg.path_style === true || cfg.use_path_style === true ? true : (cfg.path_style === false || cfg.use_path_style === false ? false : undefined),
+      signatureVersion: sv === "v2" ? "v2" : "v4",
     });
   }
   return new S3Client({
