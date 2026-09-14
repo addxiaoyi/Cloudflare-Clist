@@ -442,10 +442,12 @@ export class GoogleDriveClient {
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
-    const fileId = await this.findFileIdByPath(stripLeadingSlash(sourceKey));
+    const sourceClean = stripLeadingSlash(sourceKey).replace(/\/$/, "");
+    const fileId = await this.findFileIdByPath(sourceClean);
     if (!fileId) {
       throw new Error("Google Drive source not found");
     }
+    
     const normalized = stripLeadingSlash(destKey);
     const parentPath = normalized.includes("/") ? normalized.slice(0, normalized.lastIndexOf("/")) : "";
     const fileName = normalized.split("/").pop() || "copy";
@@ -453,11 +455,17 @@ export class GoogleDriveClient {
     if (!parentId) {
       throw new Error("Google Drive parent not found");
     }
+    
     const url = `${this.apiBase}/files/${fileId}/copy?supportsAllDrives=true`;
-    await this.requestJson(url, "POST", {
+    const isDirectory = sourceKey.endsWith("/");
+    const body: Record<string, unknown> = {
       name: fileName,
       parents: [parentId],
-    });
+    };
+    if (isDirectory) {
+      body.mimeType = "application/vnd.google-apps.folder";
+    }
+    await this.requestJson(url, "POST", body);
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
