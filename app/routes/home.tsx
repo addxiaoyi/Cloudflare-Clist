@@ -1204,7 +1204,7 @@ const isS3 = formData.type === "s3";
   const [oauthAuthorized, setOauthAuthorized] = useState(false);
 
   // 夸克扫码登录：弹窗内的二维码、轮询状态与定时器
-  type QrStatus = "loading" | "waiting" | "scanned" | "success" | "expired" | "failed";
+  type QrStatus = "loading" | "waiting" | "success" | "expired" | "failed";
   const [qrOpen, setQrOpen] = useState(false);
   const [qrImage, setQrImage] = useState("");
   const [qrStatus, setQrStatus] = useState<QrStatus>("loading");
@@ -1213,6 +1213,8 @@ const isS3 = formData.type === "s3";
   const qrSessionRef = useRef("");
   const qrPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qrAbortRef = useRef<AbortController | null>(null);
 
   // gdrive 类型时查询 OAuth 配置与授权状态，用于显示按钮提示
   useEffect(() => {
@@ -1423,6 +1425,14 @@ const isS3 = formData.type === "s3";
       clearInterval(qrTickRef.current);
       qrTickRef.current = null;
     }
+    if (qrCloseRef.current) {
+      clearTimeout(qrCloseRef.current);
+      qrCloseRef.current = null;
+    }
+    if (qrAbortRef.current) {
+      qrAbortRef.current.abort();
+      qrAbortRef.current = null;
+    }
   };
 
   const closeQuarkQr = () => {
@@ -1440,13 +1450,17 @@ const isS3 = formData.type === "s3";
     const session = qrSessionRef.current;
     if (!session) return;
 
+    qrAbortRef.current = new AbortController();
     let result: { status?: string; cookie?: string; message?: string };
     try {
-      const res = await fetch(`/api/quark-qr?action=query&session=${encodeURIComponent(session)}`);
+      const res = await fetch(`/api/quark-qr?action=query&session=${encodeURIComponent(session)}`, {
+        signal: qrAbortRef.current.signal,
+      });
       result = (await res.json()) as typeof result;
     } catch {
       result = {};
     }
+    qrAbortRef.current = null;
     if (qrSessionRef.current !== session) return;
 
     if (result.status === "success") {
@@ -1454,7 +1468,7 @@ const isS3 = formData.type === "s3";
       setQrStatus("success");
       setQrHint("已获取登录 Cookie，请保存配置");
       writeQuarkCookie(result.cookie || "");
-      qrPollRef.current = setTimeout(closeQuarkQr, 1200);
+      qrCloseRef.current = setTimeout(closeQuarkQr, 1200);
       return;
     }
     if (result.status === "expired" || result.status === "failed") {
@@ -1505,7 +1519,15 @@ const isS3 = formData.type === "s3";
       setQrHint("打开夸克 App 扫码并确认登录");
       qrPollRef.current = setTimeout(pollQuarkQr, data.pollIntervalMs || QUARK_QR_POLL_MS);
       qrTickRef.current = setInterval(() => {
-        setQrCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+        setQrCountdown((prev) => {
+          if (prev <= 1) {
+            stopQuarkQr();
+            setQrStatus("expired");
+            setQrHint("二维码已过期，请重新获取");
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
     } catch {
       setQrStatus("failed");
@@ -1514,14 +1536,6 @@ const isS3 = formData.type === "s3";
   };
 
   useEffect(() => stopQuarkQr, []);
-
-  useEffect(() => {
-    if (qrOpen && qrStatus === "waiting" && qrCountdown === 0) {
-      stopQuarkQr();
-      setQrStatus("expired");
-      setQrHint("二维码已过期，请重新获取");
-    }
-  }, [qrOpen, qrStatus, qrCountdown]);
 
   // OneDrive OAuth 配置状态查询
   useEffect(() => {
@@ -1944,23 +1958,32 @@ const isS3 = formData.type === "s3";
       </div>
     </div>
       {qrOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={closeQuarkQr}>
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-xs rounded-xl shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+          onClick={closeQuarkQr}
+          role="dialog"
+          aria-modal="true"
+          aria-label="夸克扫码登录"
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-xs rounded-xl shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4">
               <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                <Smartphone className="w-4 h-4" />
+                <Smartphone className="w-4 h-4" aria-hidden="true" />
                 夸克扫码登录
               </span>
-              <button onClick={closeQuarkQr} className="icon-btn h-7 w-7" aria-label="关闭">
-                <X />
+              <button onClick={closeQuarkQr} className="icon-btn h-7 w-7" aria-label="关闭扫码弹窗">
+                <X aria-hidden="true" />
               </button>
             </div>
 
             <div className="relative aspect-square rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white flex items-center justify-center overflow-hidden">
               {qrImage ? (
-                <img src={qrImage} alt="夸克登录二维码" className="w-full h-full object-contain p-2" />
+                <img src={qrImage} alt="夸克登录二维码，请使用夸克 App 扫码" className="w-full h-full object-contain p-2" />
               ) : (
-                <RefreshCw className={`w-6 h-6 text-zinc-400 ${qrStatus === "loading" ? "animate-spin" : ""}`} />
+                <RefreshCw className={`w-6 h-6 text-zinc-400 ${qrStatus === "loading" ? "animate-spin" : ""}`} aria-hidden="true" />
               )}
               {(qrStatus === "expired" || qrStatus === "failed") && (
                 <div className="absolute inset-0 bg-white/95 dark:bg-zinc-900/95 flex flex-col items-center justify-center gap-3 px-4">
@@ -1976,7 +1999,7 @@ const isS3 = formData.type === "s3";
               )}
             </div>
 
-            <div className="mt-3 text-xs text-center leading-relaxed">
+            <div className="mt-3 text-xs text-center leading-relaxed" role="status" aria-live="polite">
               {qrStatus === "success" ? (
                 <span className="text-emerald-600 dark:text-emerald-400">{qrHint}</span>
               ) : qrStatus === "waiting" || qrStatus === "loading" ? (
