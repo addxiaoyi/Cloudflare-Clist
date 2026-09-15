@@ -206,7 +206,7 @@ export function FilePreview({
       >
         {showInfo && mediaInfo && (
           <div
-            className="absolute right-4 top-4 z-20 w-52 bg-black/70 backdrop-blur border border-white/10 rounded-lg p-3 text-xs space-y-1.5"
+            className="absolute right-4 top-4 z-20 w-52 bg-black/70 backdrop-blur border border-white/10 rounded-lg p-3 text-xs space-y-1.5 transition-all duration-200 opacity-100"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-zinc-400 font-medium mb-1.5">媒体信息</div>
@@ -232,7 +232,8 @@ export function FilePreview({
         {hasPrev && (
           <button
             onClick={onPrev}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-4xl z-10 p-2"
+            aria-label="上一张"
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 text-4xl z-10 p-2 rounded transition"
           >
             ‹
           </button>
@@ -240,7 +241,8 @@ export function FilePreview({
         {hasNext && (
           <button
             onClick={onNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-4xl z-10 p-2"
+            aria-label="下一张"
+            className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white focus-visible:ring-2 focus-visible:ring-white/80 text-4xl z-10 p-2 rounded transition"
           >
             ›
           </button>
@@ -457,6 +459,8 @@ function VideoPlayer({
   const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hoverPos, setHoverPos] = useState<number>(0);
   const controlsTimeoutRef = useRef<number | null>(null);
 
   const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -742,6 +746,14 @@ function VideoPlayer({
           ref={progressRef}
           className="relative h-1 bg-white/20 rounded-full cursor-pointer mb-3 group/progress"
           onClick={handleProgressClick}
+          onMouseMove={(e) => {
+            if (!progressRef.current) return;
+            const rect = progressRef.current.getBoundingClientRect();
+            const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            setHoverPos(percent * 100);
+            setHoverTime(percent * duration);
+          }}
+          onMouseLeave={() => setHoverTime(null)}
         >
           {/* Buffered */}
           <div
@@ -758,6 +770,14 @@ function VideoPlayer({
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity shadow-lg"
             style={{ left: `calc(${progress}% - 6px)` }}
           />
+          {hoverTime !== null && (
+            <div
+              className="absolute -top-8 bg-black/90 text-white text-[11px] px-1.5 py-0.5 rounded font-mono pointer-events-none"
+              style={{ left: `${hoverPos}%`, transform: 'translateX(-50%)' }}
+            >
+              {formatDuration(hoverTime)}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between">
@@ -765,7 +785,8 @@ function VideoPlayer({
             {/* Play/Pause */}
             <button
               onClick={togglePlay}
-              className="text-white p-1.5 hover:bg-white/10 rounded transition"
+              aria-label={isPlaying ? '暂停' : '播放'}
+              className="text-white p-1.5 hover:bg-white/10 rounded transition focus-visible:ring-2 focus-visible:ring-white/80"
             >
               {isPlaying ? (
                 <svg
@@ -789,13 +810,15 @@ function VideoPlayer({
             {/* Skip buttons */}
             <button
               onClick={() => skip(-10)}
-              className="text-white/70 hover:text-white p-1 text-xs font-mono"
+              aria-label="后退 10 秒"
+              className="text-white/70 hover:text-white p-1 text-xs font-mono rounded focus-visible:ring-2 focus-visible:ring-white/80"
             >
               -10s
             </button>
             <button
               onClick={() => skip(10)}
-              className="text-white/70 hover:text-white p-1 text-xs font-mono"
+              aria-label="前进 10 秒"
+              className="text-white/70 hover:text-white p-1 text-xs font-mono rounded focus-visible:ring-2 focus-visible:ring-white/80"
             >
               +10s
             </button>
@@ -811,7 +834,8 @@ function VideoPlayer({
             <div className="relative">
               <button
                 onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-                className="text-white/70 hover:text-white px-2 py-1 text-xs font-mono hover:bg-white/10 rounded transition"
+                aria-label="播放速度"
+                className="text-white/70 hover:text-white px-2 py-1 text-xs font-mono hover:bg-white/10 rounded transition focus-visible:ring-2 focus-visible:ring-white/80"
               >
                 {playbackRate}x
               </button>
@@ -838,7 +862,8 @@ function VideoPlayer({
             <div className="flex items-center gap-1 group/vol">
               <button
                 onClick={toggleMute}
-                className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition"
+                aria-label={isMuted ? '取消静音' : '静音'}
+                className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition focus-visible:ring-2 focus-visible:ring-white/80"
               >
                 {isMuted || volume === 0 ? (
                   <svg
@@ -874,7 +899,8 @@ function VideoPlayer({
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
-              className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition"
+              aria-label="全屏"
+              className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition focus-visible:ring-2 focus-visible:ring-white/80"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
@@ -902,6 +928,8 @@ function AudioPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -941,6 +969,25 @@ function AudioPlayer({
       audioRef.current.volume = vol;
     }
   };
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const onCanPlay = () => setLoading(false);
+    const onError = () => {
+      setLoading(false);
+      setError('音频加载失败');
+    };
+    el.addEventListener('canplay', onCanPlay, { once: true });
+    el.addEventListener('error', onError, { once: true });
+    return () => {
+      el.removeEventListener('canplay', onCanPlay);
+      el.removeEventListener('error', onError);
+    };
+  }, [url]);
+
+  if (loading) return <PreviewLoading />;
+  if (error) return <PreviewError msg={error} />;
 
   return (
     <div className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-lg p-6">
@@ -1042,22 +1089,25 @@ function ImageViewer({
       <div className="flex items-center gap-2 mb-4 bg-black/50 rounded-lg px-3 py-2">
         <button
           onClick={zoomOut}
-          className="text-white px-2 hover:text-blue-400"
+          aria-label="缩小"
+          className="text-white px-2 hover:text-blue-400 rounded focus-visible:ring-2 focus-visible:ring-white/80 transition"
         >
           −
         </button>
-        <span className="text-white text-sm font-mono w-16 text-center">
+        <span className="text-white text-sm font-mono w-16 text-center" aria-live="polite">
           {Math.round(scale * 100)}%
         </span>
         <button
           onClick={zoomIn}
-          className="text-white px-2 hover:text-blue-400"
+          aria-label="放大"
+          className="text-white px-2 hover:text-blue-400 rounded focus-visible:ring-2 focus-visible:ring-white/80 transition"
         >
           +
         </button>
         <button
           onClick={resetZoom}
-          className="text-zinc-400 text-xs ml-2 hover:text-white"
+          aria-label="重置缩放"
+          className="text-zinc-400 text-xs ml-2 hover:text-white rounded focus-visible:ring-2 focus-visible:ring-white/80 transition"
         >
           重置
         </button>
@@ -1697,12 +1747,44 @@ function MarkdownViewer({
 
 // PDF Viewer Component
 function PDFViewer({ url }: { url: string }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error('加载失败');
+        return res.blob();
+      })
+      .then((blob) => {
+        if (!cancelled) setLoading(false);
+        const objectUrl = URL.createObjectURL(blob);
+        const iframe = document.getElementById('preview-pdf-iframe') as HTMLIFrameElement | null;
+        if (iframe) iframe.src = objectUrl;
+        return () => URL.revokeObjectURL(objectUrl);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setLoading(false);
+          setError(e instanceof Error ? e.message : '无法预览');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (loading) return <PreviewLoading />;
+  if (error) return <PreviewError msg={error} />;
   return (
     <div className="w-full h-full max-w-5xl max-h-[calc(100vh-100px)]">
       <iframe
-        src={url}
-        className="w-full h-full bg-white rounded-lg"
+        id="preview-pdf-iframe"
         title="PDF Viewer"
+        className="w-full h-full bg-white rounded-lg"
       />
     </div>
   );
