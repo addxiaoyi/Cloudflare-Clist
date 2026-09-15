@@ -4,11 +4,11 @@
 
 ### 错误 530 / 1016 解决方法
 
-| 问题 | 解决方法 |
-|------|----------|
+| 问题                     | 解决方法                                  |
+| ------------------------ | ----------------------------------------- |
 | AccessKey/SecretKey 错误 | 在七牛云控制台 → 个人中心 → 密钥管理 获取 |
-| Bucket 名称错误 | 使用 **S3 空间名** 而非 KODO 空间名 |
-| 区域不匹配 | 区域必须和 bucket 创建时的区域一致 |
+| Bucket 名称错误          | 使用 **S3 空间名** 而非 KODO 空间名       |
+| 区域不匹配               | 区域必须和 bucket 创建时的区域一致        |
 
 ## 获取凭证
 
@@ -28,13 +28,13 @@ S3 空间名（Bucket）获取方式：
 
 ## 区域配置
 
-| 区域选择 | AWS Region | S3 端点 |
-|----------|------------|---------|
-| 华东 | z0（默认） | s3.cn-east-1.qiniucs.com |
-| 华北 | z1 | s3.cn-north-1.qiniucs.com |
-| 华南 | z2 | s3.cn-south-1.qiniucs.com |
-| 北美 | na0 | s3.us-north-1.qiniucs.com |
-| 亚太 | as0 | s3.ap-southeast-1.qiniucs.com |
+| 区域选择 | AWS Region | S3 端点                       |
+| -------- | ---------- | ----------------------------- |
+| 华东     | z0（默认） | s3.cn-east-1.qiniucs.com      |
+| 华北     | z1         | s3.cn-north-1.qiniucs.com     |
+| 华南     | z2         | s3.cn-south-1.qiniucs.com     |
+| 北美     | na0        | s3.us-north-1.qiniucs.com     |
+| 亚太     | as0        | s3.ap-southeast-1.qiniucs.com |
 
 ## 配置示例
 
@@ -58,12 +58,14 @@ S3 空间名（Bucket）获取方式：
 ### 步骤 1：确认空间类型
 
 进入七牛云控制台 → 对象存储 → 空间管理：
+
 - ✅ 看到 "S3 Compatible API" 标识 → 正确
 - ❌ 只有 KODO 标识 → 需要创建 S3 空间
 
 ### 步骤 2：获取正确 S3 空间名
 
 如果 KODO 空间名已全局唯一，直接用；否则：
+
 ```bash
 # 通过 API 获取所有 S3 空间名
 curl --get "https://rs.qiniu.com/v3/bucket" \
@@ -73,12 +75,14 @@ curl --get "https://rs.qiniu.com/v3/bucket" \
 ### 步骤 3：检查区域匹配
 
 确保存储配置的区域和 bucket 创建时的区域一致：
+
 - 华东创建的 bucket → 选 z0
 - 华北创建的 bucket → 选 z1
 
 ### 步骤 4：验证连接
 
 在本地测试 S3 兼容性：
+
 ```bash
 # 使用 AWS CLI
 aws s3 ls s3://your-bucket \

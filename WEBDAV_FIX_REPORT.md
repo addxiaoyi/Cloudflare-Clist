@@ -3,11 +3,13 @@
 ## 问题概述
 
 **原始错误**：
+
 ```
 WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org/dav/11)
 ```
 
 **根本原因**：
+
 1. React Router 7 的路由系统将读操作（GET, PROPFIND）路由到 `loader`，写操作（PUT, DELETE）路由到 `action`
 2. 原代码在 `loader` 和 `action` 中有重复的逻辑，且可能导致某些 HTTP 方法无法正确路由
 3. 缺少必要的 WebDAV 响应头（DAV, CORS）
@@ -19,6 +21,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
 **文件**：`app/routes/dav.$storageId.$.ts`
 
 **关键改进**：
+
 - ✅ 创建统一的 `handleWebdavRequest` 函数处理所有 WebDAV 方法
 - ✅ `loader` 和 `action` 都调用同一个处理函数
 - ✅ OPTIONS 请求添加完整的 CORS 头
@@ -27,6 +30,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
 - ✅ 改进错误处理和日志输出
 
 **支持的 HTTP 方法**：
+
 - OPTIONS (WebDAV 能力发现)
 - PROPFIND (列出文件/目录)
 - GET (下载文件)
@@ -42,6 +46,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
 创建了 **9 个新文档**：
 
 #### 英文文档
+
 1. **WEBDAV_SETUP.md** (6KB+)
    - 完整的配置指南
    - 多平台客户端设置
@@ -62,6 +67,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
    - 后续建议
 
 #### 中文文档
+
 4. **WEBDAV_快速修复.md** (5KB+)
    - 针对中文用户的快速指南
    - 详细的故障排查步骤
@@ -74,6 +80,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
    - 常见问题汇总
 
 #### 更新日志
+
 6. **CHANGELOG_WEBDAV.md** (5KB+)
    - 版本历史
    - 详细的变更记录
@@ -81,11 +88,13 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
    - 未来计划
 
 #### 配置文件
+
 7. **.dev.vars.example**
    - 本地开发环境变量模板
    - 包含所有必需的配置项
 
 #### 测试脚本
+
 8. **test-webdav.sh** (Linux/macOS)
    - 自动化测试所有 WebDAV 操作
    - 包含 7 个测试场景
@@ -95,18 +104,21 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
    - 彩色输出，易读性强
 
 #### 更新现有文档
+
 - **docs/webdav.md** - 添加 URL 格式要求和故障排查
 - **README.md** - 更新 WebDAV 配置说明
 
 ### 3. 测试工具 ✅
 
 **功能**：
+
 - 自动测试所有 WebDAV 操作
 - 支持 Windows (PowerShell) 和 Linux/macOS (Bash)
 - 彩色输出，清晰的结果展示
 - 自动清理测试数据
 
 **测试覆盖**：
+
 - OPTIONS - WebDAV 能力发现
 - PROPFIND - 目录列表
 - PUT - 文件上传
@@ -119,6 +131,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
 ### 关键配置
 
 **环境变量（必须）**：
+
 ```json
 {
   "WEBDAV_ENABLED": "true",
@@ -128,6 +141,7 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
 ```
 
 **URL 格式（重要）**：
+
 - ✅ 正确：`https://mirrors.ohyraw.dpdns.org/dav/11/`
 - ❌ 错误：`https://mirrors.ohyraw.dpdns.org/dav/11`
 
@@ -136,11 +150,13 @@ WebDAV PROPFIND 失败: 405 Method Not Allowed (https://mirrors.ohyraw.dpdns.org
 ### 验证步骤
 
 **1. 快速测试**：
+
 ```bash
 curl -i -X OPTIONS https://mirrors.ohyraw.dpdns.org/dav/11/
 ```
 
 **期望结果**：
+
 ```
 HTTP/2 200
 DAV: 1, 2
@@ -148,6 +164,7 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ```
 
 **2. 完整测试**：
+
 ```bash
 # Linux/macOS
 ./scripts/test-webdav.sh https://mirrors.ohyraw.dpdns.org username password 11
@@ -161,16 +178,19 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ### 用户需要执行的操作
 
 1. **拉取更新**：
+
    ```bash
    git pull origin master
    ```
 
 2. **构建项目**：
+
    ```bash
    npm run build
    ```
 
 3. **部署到 Cloudflare**：
+
    ```bash
    npm run deploy
    ```
@@ -192,26 +212,31 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ## 客户端推荐
 
 ### Windows
+
 - **RaiDrive** (免费，推荐) - https://www.raidrive.com/
 - **NetDrive** (付费) - https://www.netdrive.net/
 - **Cyberduck** (免费，跨平台) - https://cyberduck.io/
 
 ### macOS
+
 - **Finder** (内置) - 前往 → 连接到服务器
 - **Transmit** (付费) - https://panic.com/transmit/
 - **Cyberduck** (免费) - https://cyberduck.io/
 
 ### Linux
+
 - **davfs2** (命令行)
 - **Nautilus/Dolphin** (文件管理器内置)
 
 ### 移动设备
+
 - **iOS**: Documents by Readdle, FE File Explorer
 - **Android**: Solid Explorer, FX File Explorer, Total Commander
 
 ## 已知问题和限制
 
 ### 当前限制
+
 1. ⚠️ **不支持文件锁定**（LOCK/UNLOCK 未实现）
    - 多客户端并发修改可能导致冲突
    - 建议：避免多客户端同时编辑同一文件
@@ -227,18 +252,21 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ### 后续改进计划
 
 **短期**（1-2 周）：
+
 - [ ] 实现 LOCK/UNLOCK 支持
 - [ ] 添加访问日志记录
 - [ ] 支持 ETag 缓存控制
 - [ ] 添加速率限制
 
 **中期**（1-2 月）：
+
 - [ ] 只读访问模式
 - [ ] IP 白名单功能
 - [ ] 性能监控仪表板
 - [ ] 压缩传输支持
 
 **长期**（3+ 月）：
+
 - [ ] 多因素认证
 - [ ] 详细的审计日志
 - [ ] 自动化测试套件
@@ -247,6 +275,7 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ## 文件清单
 
 ### 修改的文件
+
 ```
 ✏️ app/routes/dav.$storageId.$.ts      (核心修复)
 ✏️ docs/webdav.md                      (更新)
@@ -254,6 +283,7 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ```
 
 ### 新增的文件
+
 ```
 📄 docs/WEBDAV_SETUP.md
 📄 docs/WEBDAV_TROUBLESHOOTING.md
@@ -267,6 +297,7 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ```
 
 ### 文件统计
+
 - **总计新增文件**：9 个
 - **修改的文件**：3 个
 - **文档总大小**：约 35KB+
@@ -275,12 +306,14 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ## 质量保证
 
 ### 测试覆盖
+
 - ✅ 所有 WebDAV 方法手动测试通过
 - ✅ 多平台客户端测试（Windows, macOS, Linux, iOS, Android）
 - ✅ TypeScript 类型检查（WebDAV 代码无错误）
 - ✅ 错误场景测试（401, 403, 404, 405）
 
 ### 文档质量
+
 - ✅ 英文和中文双语文档
 - ✅ 详细的故障排查指南
 - ✅ 实用的测试脚本
@@ -291,6 +324,7 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ### 问题解决状态：✅ 已解决
 
 **核心问题**：
+
 - ✅ 405 Method Not Allowed 错误 → **已修复**
 - ✅ 缺少 WebDAV 响应头 → **已添加**
 - ✅ 代码重复 → **已重构**
@@ -324,11 +358,13 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ### 技术支持
 
 如有问题，请查阅：
+
 1. 📖 [快速修复指南](./docs/WEBDAV_快速修复.md) - 针对 405 错误
 2. 📖 [完整配置指南](./docs/WEBDAV_SETUP.md) - 详细说明
 3. 📖 [故障排查清单](./docs/WEBDAV_TROUBLESHOOTING.md) - 诊断工具
 
 或联系：
+
 - 📧 邮箱：laowan345@gmail.com
 - 🐛 GitHub：https://github.com/ooyyh/Cloudflare-Clist/issues
 

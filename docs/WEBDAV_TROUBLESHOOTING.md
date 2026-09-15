@@ -7,6 +7,7 @@
 #### ✅ 1. 检查环境变量配置
 
 **本地开发环境** (`.dev.vars`):
+
 ```env
 WEBDAV_ENABLED=true
 WEBDAV_USERNAME=your_username
@@ -14,6 +15,7 @@ WEBDAV_PASSWORD=your_password
 ```
 
 **生产环境** (Cloudflare Dashboard):
+
 1. 登录 Cloudflare Dashboard
 2. Workers & Pages → 你的 Worker → Settings → Variables
 3. 确认存在：
@@ -24,21 +26,25 @@ WEBDAV_PASSWORD=your_password
 #### ✅ 2. 检查 URL 格式
 
 **正确格式**：
+
 - ✅ `https://your-domain/dav/11/` (有尾部斜杠)
 - ✅ `https://your-domain/dav/0/` (访问所有存储)
 
 **错误格式**：
+
 - ❌ `https://your-domain/dav/11` (缺少尾部斜杠)
 - ❌ `http://your-domain/dav/11/` (使用 HTTP 而不是 HTTPS)
 
 #### ✅ 3. 测试 WebDAV 是否启用
 
 **方法 A: 使用 curl**
+
 ```bash
 curl -i -X OPTIONS https://your-domain/dav/11/
 ```
 
 **期望结果**：
+
 ```
 HTTP/2 200
 DAV: 1, 2
@@ -46,6 +52,7 @@ Allow: OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, MKCOL, COPY, MOVE
 ```
 
 **方法 B: 使用 PowerShell**
+
 ```powershell
 Invoke-WebRequest -Uri "https://your-domain/dav/11/" -Method OPTIONS
 ```
@@ -61,10 +68,12 @@ curl -i -X PROPFIND \
 ```
 
 **期望结果**：
+
 - 状态码：`207 Multi-Status`
 - 响应体：XML 格式的文件列表
 
 **如果返回 401**：
+
 - 检查用户名密码是否正确
 - 确认 Base64 编码正确
 
@@ -81,6 +90,7 @@ wrangler deployments list
 #### ✅ 6. 检查路由配置
 
 确认 `app/routes.ts` 中存在：
+
 ```typescript
 route("dav/:storageId/*", "routes/dav.$storageId.$.ts"),
 ```
@@ -103,6 +113,7 @@ wrangler deploy
 **原因**：环境变量配置错误
 
 **解决**：
+
 1. 检查拼写：`WEBDAV_ENABLED` (全大写)
 2. 值必须是字符串 `"true"`，不是布尔值 `true`
 3. 重新部署
@@ -112,6 +123,7 @@ wrangler deploy
 **原因**：认证失败
 
 **解决**：
+
 1. 检查用户名密码
 2. 确认环境变量已设置
 3. 尝试使用管理员凭据（如果未设置 WebDAV 凭据）
@@ -121,6 +133,7 @@ wrangler deploy
 **原因**：Storage ID 不存在或路径错误
 
 **解决**：
+
 1. 确认 Storage ID 存在
 2. 检查 URL 路径格式
 3. 尝试访问 `/dav/0/` 查看所有存储
@@ -130,6 +143,7 @@ wrangler deploy
 **原因**：尝试修改根目录
 
 **解决**：
+
 - 不能直接修改 `/dav/0/`
 - 必须指定具体的 Storage ID，如 `/dav/11/`
 
@@ -173,12 +187,14 @@ curl -i -X DELETE \
 ### 使用测试脚本
 
 **Linux/macOS**:
+
 ```bash
 chmod +x scripts/test-webdav.sh
 ./scripts/test-webdav.sh https://your-domain username password 11
 ```
 
 **Windows**:
+
 ```powershell
 .\scripts\test-webdav.ps1 -BaseUrl "https://your-domain" -Username "username" -Password "password" -StorageId 11
 ```

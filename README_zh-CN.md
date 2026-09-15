@@ -40,25 +40,30 @@ Starx 通过统一的 Web 界面管理多个云存储后端，提供上传、预
 ## 核心能力
 
 ### 文件管理
+
 - 文件上传与下载（支持分块上传）
 - 文件预览与代码高亮
 - 目录结构管理与快速搜索
 
 ### 多存储后端
+
 - 多后端统一管理与切换
 - 存储访问参数灵活配置
 - 后端类型与名称标识
 
 ### 访问控制
+
 - 管理员登录与会话管理
 - 访客权限：浏览 / 下载 / 上传可分项控制
 - 存储后端可设置公开或私有
 
 ### 文件分享
+
 - 生成文件或目录分享链接
 - 支持分享有效期与分享令牌
 
 ### WebDAV
+
 - 对外提供 WebDAV 访问
 - 支持独立 WebDAV 账号或复用管理员账号
 
@@ -105,20 +110,20 @@ Copy-Item .\wrangler.jsonc.example .\wrangler.jsonc
 
 以下为默认配置字段（来自 `wrangler.jsonc.example`）：
 
-| 变量 | 必填 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `ADMIN_USERNAME` | 是 | `admin` | 管理员用户名 |
-| `ADMIN_PASSWORD` | 是 | `changeme` | 管理员密码 |
-| `SITE_TITLE` | 否 | `Starx` | 站点标题 |
-| `SITE_ANNOUNCEMENT` | 否 | `Welcome to Starx storage service!` | 站点公告 |
-| `CHUNK_SIZE_MB` | 否 | `10` | 上传分块大小（MB） |
-| `WEBDAV_ENABLED` | 否 | `false` | 是否启用 WebDAV |
-| `WEBDAV_USERNAME` | 否 | `webdav` | WebDAV 用户名 |
-| `WEBDAV_PASSWORD` | 否 | `changeme` | WebDAV 密码 |
-| `VALUE_FROM_CLOUDFLARE` | 否 | `Hello from Cloudflare` | 示例变量（可选） |
-| `GOOGLE_CLIENT_ID` | 否 | 空 | Google Drive 客户端 ID |
-| `GOOGLE_CLIENT_SECRET` | 否 | 空 | Google Drive 客户端密钥 |
-| `GOOGLE_REDIRECT_URI` | 否 | 空 | Google Drive 回调地址 |
+| 变量                    | 必填 | 默认值                              | 说明                    |
+| ----------------------- | ---- | ----------------------------------- | ----------------------- |
+| `ADMIN_USERNAME`        | 是   | `admin`                             | 管理员用户名            |
+| `ADMIN_PASSWORD`        | 是   | `changeme`                          | 管理员密码              |
+| `SITE_TITLE`            | 否   | `Starx`                             | 站点标题                |
+| `SITE_ANNOUNCEMENT`     | 否   | `Welcome to Starx storage service!` | 站点公告                |
+| `CHUNK_SIZE_MB`         | 否   | `10`                                | 上传分块大小（MB）      |
+| `WEBDAV_ENABLED`        | 否   | `false`                             | 是否启用 WebDAV         |
+| `WEBDAV_USERNAME`       | 否   | `webdav`                            | WebDAV 用户名           |
+| `WEBDAV_PASSWORD`       | 否   | `changeme`                          | WebDAV 密码             |
+| `VALUE_FROM_CLOUDFLARE` | 否   | `Hello from Cloudflare`             | 示例变量（可选）        |
+| `GOOGLE_CLIENT_ID`      | 否   | 空                                  | Google Drive 客户端 ID  |
+| `GOOGLE_CLIENT_SECRET`  | 否   | 空                                  | Google Drive 客户端密钥 |
+| `GOOGLE_REDIRECT_URI`   | 否   | 空                                  | Google Drive 回调地址   |
 
 > 敏感字段（如 `ADMIN_PASSWORD`、Google 密钥）建议部署后在 Cloudflare 控制台 → Settings → Variables and Secrets 中修改为 Secret，避免明文留在仓库。
 
@@ -179,11 +184,11 @@ npm run typecheck
 3. 选择仓库与分支（默认 `main`）。
 4. 在构建设置中填写：
 
-   | 配置项 | 值 |
-   | --- | --- |
-   | 构建命令 | `npm run build` |
+   | 配置项   | 值                                                        |
+   | -------- | --------------------------------------------------------- |
+   | 构建命令 | `npm run build`                                           |
    | 部署命令 | `npx wrangler deploy --config build/server/wrangler.json` |
-   | 根目录 | 留空 |
+   | 根目录   | 留空                                                      |
 
 5. 保存后，推送代码即自动部署。首次部署自动创建 D1 数据库与 R2 桶，应用首次访问自动建表。
 

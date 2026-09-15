@@ -545,14 +545,17 @@ function VideoPlayer({
     }
   };
 
-  const skip = useCallback((seconds: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(
-        0,
-        Math.min(duration, videoRef.current.currentTime + seconds),
-      );
-    }
-  }, [duration]);
+  const skip = useCallback(
+    (seconds: number) => {
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.max(
+          0,
+          Math.min(duration, videoRef.current.currentTime + seconds),
+        );
+      }
+    },
+    [duration],
+  );
 
   const handleMouseMove = () => {
     setShowControls(true);

@@ -5,13 +5,12 @@ import type { StorageLike } from '~/lib/client-factory';
 import { GitRepositoryClient } from '~/lib/git/git-repository-client';
 
 describe('createClient Git Dispatch', () => {
-  const TYPE_CONFIGS: Array<{ type: string; token: string }> =
-    [
-      { type: 'github', token: 'ghp_test' },
-      { type: 'gitlab', token: 'glpat_test' },
-      { type: 'gitea', token: 'gitea_test' },
-      { type: 'gitee', token: 'gitee_test' },
-    ];
+  const TYPE_CONFIGS: Array<{ type: string; token: string }> = [
+    { type: 'github', token: 'ghp_test' },
+    { type: 'gitlab', token: 'glpat_test' },
+    { type: 'gitea', token: 'gitea_test' },
+    { type: 'gitee', token: 'gitee_test' },
+  ];
 
   test.each(TYPE_CONFIGS)(
     "createClient(type='${this.type}') 返回 GitRepositoryClient 实例",

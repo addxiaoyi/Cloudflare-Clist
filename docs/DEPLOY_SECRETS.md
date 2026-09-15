@@ -23,9 +23,9 @@
 
 添加以下两个 Secrets：
 
-| Secret 名称 | 说明 | 示例值 |
-|------------|------|--------|
-| `CF_API_TOKEN` | Cloudflare API Token | `xxxx-xxxx-xxxx` |
+| Secret 名称     | 说明                  | 示例值             |
+| --------------- | --------------------- | ------------------ |
+| `CF_API_TOKEN`  | Cloudflare API Token  | `xxxx-xxxx-xxxx`   |
 | `CF_ACCOUNT_ID` | Cloudflare Account ID | `1234567890abcdef` |
 
 ## 3. 查找 Account ID
@@ -35,12 +35,14 @@
 ## 4. 触发部署
 
 推送到 master/main 分支后自动触发：
+
 - workers/ 目录变更
 - app/ 目录变更
 - package.json 变更
 - wrangler.jsonc 变更
 
 手动触发：
+
 ```bash
 git push
 ```
@@ -74,6 +76,7 @@ wrangler hyperdrive create clist-hyperdrive \
 ```
 
 输出会包含一个 Hyperdrive ID：
+
 ```
 ✅ Created Hyperdrive configuration
 {
@@ -106,13 +109,13 @@ npx wrangler deploy
 
 在 Starx 首页 → 添加存储 → 类型选择 "MySQL 数据库" → 填写：
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| 显示名称 | 自定义存储名 | "生产数据库" |
-| 描述 | 可选说明文字 | "订单系统 MySQL" |
-| Hyperdrive 连接串 | 可留空，自动用 binding 配置 | （留空） |
-| 数据库名 | 默认连接的数据库 | "my_database" |
-| 表前缀 | 可选，过滤业务表 | "wp_" |
+| 字段              | 说明                        | 示例             |
+| ----------------- | --------------------------- | ---------------- |
+| 显示名称          | 自定义存储名                | "生产数据库"     |
+| 描述              | 可选说明文字                | "订单系统 MySQL" |
+| Hyperdrive 连接串 | 可留空，自动用 binding 配置 | （留空）         |
+| 数据库名          | 默认连接的数据库            | "my_database"    |
+| 表前缀            | 可选，过滤业务表            | "wp_"            |
 
 保存后点击存储，会跳转 `/mysql/{id}` 浏览表结构和执行 SQL 查询。
 
@@ -124,7 +127,7 @@ npx wrangler deploy
 {
   "binding": "HD",
   "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "localConnectionString": "mysql://root@localhost:3306/db"
+  "localConnectionString": "mysql://root@localhost:3306/db",
 }
 ```
 
@@ -138,11 +141,11 @@ npx wrangler deploy
 
 要支持通过 OAuth 授权访问他人 Cloudflare R2 存储桶，需要配置以下环境变量：
 
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `CF_CLIENT_ID` | Cloudflare OAuth 客户端 ID | `xxxx.access` |
-| `CF_CLIENT_SECRET` | Cloudflare OAuth 客户端密钥 | `xxxxx` |
-| `CF_REDIRECT_URI` | 授权回调地址 | `https://your-domain/api/r2-oauth` |
+| 变量               | 说明                        | 示例                               |
+| ------------------ | --------------------------- | ---------------------------------- |
+| `CF_CLIENT_ID`     | Cloudflare OAuth 客户端 ID  | `xxxx.access`                      |
+| `CF_CLIENT_SECRET` | Cloudflare OAuth 客户端密钥 | `xxxxx`                            |
+| `CF_REDIRECT_URI`  | 授权回调地址                | `https://your-domain/api/r2-oauth` |
 
 ### 获取 OAuth 凭证
 

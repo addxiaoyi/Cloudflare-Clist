@@ -5,6 +5,7 @@
 ### 🐛 Bug 修复
 
 #### WebDAV 405 Method Not Allowed 错误
+
 - **问题**：WebDAV 客户端连接时返回 `405 Method Not Allowed` 错误
 - **原因**：React Router 7 的 `loader` 和 `action` 分离导致某些 HTTP 方法未正确路由
 - **修复**：重构 WebDAV 路由处理逻辑，统一所有 HTTP 方法的处理
@@ -12,11 +13,13 @@
 ### ✨ 新增功能
 
 #### 代码改进
+
 - 创建 `handleWebdavRequest` 统一请求处理函数
 - 消除 `loader` 和 `action` 之间的代码重复
 - 改进错误处理和日志记录
 
 #### 响应头增强
+
 - OPTIONS 请求添加 CORS 支持
   - `Access-Control-Allow-Origin: *`
   - `Access-Control-Allow-Methods`
@@ -26,6 +29,7 @@
 ### 📚 文档
 
 #### 新增文档
+
 1. **WEBDAV_SETUP.md** - 完整的 WebDAV 配置和使用指南
    - 详细的配置步骤
    - 多平台客户端配置说明
@@ -49,15 +53,18 @@
    - 客户端配置说明
 
 #### 更新文档
+
 - **webdav.md** - 添加 URL 格式要求和故障排查提示
 - **README.md** - 更新 WebDAV 配置说明，强调 URL 尾部斜杠的重要性
 
 #### 配置文件
+
 - **.dev.vars.example** - 本地开发环境变量模板
 
 ### 🧪 测试工具
 
 #### 测试脚本
+
 1. **test-webdav.sh** (Linux/macOS)
    - 自动化测试所有 WebDAV 操作
    - OPTIONS, PROPFIND, PUT, GET, MKCOL, DELETE
@@ -69,6 +76,7 @@
 ### 🔧 技术细节
 
 #### 修改的文件
+
 ```
 app/routes/dav.$storageId.$.ts  - WebDAV 路由处理 (重构)
 docs/webdav.md                  - WebDAV 文档 (更新)
@@ -83,6 +91,7 @@ README.md                       - WebDAV 部分 (更新)
 ```
 
 #### 代码变更摘要
+
 ```typescript
 // 之前：分散的处理逻辑
 export async function loader({ request, params, context }) {
@@ -118,21 +127,25 @@ export async function action({ request, params, context }) {
 #### 从之前的版本升级
 
 1. **拉取最新代码**：
+
    ```bash
    git pull origin master
    ```
 
 2. **安装依赖**（如有新依赖）：
+
    ```bash
    npm install
    ```
 
 3. **重新构建**：
+
    ```bash
    npm run build
    ```
 
 4. **部署到 Cloudflare**：
+
    ```bash
    npm run deploy
    ```
@@ -147,7 +160,7 @@ export async function action({ request, params, context }) {
    ```bash
    # Linux/macOS
    ./scripts/test-webdav.sh https://your-domain username password 11
-   
+
    # Windows
    .\scripts\test-webdav.ps1 -BaseUrl "https://your-domain" -Username "username" -Password "password" -StorageId 11
    ```
@@ -171,18 +184,21 @@ export async function action({ request, params, context }) {
 ### 🔮 未来计划
 
 #### 短期（1-2 周）
+
 - [ ] 实现 LOCK/UNLOCK 支持
 - [ ] 添加 WebDAV 访问日志
 - [ ] 支持 ETag 用于缓存控制
 - [ ] 添加速率限制
 
 #### 中期（1-2 月）
+
 - [ ] 只读访问模式
 - [ ] IP 白名单功能
 - [ ] WebDAV 性能监控
 - [ ] 压缩传输支持
 
 #### 长期（3+ 月）
+
 - [ ] WebDAV 集群支持
 - [ ] 多因素认证
 - [ ] 审计日志完善
@@ -191,6 +207,7 @@ export async function action({ request, params, context }) {
 ### 📊 测试覆盖
 
 #### 手动测试
+
 - ✅ OPTIONS - WebDAV 能力发现
 - ✅ PROPFIND - 列出文件和文件夹
 - ✅ GET - 下载文件
@@ -202,6 +219,7 @@ export async function action({ request, params, context }) {
 - ✅ MOVE - 移动/重命名文件
 
 #### 客户端测试
+
 - ✅ Windows - RaiDrive
 - ✅ macOS - Finder
 - ✅ Linux - davfs2
@@ -215,6 +233,7 @@ export async function action({ request, params, context }) {
 ### 📞 反馈
 
 如有问题或建议，请：
+
 - 提交 GitHub Issue：https://github.com/ooyyh/Cloudflare-Clist/issues
 - 发送邮件：laowan345@gmail.com
 

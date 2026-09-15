@@ -4,16 +4,16 @@
 
 The application uses the following environment variables:
 
-| Variable | Description |
-| --- | --- |
-| `ADMIN_USERNAME` | Administrator username for accessing the service |
-| `ADMIN_PASSWORD` | Administrator password for accessing the service |
-| `SITE_TITLE` | Title displayed on the website |
-| `SITE_ANNOUNCEMENT` | Announcement text shown on the homepage |
-| `CHUNK_SIZE_MB` | Maximum file chunk size in MB for uploads |
-| `WEBDAV_ENABLED` | Set to `true` to enable WebDAV server |
-| `WEBDAV_USERNAME` | WebDAV access username (optional, defaults to admin username) |
-| `WEBDAV_PASSWORD` | WebDAV access password (optional, defaults to admin password) |
+| Variable            | Description                                                   |
+| ------------------- | ------------------------------------------------------------- |
+| `ADMIN_USERNAME`    | Administrator username for accessing the service              |
+| `ADMIN_PASSWORD`    | Administrator password for accessing the service              |
+| `SITE_TITLE`        | Title displayed on the website                                |
+| `SITE_ANNOUNCEMENT` | Announcement text shown on the homepage                       |
+| `CHUNK_SIZE_MB`     | Maximum file chunk size in MB for uploads                     |
+| `WEBDAV_ENABLED`    | Set to `true` to enable WebDAV server                         |
+| `WEBDAV_USERNAME`   | WebDAV access username (optional, defaults to admin username) |
+| `WEBDAV_PASSWORD`   | WebDAV access password (optional, defaults to admin password) |
 
 ## Wrangler Configuration
 

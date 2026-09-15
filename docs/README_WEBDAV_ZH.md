@@ -28,19 +28,23 @@ Starx 现在完全支持 WebDAV 协议，允许你通过标准的 WebDAV 客户�
 ### 3. 连接客户端
 
 #### Windows
+
 推荐使用：RaiDrive、NetDrive 或 Cyberduck
 
 #### macOS
+
 1. Finder → 前往 → 连接到服务器 (⌘K)
 2. 输入 WebDAV URL
 3. 输入用户名和密码
 
 #### Linux
+
 ```bash
 sudo mount -t davfs https://你的域名/dav/11/ /mnt/webdav
 ```
 
 #### 移动设备
+
 - iOS: Documents by Readdle
 - Android: Solid Explorer、FX File Explorer
 
@@ -49,6 +53,7 @@ sudo mount -t davfs https://你的域名/dav/11/ /mnt/webdav
 ### 405 Method Not Allowed 错误
 
 **快速解决**：
+
 1. 确认 `WEBDAV_ENABLED = "true"` (必须是字符串)
 2. 确保 URL 以 `/` 结尾
 3. 重新部署 Worker：`npm run deploy`
@@ -65,26 +70,28 @@ sudo mount -t davfs https://你的域名/dav/11/ /mnt/webdav
 
 ## 支持的操作
 
-| 操作 | 说明 | 状态 |
-|------|------|------|
-| 浏览文件 | 列出文件和文件夹 | ✅ |
-| 下载文件 | 获取文件内容 | ✅ |
-| 上传文件 | 创建或覆盖文件 | ✅ |
-| 删除 | 删除文件或文件夹 | ✅ |
-| 创建文件夹 | 新建目录 | ✅ |
-| 复制 | 复制文件 | ✅ |
-| 移动/重命名 | 移动或重命名文件 | ✅ |
+| 操作        | 说明             | 状态 |
+| ----------- | ---------------- | ---- |
+| 浏览文件    | 列出文件和文件夹 | ✅   |
+| 下载文件    | 获取文件内容     | ✅   |
+| 上传文件    | 创建或覆盖文件   | ✅   |
+| 删除        | 删除文件或文件夹 | ✅   |
+| 创建文件夹  | 新建目录         | ✅   |
+| 复制        | 复制文件         | ✅   |
+| 移动/重命名 | 移动或重命名文件 | ✅   |
 
 ## 测试工具
 
 ### 快速测试
 
 **Windows PowerShell**：
+
 ```powershell
 Invoke-WebRequest -Uri "https://你的域名/dav/11/" -Method OPTIONS
 ```
 
 **Linux/macOS**：
+
 ```bash
 curl -i -X OPTIONS https://你的域名/dav/11/
 ```
@@ -94,11 +101,13 @@ curl -i -X OPTIONS https://你的域名/dav/11/
 ### 完整测试
 
 **Windows**：
+
 ```powershell
 .\scripts\test-webdav.ps1 -BaseUrl "https://你的域名" -Username "用户名" -Password "密码" -StorageId 11
 ```
 
 **Linux/macOS**：
+
 ```bash
 ./scripts/test-webdav.sh https://你的域名 用户名 密码 11
 ```

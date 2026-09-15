@@ -1,14 +1,18 @@
-import { execSync } from "child_process";
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { execSync } from 'child_process';
+import { readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
-function run(command, cwd = "/workspace") {
-  return execSync(command, { cwd, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+function run(command, cwd = '/workspace') {
+  return execSync(command, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
 }
 
-const output = run("npm run lint 2>&1");
+const output = run('npm run lint 2>&1');
 
-const warnings = output.split("\n").filter((line) => line.includes("warning"));
+const warnings = output.split('\n').filter((line) => line.includes('warning'));
 const files = new Map();
 
 for (const line of warnings) {
@@ -26,4 +30,6 @@ for (const [file, count] of sorted) {
 }
 
 console.log(`\nTotal files with no-unused-vars: ${sorted.length}`);
-console.log(`Total no-unused-vars warnings: ${sorted.reduce((sum, [, c]) => sum + c, 0)}`);
+console.log(
+  `Total no-unused-vars warnings: ${sorted.reduce((sum, [, c]) => sum + c, 0)}`,
+);

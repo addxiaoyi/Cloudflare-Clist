@@ -71,14 +71,14 @@ flowchart LR
 
 ## Supported Backends
 
-| Backend | Browse | Upload | Rename / Move | Notes |
-| --- | --- | --- | --- | --- |
-| S3 compatible | Yes | Yes | Yes | Works with R2-like and S3-compatible endpoints |
-| WebDAV upstream | Yes | Yes | Yes | Also exposed through Starx's own WebDAV server |
-| OneDrive | Yes | Yes | Yes | Supports online refresh API or custom OAuth app |
-| Google Drive | Yes | Yes | Yes | Supports online refresh API or custom OAuth app |
-| Aliyun Drive | Yes | Yes | Yes | Uses Aliyun Open API style token refresh |
-| Baidu Netdisk | Yes | Yes | Yes | Supports refresh token based access |
+| Backend         | Browse | Upload | Rename / Move | Notes                                           |
+| --------------- | ------ | ------ | ------------- | ----------------------------------------------- |
+| S3 compatible   | Yes    | Yes    | Yes           | Works with R2-like and S3-compatible endpoints  |
+| WebDAV upstream | Yes    | Yes    | Yes           | Also exposed through Starx's own WebDAV server  |
+| OneDrive        | Yes    | Yes    | Yes           | Supports online refresh API or custom OAuth app |
+| Google Drive    | Yes    | Yes    | Yes           | Supports online refresh API or custom OAuth app |
+| Aliyun Drive    | Yes    | Yes    | Yes           | Uses Aliyun Open API style token refresh        |
+| Baidu Netdisk   | Yes    | Yes    | Yes           | Supports refresh token based access             |
 
 ## Quick Start
 
@@ -123,20 +123,20 @@ npm run preview
 
 ## Environment Variables
 
-| Variable | Required | Example | Description |
-| --- | --- | --- | --- |
-| `DB` | Yes | D1 binding | Cloudflare D1 database binding |
-| `ADMIN_USERNAME` | Yes | `admin` | Admin login username |
-| `ADMIN_PASSWORD` | Yes | `change-me` | Admin login password |
-| `SITE_TITLE` | No | `Starx` | Site title shown in the UI |
-| `SITE_ANNOUNCEMENT` | No | `Welcome` | Announcement text shown to visitors |
-| `CHUNK_SIZE_MB` | No | `10` | Browser upload chunk size |
-| `WEBDAV_ENABLED` | No | `true` | Enables the WebDAV server endpoint |
-| `WEBDAV_USERNAME` | No | `webdav` | WebDAV username; falls back to admin username |
-| `WEBDAV_PASSWORD` | No | `secret` | WebDAV password; falls back to admin password |
-| `GOOGLE_CLIENT_ID` | No | - | Google Drive OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | No | - | Google Drive OAuth client secret |
-| `GOOGLE_REDIRECT_URI` | No | - | Google Drive OAuth redirect URI |
+| Variable               | Required | Example     | Description                                   |
+| ---------------------- | -------- | ----------- | --------------------------------------------- |
+| `DB`                   | Yes      | D1 binding  | Cloudflare D1 database binding                |
+| `ADMIN_USERNAME`       | Yes      | `admin`     | Admin login username                          |
+| `ADMIN_PASSWORD`       | Yes      | `change-me` | Admin login password                          |
+| `SITE_TITLE`           | No       | `Starx`     | Site title shown in the UI                    |
+| `SITE_ANNOUNCEMENT`    | No       | `Welcome`   | Announcement text shown to visitors           |
+| `CHUNK_SIZE_MB`        | No       | `10`        | Browser upload chunk size                     |
+| `WEBDAV_ENABLED`       | No       | `true`      | Enables the WebDAV server endpoint            |
+| `WEBDAV_USERNAME`      | No       | `webdav`    | WebDAV username; falls back to admin username |
+| `WEBDAV_PASSWORD`      | No       | `secret`    | WebDAV password; falls back to admin password |
+| `GOOGLE_CLIENT_ID`     | No       | -           | Google Drive OAuth client ID                  |
+| `GOOGLE_CLIENT_SECRET` | No       | -           | Google Drive OAuth client secret              |
+| `GOOGLE_REDIRECT_URI`  | No       | -           | Google Drive OAuth redirect URI               |
 
 ## WebDAV
 

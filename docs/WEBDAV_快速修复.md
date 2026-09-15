@@ -3,6 +3,7 @@
 ## 问题描述
 
 连接 WebDAV 时出现错误：
+
 ```
 WebDAV PROPFIND 失败: 405 Method Not Allowed
 ```
@@ -26,6 +27,7 @@ WEBDAV_PASSWORD = 你的密码
 ```
 
 ⚠️ **重要提示**：
+
 - `WEBDAV_ENABLED` 的值必须是字符串 `"true"`，不是布尔值
 - 用户名和密码不要包含特殊字符
 
@@ -34,11 +36,13 @@ WEBDAV_PASSWORD = 你的密码
 WebDAV URL **必须**以斜杠 `/` 结尾！
 
 **正确格式**：
+
 ```
 https://mirrors.ohyraw.dpdns.org/dav/11/
 ```
 
 **错误格式**：
+
 ```
 https://mirrors.ohyraw.dpdns.org/dav/11  ❌ 缺少尾部斜杠
 ```
@@ -53,6 +57,7 @@ npm run deploy
 ```
 
 或者使用：
+
 ```bash
 wrangler deploy
 ```
@@ -62,6 +67,7 @@ wrangler deploy
 #### 方法 A：使用命令行测试
 
 **Windows PowerShell**：
+
 ```powershell
 # 测试 WebDAV 是否启用
 Invoke-WebRequest -Uri "https://mirrors.ohyraw.dpdns.org/dav/11/" -Method OPTIONS
@@ -72,6 +78,7 @@ Invoke-WebRequest -Uri "https://mirrors.ohyraw.dpdns.org/dav/11/" -Method OPTION
 ```
 
 **Linux/macOS**：
+
 ```bash
 # 测试 WebDAV 是否启用
 curl -i -X OPTIONS https://mirrors.ohyraw.dpdns.org/dav/11/
@@ -85,6 +92,7 @@ curl -i -X OPTIONS https://mirrors.ohyraw.dpdns.org/dav/11/
 #### 方法 B：使用 WebDAV 客户端
 
 确保在客户端中输入的 URL **以斜杠结尾**：
+
 ```
 https://mirrors.ohyraw.dpdns.org/dav/11/
 ```
@@ -108,7 +116,7 @@ https://mirrors.ohyraw.dpdns.org/dav/11/
    ```bash
    # 测试环境变量是否生效
    curl -i https://mirrors.ohyraw.dpdns.org/dav/11/
-   
+
    # 如果返回 403 "WebDAV is disabled"，说明环境变量未生效
    # 如果返回 401 "Unauthorized"，说明 WebDAV 已启用，但认证失败
    ```
@@ -118,6 +126,7 @@ https://mirrors.ohyraw.dpdns.org/dav/11/
 **原因**：用户名或密码不正确
 
 **解决方案**：
+
 1. 确认在 Cloudflare Dashboard 中设置的用户名密码
 2. 如果没有设置 `WEBDAV_USERNAME` 和 `WEBDAV_PASSWORD`，使用管理员凭据（`ADMIN_USERNAME` 和 `ADMIN_PASSWORD`）
 3. 确保密码没有特殊字符引起的编码问题
@@ -134,6 +143,7 @@ https://mirrors.ohyraw.dpdns.org/dav/11/
 **原因**：存储 ID 不存在
 
 **解决方案**：
+
 1. 访问 `https://mirrors.ohyraw.dpdns.org/dav/0/` 查看所有可用的存储
 2. 确认存储 ID 11 是否存在
 3. 尝试使用其他存储 ID
@@ -143,12 +153,14 @@ https://mirrors.ohyraw.dpdns.org/dav/11/
 ### 使用测试脚本（推荐）
 
 **Windows**：
+
 ```powershell
 # 下载并运行测试脚本
 .\scripts\test-webdav.ps1 -BaseUrl "https://mirrors.ohyraw.dpdns.org" -Username "你的用户名" -Password "你的密码" -StorageId 11
 ```
 
 **Linux/macOS**：
+
 ```bash
 # 下载并运行测试脚本
 chmod +x scripts/test-webdav.sh
@@ -221,6 +233,7 @@ curl -i -X DELETE \
 ### Linux 配置
 
 #### 使用 davfs2
+
 ```bash
 # 安装
 sudo apt-get install davfs2
@@ -233,7 +246,9 @@ sudo mount -t davfs https://mirrors.ohyraw.dpdns.org/dav/11/ /mnt/webdav
 ```
 
 #### 使用文件管理器
+
 大多数 Linux 文件管理器都支持 WebDAV：
+
 1. 打开文件管理器
 2. 连接到服务器
 3. 输入：`davs://mirrors.ohyraw.dpdns.org/dav/11/`
@@ -261,6 +276,7 @@ sudo mount -t davfs https://mirrors.ohyraw.dpdns.org/dav/11/ /mnt/webdav
    - [故障排查清单](./WEBDAV_TROUBLESHOOTING.md)
 
 2. 查看 Cloudflare Workers 日志：
+
    ```bash
    wrangler tail
    ```

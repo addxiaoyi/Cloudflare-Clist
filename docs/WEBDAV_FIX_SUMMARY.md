@@ -5,11 +5,13 @@
 ### 主要问题：405 Method Not Allowed
 
 **原因**：
+
 1. React Router 7 的路由系统只将 GET/HEAD 请求路由到 `loader`
 2. PROPFIND 等 WebDAV 方法没有正确路由到处理函数
 3. `loader` 和 `action` 有重复的认证和处理逻辑
 
 **解决方案**：
+
 - 创建统一的 `handleWebdavRequest` 函数处理所有 WebDAV 方法
 - `loader` 和 `action` 都调用同一个处理函数
 - 添加适当的 CORS 和 DAV 响应头
@@ -19,6 +21,7 @@
 ### 1. `app/routes/dav.$storageId.$.ts` (主要修复)
 
 **变更**：
+
 - ✅ 重构：创建 `handleWebdavRequest` 统一处理函数
 - ✅ 修复：OPTIONS 请求添加 CORS 头
 - ✅ 修复：PROPFIND 响应添加 `DAV: 1, 2` 头
@@ -26,6 +29,7 @@
 - ✅ 改进：更好的错误处理和日志记录
 
 **关键代码结构**：
+
 ```typescript
 // 统一的 WebDAV 请求处理器
 async function handleWebdavRequest(request, params, context) {
@@ -45,6 +49,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 ### 2. 文档更新
 
 **新增文件**：
+
 - ✅ `docs/WEBDAV_SETUP.md` - 完整的 WebDAV 配置指南
 - ✅ `docs/WEBDAV_TROUBLESHOOTING.md` - 故障排查检查清单
 - ✅ `.dev.vars.example` - 本地开发环境变量示例
@@ -52,24 +57,29 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 - ✅ `scripts/test-webdav.ps1` - Windows 测试脚本
 
 **更新文件**：
+
 - ✅ `docs/webdav.md` - 添加 URL 格式说明和故障排查
 - ✅ `README.md` - 更新 WebDAV 配置说明
 
 ## 关键改进
 
 ### 1. 路由处理
+
 - **之前**：PROPFIND 等方法可能返回 405
 - **现在**：所有 WebDAV 方法都正确路由
 
 ### 2. 响应头
+
 - **之前**：缺少某些必需的 DAV 头
 - **现在**：完整的 WebDAV 响应头
 
 ### 3. CORS 支持
+
 - **之前**：没有 CORS 头
 - **现在**：OPTIONS 响应包含适当的 CORS 头
 
 ### 4. 代码质量
+
 - **之前**：loader 和 action 有大量重复代码
 - **现在**：统一的处理函数，更易维护
 
@@ -78,6 +88,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 ### 配置 WebDAV
 
 1. **设置环境变量**：
+
    ```json
    {
      "WEBDAV_ENABLED": "true",
@@ -99,6 +110,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 ### 测试 WebDAV
 
 **快速测试**：
+
 ```bash
 # 测试连接
 curl -i -X OPTIONS https://your-domain/dav/11/
@@ -111,6 +123,7 @@ curl -i -X PROPFIND \
 ```
 
 **完整测试**：
+
 ```bash
 # Linux/macOS
 ./scripts/test-webdav.sh https://your-domain username password 11
@@ -124,6 +137,7 @@ curl -i -X PROPFIND \
 ### 问题：仍然显示 405 错误
 
 **检查清单**：
+
 1. ✅ 确认 `WEBDAV_ENABLED = "true"` (字符串)
 2. ✅ URL 以 `/` 结尾
 3. ✅ 已重新部署 Worker
@@ -132,6 +146,7 @@ curl -i -X PROPFIND \
 ### 问题：认证失败 (401)
 
 **检查清单**：
+
 1. ✅ 用户名密码正确
 2. ✅ 环境变量已设置
 3. ✅ Base64 编码正确
@@ -139,25 +154,26 @@ curl -i -X PROPFIND \
 ### 问题：404 Not Found
 
 **检查清单**：
+
 1. ✅ Storage ID 存在
 2. ✅ 路径格式正确
 3. ✅ 尝试访问 `/dav/0/` 查看所有存储
 
 ## 支持的 WebDAV 操作
 
-| 方法 | 功能 | 状态 |
-|------|------|------|
-| OPTIONS | WebDAV 能力发现 | ✅ |
-| PROPFIND | 列出文件/文件夹 | ✅ |
-| GET | 下载文件 | ✅ |
-| HEAD | 获取文件元数据 | ✅ |
-| PUT | 上传文件 | ✅ |
-| DELETE | 删除文件/文件夹 | ✅ |
-| MKCOL | 创建文件夹 | ✅ |
-| COPY | 复制文件 | ✅ |
-| MOVE | 移动/重命名 | ✅ |
-| LOCK | 文件锁定 | ❌ |
-| UNLOCK | 解锁文件 | ❌ |
+| 方法     | 功能            | 状态 |
+| -------- | --------------- | ---- |
+| OPTIONS  | WebDAV 能力发现 | ✅   |
+| PROPFIND | 列出文件/文件夹 | ✅   |
+| GET      | 下载文件        | ✅   |
+| HEAD     | 获取文件元数据  | ✅   |
+| PUT      | 上传文件        | ✅   |
+| DELETE   | 删除文件/文件夹 | ✅   |
+| MKCOL    | 创建文件夹      | ✅   |
+| COPY     | 复制文件        | ✅   |
+| MOVE     | 移动/重命名     | ✅   |
+| LOCK     | 文件锁定        | ❌   |
+| UNLOCK   | 解锁文件        | ❌   |
 
 ## 后续建议
 
@@ -180,12 +196,14 @@ curl -i -X PROPFIND \
 ## 技术细节
 
 ### 架构
+
 - **框架**：React Router 7
 - **运行时**：Cloudflare Workers
 - **数据库**：Cloudflare D1
 - **认证**：HTTP Basic Authentication
 
 ### 文件结构
+
 ```
 app/
 ├── routes/

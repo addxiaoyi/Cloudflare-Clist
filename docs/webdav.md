@@ -26,6 +26,7 @@
 ⚠️ **重要**: URL 必须以斜杠 `/` 结尾！
 
 例如：
+
 - ✅ 正确：`https://your-domain/dav/11/`
 - ❌ 错误：`https://your-domain/dav/11`
 
@@ -36,6 +37,7 @@
 映射网络驱动器，使用 WebDAV URL。
 
 **推荐第三方客户端**：
+
 - RaiDrive
 - NetDrive
 - Cyberduck
@@ -57,11 +59,13 @@ Finder → 前往 → 连接到服务器，输入 WebDAV URL。
 ### 错误 405 Method Not Allowed
 
 **原因**：
+
 1. `WEBDAV_ENABLED` 未设置为 `"true"`
 2. URL 格式不正确（缺少尾部斜杠）
 3. WebDAV 功能未正确部署
 
 **解决方案**：
+
 1. 确认环境变量 `WEBDAV_ENABLED = "true"`（必须是字符串）
 2. 确保 URL 以 `/` 结尾
 3. 重新部署 Worker
@@ -86,4 +90,3 @@ curl -i -X PROPFIND \
 ## 完整文档
 
 更多配置选项、客户端设置和故障排查，请参阅 [完整 WebDAV 配置指南](./WEBDAV_SETUP.md)。
-
