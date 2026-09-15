@@ -5,10 +5,10 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { Check, AlertCircle, X } from "~/components/icons";
+} from 'react';
+import { Check, AlertCircle, X } from '~/components/icons';
 
-export type ToastType = "success" | "error" | "info";
+export type ToastType = 'success' | 'error' | 'info';
 export type ToastFn = (message: string, type?: ToastType) => void;
 
 interface ToastItem {
@@ -29,9 +29,9 @@ const TOAST_DURATION: Record<ToastType, number> = {
 };
 
 const TOAST_ACCENT: Record<ToastType, string> = {
-  success: "text-emerald-500",
-  error: "text-red-500",
-  info: "text-blue-500",
+  success: 'text-emerald-500',
+  error: 'text-red-500',
+  info: 'text-blue-500',
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -40,18 +40,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback((id: number) => {
     setToasts((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, leaving: true } : t))
+      prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)),
     );
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 220);
   }, []);
 
   const toast = useCallback<ToastFn>(
-    (message, type = "info") => {
+    (message, type = 'info') => {
       const id = ++idRef.current;
       setToasts((prev) => [...prev, { id, message, type, leaving: false }]);
       setTimeout(() => dismiss(id), TOAST_DURATION[type]);
     },
-    [dismiss]
+    [dismiss],
   );
 
   return (
@@ -63,12 +63,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={`pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm shadow-lg shadow-black/5 dark:border-zinc-700 dark:bg-zinc-900 ${
-              t.leaving ? "toast-out" : "toast-in"
+              t.leaving ? 'toast-out' : 'toast-in'
             }`}
           >
-            {t.type !== "info" && (
+            {t.type !== 'info' && (
               <span className={`mt-0.5 shrink-0 ${TOAST_ACCENT[t.type]}`}>
-                {t.type === "success" ? (
+                {t.type === 'success' ? (
                   <Check className="h-4 w-4" />
                 ) : (
                   <AlertCircle className="h-4 w-4" />
@@ -116,13 +116,10 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const close = useCallback(
-    (result: boolean) => {
-      setPending(null);
-      resolveRef.current(result);
-    },
-    []
-  );
+  const close = useCallback((result: boolean) => {
+    setPending(null);
+    resolveRef.current(result);
+  }, []);
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -140,7 +137,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           >
             <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
               <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                {pending.title ?? "确认操作"}
+                {pending.title ?? '确认操作'}
               </span>
               <button
                 onClick={() => close(false)}
@@ -159,18 +156,18 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 onClick={() => close(false)}
                 className="flex-1 rounded border border-zinc-200 px-4 py-2 text-sm text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-100"
               >
-                {pending.cancelText ?? "取消"}
+                {pending.cancelText ?? '取消'}
               </button>
               <button
                 type="button"
                 onClick={() => close(true)}
                 className={`flex-1 rounded px-4 py-2 text-sm text-white transition ${
                   pending.danger
-                    ? "bg-red-600 hover:bg-red-500"
-                    : "bg-blue-600 hover:bg-blue-500"
+                    ? 'bg-red-600 hover:bg-red-500'
+                    : 'bg-blue-600 hover:bg-blue-500'
                 }`}
               >
-                {pending.confirmText ?? "确定"}
+                {pending.confirmText ?? '确定'}
               </button>
             </div>
           </div>

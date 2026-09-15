@@ -1,8 +1,5 @@
-import {
-  stripLeadingSlash,
-  stripTrailingSlash,
-} from "./drive-utils";
-import { getMimeType } from "./file-utils";
+import { stripLeadingSlash, stripTrailingSlash } from './drive-utils';
+import { getMimeType } from './file-utils';
 
 export interface DriveObject {
   key: string;
@@ -20,8 +17,8 @@ export interface ListObjectsResult {
   nextContinuationToken?: string;
 }
 
-const API_BASE = "https://drive.quark.cn";
-const DEFAULT_API_ADDRESS = "https://api.oplist.org/quark/renewapi";
+const API_BASE = 'https://drive.quark.cn';
+const DEFAULT_API_ADDRESS = 'https://api.oplist.org/quark/renewapi';
 
 interface QuarkFile {
   fid: number;
@@ -38,7 +35,14 @@ interface QuarkFile {
 }
 
 interface QuarkListResponse {
-  data: Array<{ fid: number; name: string; type: number; size?: number; modified_time?: number; is_dir?: number }>;
+  data: Array<{
+    fid: number;
+    name: string;
+    type: number;
+    size?: number;
+    modified_time?: number;
+    is_dir?: number;
+  }>;
   total?: number;
   cursor?: string;
 }
@@ -48,13 +52,19 @@ export class QuarkClient {
   private saving: Record<string, any>;
   private basePath: string;
 
-  constructor(options: { config?: Record<string, any>; saving?: Record<string, any> }) {
+  constructor(options: {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  }) {
     this.config = options.config || {};
     this.saving = options.saving || {};
-    this.basePath = this.config.root_path?.replace(/^\/|\/$/g, "") || "";
+    this.basePath = this.config.root_path?.replace(/^\/|\/$/g, '') || '';
   }
 
-  getStateUpdates(): { config?: Record<string, any>; saving?: Record<string, any> } | null {
+  getStateUpdates(): {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  } | null {
     if (!this.savingChanged && !this.configChanged) {
       return null;
     }
@@ -74,19 +84,20 @@ export class QuarkClient {
   }
 
   private getCookie(): string {
-    return this.config.cookie || this.saving.cookie || "";
+    return this.config.cookie || this.saving.cookie || '';
   }
 
   private headers(): Record<string, string> {
     const h: Record<string, string> = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       Cookie: this.getCookie(),
     };
     const apiAddress = this.config.use_online_api
-      ? (this.config.api_address || DEFAULT_API_ADDRESS)
+      ? this.config.api_address || DEFAULT_API_ADDRESS
       : null;
     if (apiAddress) {
-      h["X-API-Address"] = apiAddress;
+      h['X-API-Address'] = apiAddress;
     }
     return h;
   }
@@ -98,20 +109,20 @@ export class QuarkClient {
 
   private getDisplayPath(fullKey: string): string {
     if (!this.basePath) return fullKey;
-    return fullKey.startsWith(this.basePath + "/")
+    return fullKey.startsWith(this.basePath + '/')
       ? fullKey.slice(this.basePath.length + 1)
-      : fullKey.replace(/^\/+/, "");
+      : fullKey.replace(/^\/+/, '');
   }
 
   private request(
     pathname: string,
-    method: string = "GET",
+    method: string = 'GET',
     params?: Record<string, string>,
-    body?: string
+    body?: string,
   ): Promise<any> {
     const url = new URL(`${API_BASE}${pathname}`);
-    url.searchParams.set("pr", "ucpro");
-    url.searchParams.set("fr", "pc");
+    url.searchParams.set('pr', 'ucpro');
+    url.searchParams.set('fr', 'pc');
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v);
@@ -124,38 +135,47 @@ export class QuarkClient {
     };
 
     if (body) {
-      options.headers = { ...options.headers as Record<string, string>, "Content-Type": "application/json" };
+      options.headers = {
+        ...(options.headers as Record<string, string>),
+        'Content-Type': 'application/json',
+      };
       options.body = body;
     }
 
     return fetch(url.toString(), options).then(async (res) => {
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Quark API error: ${res.status} ${text.substring(0, 200)}`);
+        throw new Error(
+          `Quark API error: ${res.status} ${text.substring(0, 200)}`,
+        );
       }
       const data: Record<string, any> = await res.json();
-      if (data.code && data.code !== "0") {
-        throw new Error(`Quark API error: ${data.code} ${data.message || ""}`);
+      if (data.code && data.code !== '0') {
+        throw new Error(`Quark API error: ${data.code} ${data.message || ''}`);
       }
       return data;
     });
   }
 
   private async listFilesByFid(pdirFid: string): Promise<QuarkFile[]> {
-    const result: QuarkListResponse = await this.request("/1/clouddrive/file/sort", "GET", {
-      pdir_fid: pdirFid,
-      _page: "1",
-      _size: "1000",
-      _sort: "file_path:asc",
-    });
+    const result: QuarkListResponse = await this.request(
+      '/1/clouddrive/file/sort',
+      'GET',
+      {
+        pdir_fid: pdirFid,
+        _page: '1',
+        _size: '1000',
+        _sort: 'file_path:asc',
+      },
+    );
     return result.data || [];
   }
 
   private async findFidByPath(path: string): Promise<number> {
     const normalized = stripTrailingSlash(stripLeadingSlash(path));
     if (!normalized) return 0;
-    const parts = normalized.split("/").filter(Boolean);
-    let pdirFid = "0";
+    const parts = normalized.split('/').filter(Boolean);
+    let pdirFid = '0';
     for (const part of parts) {
       const files = await this.listFilesByFid(pdirFid);
       const found = files.find((f) => f.name === part);
@@ -166,12 +186,12 @@ export class QuarkClient {
   }
 
   async listObjects(
-    prefix: string = "",
-    _delimiter: string = "/",
+    prefix: string = '',
+    _delimiter: string = '/',
     maxKeys: number = 1000,
-    _continuationToken?: string
+    _continuationToken?: string,
   ): Promise<ListObjectsResult> {
-    const targetPath = this.getFullPath(prefix || "/");
+    const targetPath = this.getFullPath(prefix || '/');
     const curFid = await this.findFidByPath(targetPath);
     if (curFid < 0) {
       return { objects: [], prefixes: [], isTruncated: false };
@@ -180,10 +200,12 @@ export class QuarkClient {
     const objects: DriveObject[] = [];
     const prefixes: string[] = [];
 
-    const parentDisplay = stripLeadingSlash(stripTrailingSlash(prefix || ""));
+    const parentDisplay = stripLeadingSlash(stripTrailingSlash(prefix || ''));
     for (const file of files) {
       const isDir = file.type === 1 || file.is_dir === 1;
-      const childDisplay = parentDisplay ? `${parentDisplay}/${file.name}` : file.name;
+      const childDisplay = parentDisplay
+        ? `${parentDisplay}/${file.name}`
+        : file.name;
       objects.push({
         key: isDir ? `${childDisplay}/` : childDisplay,
         name: file.name,
@@ -216,16 +238,25 @@ export class QuarkClient {
     return this.findFidByPath(fullPath);
   }
 
-  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+  async getObject(
+    key: string,
+    options?: { range?: string },
+  ): Promise<Response> {
     const fid = await this.getFidByKey(key);
     if (fid < 0) {
-      return new Response("Not Found", { status: 404 });
+      return new Response('Not Found', { status: 404 });
     }
 
-    const result = await this.request("/1/clouddrive/file/download", "POST", undefined, JSON.stringify({ fids: [fid] }));
-    const downloadInfo = result?.data?.info?.urls?.[0] || result?.data?.info?.url;
+    const result = await this.request(
+      '/1/clouddrive/file/download',
+      'POST',
+      undefined,
+      JSON.stringify({ fids: [fid] }),
+    );
+    const downloadInfo =
+      result?.data?.info?.urls?.[0] || result?.data?.info?.url;
     if (!downloadInfo) {
-      throw new Error("Quark download url missing");
+      throw new Error('Quark download url missing');
     }
 
     const downloadUrl = downloadInfo.url || downloadInfo;
@@ -240,91 +271,138 @@ export class QuarkClient {
   async getSignedUrl(key: string, _expiresIn: number = 3600): Promise<string> {
     const fid = await this.getFidByKey(key);
     if (fid < 0) {
-      throw new Error("Not Found");
+      throw new Error('Not Found');
     }
-    const result = await this.request("/1/clouddrive/file/download", "POST", undefined, JSON.stringify({ fids: [fid] }));
-    const downloadInfo = result?.data?.info?.urls?.[0] || result?.data?.info?.url;
-    return downloadInfo?.url || downloadInfo || "";
+    const result = await this.request(
+      '/1/clouddrive/file/download',
+      'POST',
+      undefined,
+      JSON.stringify({ fids: [fid] }),
+    );
+    const downloadInfo =
+      result?.data?.info?.urls?.[0] || result?.data?.info?.url;
+    return downloadInfo?.url || downloadInfo || '';
   }
 
-  async headObject(key: string): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
+  async headObject(key: string): Promise<{
+    contentLength: number;
+    contentType: string;
+    lastModified: string;
+  } | null> {
     const fid = await this.getFidByKey(key);
     if (fid < 0) return null;
-    const result = await this.request("/1/clouddrive/file/detail", "GET", { fid: String(fid) });
+    const result = await this.request('/1/clouddrive/file/detail', 'GET', {
+      fid: String(fid),
+    });
     const file = result?.data?.files?.[0] || result?.data;
     if (!file) return null;
     return {
       contentLength: file.size || 0,
       contentType: getMimeType(key),
-      lastModified: file.modified_time ? new Date(file.modified_time * 1000).toISOString() : new Date().toISOString(),
+      lastModified: file.modified_time
+        ? new Date(file.modified_time * 1000).toISOString()
+        : new Date().toISOString(),
     };
   }
 
-  async putObject(_key: string, _body: ArrayBuffer | string, _contentType?: string): Promise<void> {
-    throw new Error("Quark multipart upload not supported via direct API, use proxy upload");
+  async putObject(
+    _key: string,
+    _body: ArrayBuffer | string,
+    _contentType?: string,
+  ): Promise<void> {
+    throw new Error(
+      'Quark multipart upload not supported via direct API, use proxy upload',
+    );
   }
 
   async deleteObject(key: string): Promise<void> {
     const fid = await this.getFidByKey(key);
     if (fid < 0) return;
-    await this.request("/1/clouddrive/file/delete", "POST", undefined, JSON.stringify({
-      action_type: 2,
-      filelist: [fid],
-      exclude_fids: [],
-    }));
+    await this.request(
+      '/1/clouddrive/file/delete',
+      'POST',
+      undefined,
+      JSON.stringify({
+        action_type: 2,
+        filelist: [fid],
+        exclude_fids: [],
+      }),
+    );
   }
 
   async createFolder(folderPath: string): Promise<void> {
     const parent = this.getFullPath(stripTrailingSlash(folderPath));
-    const dirParts = stripLeadingSlash(parent).split("/").filter(Boolean);
-    const name = dirParts.pop() || "";
+    const dirParts = stripLeadingSlash(parent).split('/').filter(Boolean);
+    const name = dirParts.pop() || '';
     if (!name) return;
-    const parentPath = dirParts.join("/");
+    const parentPath = dirParts.join('/');
     const parentId = await this.findFidByPath(parentPath);
     if (parentId < 0) {
-      throw new Error("Quark: parent folder not found");
+      throw new Error('Quark: parent folder not found');
     }
-    await this.request("/1/clouddrive/file", "POST", undefined, JSON.stringify({
-      pdir_fid: parentId,
-      file_name: name,
-      dir_path: `/${parentPath}/${name}`.replace(/\/+/g, "/"),
-      size: 0,
-      format_type: "application/octet-stream",
-      lcreated_at: Date.now(),
-    }));
+    await this.request(
+      '/1/clouddrive/file',
+      'POST',
+      undefined,
+      JSON.stringify({
+        pdir_fid: parentId,
+        file_name: name,
+        dir_path: `/${parentPath}/${name}`.replace(/\/+/g, '/'),
+        size: 0,
+        format_type: 'application/octet-stream',
+        lcreated_at: Date.now(),
+      }),
+    );
   }
 
-  private async moveFid(sourceFid: number, destParentPath: string): Promise<void> {
+  private async moveFid(
+    sourceFid: number,
+    destParentPath: string,
+  ): Promise<void> {
     const parentId = await this.findFidByPath(destParentPath);
     if (parentId < 0) {
-      throw new Error("Quark: destination parent folder not found");
+      throw new Error('Quark: destination parent folder not found');
     }
-    await this.request("/1/clouddrive/file/move", "POST", undefined, JSON.stringify({
-      action_type: 1,
-      filelist: [sourceFid],
-      to_pdir_fid: parentId,
-      exclude_fids: [],
-    }));
+    await this.request(
+      '/1/clouddrive/file/move',
+      'POST',
+      undefined,
+      JSON.stringify({
+        action_type: 1,
+        filelist: [sourceFid],
+        to_pdir_fid: parentId,
+        exclude_fids: [],
+      }),
+    );
   }
 
   async copyObject(_sourceKey: string, _destKey: string): Promise<void> {
-    throw new Error("Quark: copy is not supported via private API, use move instead");
+    throw new Error(
+      'Quark: copy is not supported via private API, use move instead',
+    );
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
     const fid = await this.getFidByKey(path);
     if (fid < 0) {
-      throw new Error("Quark: file not found");
+      throw new Error('Quark: file not found');
     }
-    await this.request("/1/clouddrive/file/update/name", "POST", undefined, JSON.stringify({ fid, file_name: newName }));
+    await this.request(
+      '/1/clouddrive/file/update/name',
+      'POST',
+      undefined,
+      JSON.stringify({ fid, file_name: newName }),
+    );
   }
 
   async moveObject(path: string, newPath: string): Promise<void> {
     const fid = await this.getFidByKey(path);
     if (fid < 0) {
-      throw new Error("Quark: source file not found");
+      throw new Error('Quark: source file not found');
     }
-    const destParent = this.getFullPath(stripTrailingSlash(newPath).replace(/\/[^/]*$/, ""));
+    const destParent = this.getFullPath(
+      stripTrailingSlash(newPath).replace(/\/[^/]*$/, ''),
+    );
     await this.moveFid(fid, destParent);
   }
 
@@ -332,24 +410,28 @@ export class QuarkClient {
   async initiateMultipartUpload(
     _key: string,
     _contentType: string,
-    _options?: { size?: number; chunkSize?: number }
+    _options?: { size?: number; chunkSize?: number },
   ): Promise<string> {
     // 夸克网盘无标准 multipart API，需通过站内代理或分片上传
-    throw new Error("Quark multipart upload not supported via direct API, use proxy upload");
+    throw new Error(
+      'Quark multipart upload not supported via direct API, use proxy upload',
+    );
   }
   async uploadPart(
     _key: string,
     _uploadId: string,
     _partNumber: number,
     _body: ReadableStream | ArrayBuffer,
-    _contentLength?: number
+    _contentLength?: number,
   ): Promise<string> {
-    throw new Error("Quark multipart upload not supported via direct API, use proxy upload");
+    throw new Error(
+      'Quark multipart upload not supported via direct API, use proxy upload',
+    );
   }
   async completeMultipartUpload(
     _key: string,
     _uploadId: string,
-    _parts: { partNumber: number; etag: string }[]
+    _parts: { partNumber: number; etag: string }[],
   ): Promise<void> {
     return;
   }
@@ -360,8 +442,8 @@ export class QuarkClient {
     _key: string,
     _uploadId: string,
     _partNumber: number,
-    _expiresIn: number = 3600
+    _expiresIn: number = 3600,
   ): Promise<string> {
-    return "";
+    return '';
   }
 }

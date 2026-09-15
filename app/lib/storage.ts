@@ -64,7 +64,7 @@ function safeParseJson(value: string | null): Record<string, any> {
   }
   try {
     const parsed = JSON.parse(value) as Record<string, any>;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
@@ -73,19 +73,22 @@ function safeParseJson(value: string | null): Record<string, any> {
 function rowToStorage(row: StorageRow): Storage {
   return {
     id: row.id,
-    name: row.name?.trim() || "",
-    type: row.type?.trim() || "s3",
-    endpoint: row.endpoint?.trim() || "",
-    region: row.region?.trim() || "",
-    accessKeyId: row.access_key_id?.trim() || "",
-    secretAccessKey: row.secret_access_key?.trim() || "",
-    bucket: row.bucket?.trim() || "",
-    basePath: row.base_path?.trim() || "",
+    name: row.name?.trim() || '',
+    type: row.type?.trim() || 's3',
+    endpoint: row.endpoint?.trim() || '',
+    region: row.region?.trim() || '',
+    accessKeyId: row.access_key_id?.trim() || '',
+    secretAccessKey: row.secret_access_key?.trim() || '',
+    bucket: row.bucket?.trim() || '',
+    basePath: row.base_path?.trim() || '',
     config: safeParseJson(row.config_json),
     saving: safeParseJson(row.saving_json),
     isPublic: row.is_public === 1,
-    guestList: row.guest_list === 1 || (row.guest_list === null && row.is_public === 1),
-    guestDownload: row.guest_download === 1 || (row.guest_download === null && row.is_public === 1),
+    guestList:
+      row.guest_list === 1 || (row.guest_list === null && row.is_public === 1),
+    guestDownload:
+      row.guest_download === 1 ||
+      (row.guest_download === null && row.is_public === 1),
     guestUpload: row.guest_upload === 1,
     description: row.description?.trim() || undefined,
     createdAt: row.created_at,
@@ -95,7 +98,7 @@ function rowToStorage(row: StorageRow): Storage {
 
 export async function getAllStorages(db: D1Database): Promise<Storage[]> {
   const result = await db
-    .prepare("SELECT * FROM storages ORDER BY name")
+    .prepare('SELECT * FROM storages ORDER BY name')
     .all<StorageRow>();
 
   return (result.results ?? []).map(rowToStorage);
@@ -104,7 +107,9 @@ export async function getAllStorages(db: D1Database): Promise<Storage[]> {
 export async function getPublicStorages(db: D1Database): Promise<Storage[]> {
   // Show storages that have any guest permission enabled (list, download, or upload)
   const result = await db
-    .prepare("SELECT * FROM storages WHERE guest_list = 1 OR guest_download = 1 OR guest_upload = 1 OR is_public = 1 ORDER BY name")
+    .prepare(
+      'SELECT * FROM storages WHERE guest_list = 1 OR guest_download = 1 OR guest_upload = 1 OR is_public = 1 ORDER BY name',
+    )
     .all<StorageRow>();
 
   return (result.results ?? []).map(rowToStorage);
@@ -112,10 +117,10 @@ export async function getPublicStorages(db: D1Database): Promise<Storage[]> {
 
 export async function getStorageById(
   db: D1Database,
-  id: number
+  id: number,
 ): Promise<Storage | null> {
   const result = await db
-    .prepare("SELECT * FROM storages WHERE id = ?")
+    .prepare('SELECT * FROM storages WHERE id = ?')
     .bind(id)
     .first<StorageRow>();
 
@@ -124,10 +129,10 @@ export async function getStorageById(
 
 export async function getStorageByName(
   db: D1Database,
-  name: string
+  name: string,
 ): Promise<Storage | null> {
   const result = await db
-    .prepare("SELECT * FROM storages WHERE name = ?")
+    .prepare('SELECT * FROM storages WHERE name = ?')
     .bind(name)
     .first<StorageRow>();
 
@@ -136,22 +141,28 @@ export async function getStorageByName(
 
 export async function createStorage(
   db: D1Database,
-  input: StorageInput
+  input: StorageInput,
 ): Promise<Storage> {
   // Trim all string inputs to prevent signature mismatch errors
   const name = input.name.trim();
-  const type = (input.type || "s3").trim();
-  const endpoint = (input.endpoint || "").trim();
-  const region = (input.region || "us-east-1").trim();
-  const accessKeyId = (input.accessKeyId || "").trim();
-  const secretAccessKey = (input.secretAccessKey || "").trim();
-  const bucket = (input.bucket || "").trim();
-  const basePath = (input.basePath || "").trim();
+  const type = (input.type || 's3').trim();
+  const endpoint = (input.endpoint || '').trim();
+  const region = (input.region || 'us-east-1').trim();
+  const accessKeyId = (input.accessKeyId || '').trim();
+  const secretAccessKey = (input.secretAccessKey || '').trim();
+  const bucket = (input.bucket || '').trim();
+  const basePath = (input.basePath || '').trim();
   const configJson = JSON.stringify(input.config || {});
   const savingJson = JSON.stringify(input.saving || {});
   const isPublic = input.isPublic ? 1 : 0;
-  const guestList = input.guestList !== undefined ? (input.guestList ? 1 : 0) : isPublic;
-  const guestDownload = input.guestDownload !== undefined ? (input.guestDownload ? 1 : 0) : isPublic;
+  const guestList =
+    input.guestList !== undefined ? (input.guestList ? 1 : 0) : isPublic;
+  const guestDownload =
+    input.guestDownload !== undefined
+      ? input.guestDownload
+        ? 1
+        : 0
+      : isPublic;
   const guestUpload = input.guestUpload ? 1 : 0;
   const description = input.description?.trim() || null;
 
@@ -159,7 +170,7 @@ export async function createStorage(
     .prepare(
       `INSERT INTO storages (name, type, endpoint, region, access_key_id, secret_access_key, bucket, base_path, config_json, saving_json, is_public, guest_list, guest_download, guest_upload, description)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       RETURNING *`
+       RETURNING *`,
     )
     .bind(
       name,
@@ -176,12 +187,12 @@ export async function createStorage(
       guestList,
       guestDownload,
       guestUpload,
-      description
+      description,
     )
     .first<StorageRow>();
 
   if (!result) {
-    throw new Error("Failed to create storage");
+    throw new Error('Failed to create storage');
   }
 
   return rowToStorage(result);
@@ -190,7 +201,7 @@ export async function createStorage(
 export async function updateStorage(
   db: D1Database,
   id: number,
-  input: Partial<StorageInput>
+  input: Partial<StorageInput>,
 ): Promise<Storage | null> {
   const existing = await getStorageById(db, id);
   if (!existing) {
@@ -202,35 +213,35 @@ export async function updateStorage(
 
   // Trim all string inputs to prevent signature mismatch errors
   if (input.name !== undefined) {
-    updates.push("name = ?");
+    updates.push('name = ?');
     values.push(input.name.trim());
   }
   if (input.type !== undefined) {
-    updates.push("type = ?");
+    updates.push('type = ?');
     values.push(input.type.trim());
   }
   if (input.endpoint !== undefined) {
-    updates.push("endpoint = ?");
+    updates.push('endpoint = ?');
     values.push(input.endpoint.trim());
   }
   if (input.region !== undefined) {
-    updates.push("region = ?");
+    updates.push('region = ?');
     values.push(input.region.trim());
   }
   if (input.accessKeyId !== undefined) {
-    updates.push("access_key_id = ?");
+    updates.push('access_key_id = ?');
     values.push(input.accessKeyId.trim());
   }
   if (input.secretAccessKey !== undefined) {
-    updates.push("secret_access_key = ?");
+    updates.push('secret_access_key = ?');
     values.push(input.secretAccessKey.trim());
   }
   if (input.bucket !== undefined) {
-    updates.push("bucket = ?");
+    updates.push('bucket = ?');
     values.push(input.bucket.trim());
   }
   if (input.basePath !== undefined) {
-    updates.push("base_path = ?");
+    updates.push('base_path = ?');
     values.push(input.basePath.trim());
   }
   if (input.config !== undefined) {
@@ -238,32 +249,32 @@ export async function updateStorage(
       ...(existing.config || {}),
       ...(input.config || {}),
     };
-    updates.push("config_json = ?");
+    updates.push('config_json = ?');
     values.push(JSON.stringify(mergedConfig));
   }
   if (input.saving !== undefined) {
-    updates.push("saving_json = ?");
+    updates.push('saving_json = ?');
     values.push(JSON.stringify(input.saving || {}));
   }
   if (input.isPublic !== undefined) {
-    updates.push("is_public = ?");
+    updates.push('is_public = ?');
     values.push(input.isPublic ? 1 : 0);
   }
   if (input.guestList !== undefined) {
-    updates.push("guest_list = ?");
+    updates.push('guest_list = ?');
     values.push(input.guestList ? 1 : 0);
   }
   if (input.guestDownload !== undefined) {
-    updates.push("guest_download = ?");
+    updates.push('guest_download = ?');
     values.push(input.guestDownload ? 1 : 0);
   }
   if (input.guestUpload !== undefined) {
-    updates.push("guest_upload = ?");
+    updates.push('guest_upload = ?');
     values.push(input.guestUpload ? 1 : 0);
   }
   if (input.description !== undefined) {
-    const desc = input.description?.trim() || "";
-    updates.push("description = ?");
+    const desc = input.description?.trim() || '';
+    updates.push('description = ?');
     values.push(desc);
   }
 
@@ -276,7 +287,7 @@ export async function updateStorage(
 
   const result = await db
     .prepare(
-      `UPDATE storages SET ${updates.join(", ")} WHERE id = ? RETURNING *`
+      `UPDATE storages SET ${updates.join(', ')} WHERE id = ? RETURNING *`,
     )
     .bind(...values)
     .first<StorageRow>();
@@ -286,10 +297,10 @@ export async function updateStorage(
 
 export async function deleteStorage(
   db: D1Database,
-  id: number
+  id: number,
 ): Promise<boolean> {
   const result = await db
-    .prepare("DELETE FROM storages WHERE id = ?")
+    .prepare('DELETE FROM storages WHERE id = ?')
     .bind(id)
     .run();
 
@@ -372,25 +383,39 @@ export async function initDatabase(db: D1Database): Promise<void> {
   }
 
   // 迁移：为旧版 storages 表补 config_json / saving_json 列（旧 schema 缺这两列）
-  const cols = await db.prepare("PRAGMA table_info(storages)").all<{ name: string }>();
+  const cols = await db
+    .prepare('PRAGMA table_info(storages)')
+    .all<{ name: string }>();
   const names = new Set((cols.results ?? []).map((c) => c.name));
   if (names.size > 0) {
-    if (!names.has("config_json")) {
-      await db.prepare("ALTER TABLE storages ADD COLUMN config_json TEXT DEFAULT '{}'").run();
+    if (!names.has('config_json')) {
+      await db
+        .prepare(
+          "ALTER TABLE storages ADD COLUMN config_json TEXT DEFAULT '{}'",
+        )
+        .run();
     }
-    if (!names.has("saving_json")) {
-      await db.prepare("ALTER TABLE storages ADD COLUMN saving_json TEXT DEFAULT '{}'").run();
+    if (!names.has('saving_json')) {
+      await db
+        .prepare(
+          "ALTER TABLE storages ADD COLUMN saving_json TEXT DEFAULT '{}'",
+        )
+        .run();
     }
-    if (!names.has("description")) {
-      await db.prepare("ALTER TABLE storages ADD COLUMN description TEXT").run();
+    if (!names.has('description')) {
+      await db
+        .prepare('ALTER TABLE storages ADD COLUMN description TEXT')
+        .run();
     }
   }
 
   // 迁移：为旧版 shares 表补 password_hash 列（用于分享访问密码）
-  const shareCols = await db.prepare("PRAGMA table_info(shares)").all<{ name: string }>();
+  const shareCols = await db
+    .prepare('PRAGMA table_info(shares)')
+    .all<{ name: string }>();
   const shareNames = new Set((shareCols.results ?? []).map((c) => c.name));
-  if (shareNames.size > 0 && !shareNames.has("password_hash")) {
-    await db.prepare("ALTER TABLE shares ADD COLUMN password_hash TEXT").run();
+  if (shareNames.size > 0 && !shareNames.has('password_hash')) {
+    await db.prepare('ALTER TABLE shares ADD COLUMN password_hash TEXT').run();
   }
 
   dbInitialized = true;
@@ -421,7 +446,9 @@ export interface BackupData {
 }
 
 // Export all storages for backup (includes secrets)
-export async function exportStoragesForBackup(db: D1Database): Promise<BackupData> {
+export async function exportStoragesForBackup(
+  db: D1Database,
+): Promise<BackupData> {
   const storages = await getAllStorages(db);
 
   return {
@@ -450,7 +477,7 @@ export async function exportStoragesForBackup(db: D1Database): Promise<BackupDat
 export async function importStoragesFromBackup(
   db: D1Database,
   backup: BackupData,
-  mode: 'merge' | 'replace'
+  mode: 'merge' | 'replace',
 ): Promise<{ imported: number; skipped: number; errors: string[] }> {
   const errors: string[] = [];
   let imported = 0;
@@ -458,7 +485,7 @@ export async function importStoragesFromBackup(
 
   if (mode === 'replace') {
     // Delete all existing storages
-    await db.prepare("DELETE FROM storages").run();
+    await db.prepare('DELETE FROM storages').run();
   }
 
   for (const item of backup.storages) {
@@ -492,7 +519,9 @@ export async function importStoragesFromBackup(
       });
       imported++;
     } catch (err) {
-      errors.push(`Failed to import "${item.name}": ${err instanceof Error ? err.message : 'Unknown error'}`);
+      errors.push(
+        `Failed to import "${item.name}": ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
     }
   }
 
@@ -505,7 +534,7 @@ let r2MountChecked = false;
 
 export async function autoMountR2(
   db: D1Database,
-  env: { R2?: R2Bucket }
+  env: { R2?: R2Bucket },
 ): Promise<void> {
   if (!env.R2 || r2MountChecked) {
     return;
@@ -519,20 +548,20 @@ export async function autoMountR2(
     return;
   }
 
-  const nameTaken = await getStorageByName(db, "R2 存储");
+  const nameTaken = await getStorageByName(db, 'R2 存储');
   if (nameTaken) {
     return;
   }
 
   await createStorage(db, {
-    name: "R2 存储",
-    type: "r2",
-    endpoint: "",
-    region: "auto",
-    accessKeyId: "",
-    secretAccessKey: "",
-    bucket: "R2",
-    basePath: "",
+    name: 'R2 存储',
+    type: 'r2',
+    endpoint: '',
+    region: 'auto',
+    accessKeyId: '',
+    secretAccessKey: '',
+    bucket: 'R2',
+    basePath: '',
     config: {},
     saving: {},
     isPublic: false,
@@ -541,4 +570,3 @@ export async function autoMountR2(
     guestUpload: false,
   });
 }
-

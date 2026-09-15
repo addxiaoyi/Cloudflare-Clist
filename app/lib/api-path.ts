@@ -1,12 +1,13 @@
 export function encodeApiFilePath(path: string): string {
   return path
-    .split("/")
+    .split('/')
     .map((segment) =>
-      encodeURIComponent(segment).replace(/[!'()*]/g, (char) =>
-        `%${char.charCodeAt(0).toString(16).toUpperCase()}`
-      )
+      encodeURIComponent(segment).replace(
+        /[!'()*]/g,
+        (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+      ),
     )
-    .join("/");
+    .join('/');
 }
 
 export function apiFileUrl(storageId: number, path: string): string {

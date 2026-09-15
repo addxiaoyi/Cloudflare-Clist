@@ -1,6 +1,6 @@
 // 本地最小 Mock S3（path-style，不校验 SigV4 签名），用于联调验证上传/下载/批量删除
 // 运行: node scripts/mock-s3.mjs [port]   默认 9000
-import { createServer } from "node:http";
+import { createServer } from 'node:http';
 
 const PORT = Number(process.argv[2] || 9000);
 
@@ -9,27 +9,33 @@ const multiparts = new Map(); // uploadId -> { key, parts: Map<partNumber, Buffe
 let uploadIdSeq = 1;
 
 const esc = (s) =>
-  String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function cors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,PUT,POST,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,ETag,x-amz-copy-source,Content-Length");
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader(
+    'Access-Control-Allow-Methods',
+    'GET,HEAD,PUT,POST,DELETE,OPTIONS',
+  );
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type,ETag,x-amz-copy-source,Content-Length',
+  );
 }
 
 function send(res, status, body, headers = {}) {
-  res.writeHead(status, { ...headers, "Content-Length": Buffer.byteLength(body) });
+  res.writeHead(status, {
+    ...headers,
+    'Content-Length': Buffer.byteLength(body),
+  });
   res.end(body);
 }
 
 function parseUrl(req) {
-  const u = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  const segments = u.pathname.split("/").filter(Boolean);
-  const bucket = segments.shift() || "";
-  const key = decodeURIComponent(segments.join("/"));
+  const u = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const segments = u.pathname.split('/').filter(Boolean);
+  const bucket = segments.shift() || '';
+  const key = decodeURIComponent(segments.join('/'));
   return { u, bucket, key };
 }
 
@@ -39,9 +45,9 @@ function listXml(bucket, prefix, delimiter, maxKeys) {
   let count = 0;
 
   for (const [fullKey, obj] of objects) {
-    const [b, ...rest] = fullKey.split("/");
+    const [b, ...rest] = fullKey.split('/');
     if (b !== bucket) continue;
-    let key = rest.join("/");
+    let key = rest.join('/');
     if (!key.startsWith(prefix)) continue;
 
     let displayKey = key;
@@ -60,45 +66,47 @@ function listXml(bucket, prefix, delimiter, maxKeys) {
     items.push(
       `<Contents><Key>${esc(displayKey)}</Key><LastModified>${obj.lastModified}</LastModified>` +
         `<ETag>&quot;mock-etag-${key.length}&quot;</ETag><Size>${obj.data.length}</Size>` +
-        `<StorageClass>STANDARD</StorageClass></Contents>`
+        `<StorageClass>STANDARD</StorageClass></Contents>`,
     );
   }
 
   const commonXml = [...commonPrefixes]
     .sort()
     .map((p) => `<CommonPrefixes><Prefix>${esc(p)}</Prefix></CommonPrefixes>`)
-    .join("");
+    .join('');
 
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">` +
     `<Name>${esc(bucket)}</Name><Prefix>${esc(prefix)}</Prefix>` +
     `<KeyCount>${count}</KeyCount><MaxKeys>${maxKeys}</MaxKeys><IsTruncated>false</IsTruncated>` +
-    items.join("") + commonXml + `</ListBucketResult>`
+    items.join('') +
+    commonXml +
+    `</ListBucketResult>`
   );
 }
 
 const server = createServer(async (req, res) => {
   cors(res);
-  if (req.method === "OPTIONS") return send(res, 204, "");
+  if (req.method === 'OPTIONS') return send(res, 204, '');
 
   const { u, bucket, key } = parseUrl(req);
   const params = u.searchParams;
   const storeKey = `${bucket}/${key}`;
 
   // 列表
-  if (req.method === "GET" && params.get("list-type") === "2") {
-    const prefix = params.get("prefix") || "";
-    const delimiter = params.get("delimiter") || "";
-    const maxKeys = Number(params.get("max-keys") || 1000);
+  if (req.method === 'GET' && params.get('list-type') === '2') {
+    const prefix = params.get('prefix') || '';
+    const delimiter = params.get('delimiter') || '';
+    const maxKeys = Number(params.get('max-keys') || 1000);
     return send(res, 200, listXml(bucket, prefix, delimiter, maxKeys), {
-      "Content-Type": "application/xml",
+      'Content-Type': 'application/xml',
     });
   }
 
   // Helper: retrieve object and handle Range requests
   function handleGetObject(obj, req, res) {
-    const range = req.headers["range"];
+    const range = req.headers['range'];
     if (range && obj.data.length > 0) {
       const match = range.match(/bytes=(\d*)-(\d*)/);
       if (match) {
@@ -106,10 +114,10 @@ const server = createServer(async (req, res) => {
         const end = match[2] ? parseInt(match[2]) : obj.data.length - 1;
         const chunk = obj.data.slice(start, end + 1);
         res.writeHead(206, {
-          "Content-Type": obj.contentType,
-          "Content-Length": chunk.length,
-          "Content-Range": `bytes ${start}-${end}/${obj.data.length}`,
-          "Accept-Ranges": "bytes",
+          'Content-Type': obj.contentType,
+          'Content-Length': chunk.length,
+          'Content-Range': `bytes ${start}-${end}/${obj.data.length}`,
+          'Accept-Ranges': 'bytes',
           ETag: `"mock-get"`,
         });
         res.end(chunk);
@@ -120,62 +128,77 @@ const server = createServer(async (req, res) => {
   }
 
   // 初始化分片上传
-  if (req.method === "POST" && params.get("uploads") === "") {
+  if (req.method === 'POST' && params.get('uploads') === '') {
     const uploadId = `mock-upload-${uploadIdSeq++}`;
     multiparts.set(uploadId, { key, parts: new Map() });
     return send(
       res,
       200,
       `<?xml version="1.0"?><InitiateMultipartUploadResult><Bucket>${esc(bucket)}</Bucket><Key>${esc(key)}</Key><UploadId>${uploadId}</UploadId></InitiateMultipartUploadResult>`,
-      { "Content-Type": "application/xml" }
+      { 'Content-Type': 'application/xml' },
     );
   }
 
   // 上传分片（带签名参数或代理上传）
-  if (req.method === "PUT" && params.get("partNumber") && params.get("uploadId")) {
-    const mp = multiparts.get(params.get("uploadId"));
-    if (!mp) return send(res, 404, "<?xml version=\"1.0\"?><Error><Code>NoSuchUpload</Code></Error>");
+  if (
+    req.method === 'PUT' &&
+    params.get('partNumber') &&
+    params.get('uploadId')
+  ) {
+    const mp = multiparts.get(params.get('uploadId'));
+    if (!mp)
+      return send(
+        res,
+        404,
+        '<?xml version="1.0"?><Error><Code>NoSuchUpload</Code></Error>',
+      );
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
-    mp.parts.set(Number(params.get("partNumber")), Buffer.concat(chunks));
-    const etag = `"mock-part-${params.get("partNumber")}"`;
-    return send(res, 200, "", { ETag: etag });
+    mp.parts.set(Number(params.get('partNumber')), Buffer.concat(chunks));
+    const etag = `"mock-part-${params.get('partNumber')}"`;
+    return send(res, 200, '', { ETag: etag });
   }
 
   // 完成分片上传
-  if (req.method === "POST" && params.get("uploadId")) {
-    const mp = multiparts.get(params.get("uploadId"));
-    if (!mp) return send(res, 404, "");
-    const data = Buffer.concat([...mp.parts.entries()].sort((a, b) => a[0] - b[0]).map(([, buf]) => buf));
+  if (req.method === 'POST' && params.get('uploadId')) {
+    const mp = multiparts.get(params.get('uploadId'));
+    if (!mp) return send(res, 404, '');
+    const data = Buffer.concat(
+      [...mp.parts.entries()].sort((a, b) => a[0] - b[0]).map(([, buf]) => buf),
+    );
     objects.set(`${bucket}/${mp.key}`, {
       data,
-      contentType: "application/octet-stream",
+      contentType: 'application/octet-stream',
       lastModified: new Date().toISOString(),
     });
-    multiparts.delete(params.get("uploadId"));
+    multiparts.delete(params.get('uploadId'));
     return send(
       res,
       200,
       `<?xml version="1.0"?><CompleteMultipartUploadResult><Bucket>${esc(bucket)}</Bucket><Key>${esc(mp.key)}</Key><ETag>&quot;mock-complete&quot;</ETag></CompleteMultipartUploadResult>`,
-      { "Content-Type": "application/xml" }
+      { 'Content-Type': 'application/xml' },
     );
   }
 
   // 中止分片上传
-  if (req.method === "DELETE" && params.get("uploadId")) {
-    multiparts.delete(params.get("uploadId"));
-    return send(res, 204, "");
+  if (req.method === 'DELETE' && params.get('uploadId')) {
+    multiparts.delete(params.get('uploadId'));
+    return send(res, 204, '');
   }
 
   // 简单上传 / 复制
-  if (req.method === "PUT") {
-    const copySource = req.headers["x-amz-copy-source"];
+  if (req.method === 'PUT') {
+    const copySource = req.headers['x-amz-copy-source'];
     if (copySource) {
-      const srcKey = decodeURIComponent(copySource).replace(/^\/[^/]+\//, "");
+      const srcKey = decodeURIComponent(copySource).replace(/^\/[^/]+\//, '');
       const src = objects.get(`${bucket}/${srcKey}`);
-      if (!src) return send(res, 404, "");
+      if (!src) return send(res, 404, '');
       objects.set(storeKey, { ...src, lastModified: new Date().toISOString() });
-      return send(res, 200, `<?xml version="1.0"?><CopyObjectResult><LastModified>${new Date().toISOString()}</LastModified><ETag>&quot;mock-copy&quot;</ETag></CopyObjectResult>`);
+      return send(
+        res,
+        200,
+        `<?xml version="1.0"?><CopyObjectResult><LastModified>${new Date().toISOString()}</LastModified><ETag>&quot;mock-copy&quot;</ETag></CopyObjectResult>`,
+      );
     }
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -185,38 +208,38 @@ const server = createServer(async (req, res) => {
     }
     objects.set(storeKey, {
       data,
-      contentType: req.headers["content-type"] || "application/octet-stream",
+      contentType: req.headers['content-type'] || 'application/octet-stream',
       lastModified: new Date().toISOString(),
     });
-    return send(res, 200, "", { ETag: `"mock-put"` });
+    return send(res, 200, '', { ETag: `"mock-put"` });
   }
 
   // 删除对象
-  if (req.method === "DELETE") {
+  if (req.method === 'DELETE') {
     if (key) objects.delete(storeKey);
-    return send(res, 204, "");
+    return send(res, 204, '');
   }
 
   // 下载 / 预览
-  if (req.method === "GET" || req.method === "HEAD") {
+  if (req.method === 'GET' || req.method === 'HEAD') {
     const obj = objects.get(storeKey);
-    if (!obj) return send(res, 404, "");
+    if (!obj) return send(res, 404, '');
     // Handle Range requests for video seek support
-    if (req.method === "GET" && handleGetObject(obj, req, res)) return;
+    if (req.method === 'GET' && handleGetObject(obj, req, res)) return;
     const head = {
-      "Content-Type": obj.contentType,
-      "Content-Length": obj.data.length,
-      "Last-Modified": obj.lastModified,
-      "Accept-Ranges": "bytes",
+      'Content-Type': obj.contentType,
+      'Content-Length': obj.data.length,
+      'Last-Modified': obj.lastModified,
+      'Accept-Ranges': 'bytes',
       ETag: `"mock-get"`,
     };
-    if (req.method === "HEAD") return send(res, 200, "", head);
+    if (req.method === 'HEAD') return send(res, 200, '', head);
     return send(res, 200, obj.data, head);
   }
 
-  return send(res, 200, "{}");
+  return send(res, 200, '{}');
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`Mock S3 listening on http://127.0.0.1:${PORT}`);
 });

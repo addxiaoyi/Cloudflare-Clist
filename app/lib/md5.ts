@@ -6,31 +6,70 @@ function rol(value: number, shift: number): number {
   return (value << shift) | (value >>> (32 - shift));
 }
 
-function cmn(q: number, a: number, b: number, x: number, s: number, t: number): number {
+function cmn(
+  q: number,
+  a: number,
+  b: number,
+  x: number,
+  s: number,
+  t: number,
+): number {
   return add32(rol(add32(add32(a, q), add32(x, t)), s), b);
 }
 
-function ff(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+function ff(
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  x: number,
+  s: number,
+  t: number,
+): number {
   return cmn((b & c) | (~b & d), a, b, x, s, t);
 }
 
-function gg(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+function gg(
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  x: number,
+  s: number,
+  t: number,
+): number {
   return cmn((b & d) | (c & ~d), a, b, x, s, t);
 }
 
-function hh(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+function hh(
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  x: number,
+  s: number,
+  t: number,
+): number {
   return cmn(b ^ c ^ d, a, b, x, s, t);
 }
 
-function ii(a: number, b: number, c: number, d: number, x: number, s: number, t: number): number {
+function ii(
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+  x: number,
+  s: number,
+  t: number,
+): number {
   return cmn(c ^ (b | ~d), a, b, x, s, t);
 }
 
 function toHex(num: number): string {
-  let out = "";
+  let out = '';
   for (let i = 0; i < 4; i++) {
     const byte = (num >> (i * 8)) & 0xff;
-    out += byte.toString(16).padStart(2, "0");
+    out += byte.toString(16).padStart(2, '0');
   }
   return out;
 }

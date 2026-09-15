@@ -1,25 +1,118 @@
 // File type detection utilities
 
-export type FileType = 'video' | 'audio' | 'image' | 'text' | 'code' | 'markdown' | 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'archive' | 'unknown';
+export type FileType =
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'text'
+  | 'code'
+  | 'markdown'
+  | 'pdf'
+  | 'docx'
+  | 'xlsx'
+  | 'pptx'
+  | 'archive'
+  | 'unknown';
 
-const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'm4v', 'flv', 'wmv', '3gp'];
-const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus', 'webm'];
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'avif'];
+const VIDEO_EXTENSIONS = [
+  'mp4',
+  'webm',
+  'ogg',
+  'mov',
+  'avi',
+  'mkv',
+  'm4v',
+  'flv',
+  'wmv',
+  '3gp',
+];
+const AUDIO_EXTENSIONS = [
+  'mp3',
+  'wav',
+  'ogg',
+  'flac',
+  'aac',
+  'm4a',
+  'wma',
+  'opus',
+  'webm',
+];
+const IMAGE_EXTENSIONS = [
+  'jpg',
+  'jpeg',
+  'png',
+  'gif',
+  'webp',
+  'svg',
+  'bmp',
+  'ico',
+  'avif',
+];
 const TEXT_EXTENSIONS = ['txt', 'log', 'rst', 'csv', 'ini', 'cfg', 'conf'];
 const MARKDOWN_EXTENSIONS = ['md', 'markdown'];
 const CODE_EXTENSIONS = [
-  'js', 'ts', 'jsx', 'tsx', 'json', 'html', 'css', 'scss', 'less',
-  'py', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'rb',
-  'php', 'sql', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd',
-  'xml', 'yaml', 'yml', 'toml', 'vue', 'svelte', 'astro',
-  'swift', 'kt', 'scala', 'r', 'lua', 'pl', 'ex', 'exs',
-  'dockerfile', 'makefile', 'cmake', 'gradle', 'env'
+  'js',
+  'ts',
+  'jsx',
+  'tsx',
+  'json',
+  'html',
+  'css',
+  'scss',
+  'less',
+  'py',
+  'java',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'cs',
+  'go',
+  'rs',
+  'rb',
+  'php',
+  'sql',
+  'sh',
+  'bash',
+  'zsh',
+  'ps1',
+  'bat',
+  'cmd',
+  'xml',
+  'yaml',
+  'yml',
+  'toml',
+  'vue',
+  'svelte',
+  'astro',
+  'swift',
+  'kt',
+  'scala',
+  'r',
+  'lua',
+  'pl',
+  'ex',
+  'exs',
+  'dockerfile',
+  'makefile',
+  'cmake',
+  'gradle',
+  'env',
 ];
 const PDF_EXTENSIONS = ['pdf'];
 const DOCX_EXTENSIONS = ['docx'];
 const XLSX_EXTENSIONS = ['xls', 'xlsx', 'csv'];
 const PPTX_EXTENSIONS = ['pptx'];
-const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'];
+const ARCHIVE_EXTENSIONS = [
+  'zip',
+  'rar',
+  '7z',
+  'tar',
+  'gz',
+  'tgz',
+  'bz2',
+  'xz',
+];
 
 export function getFileExtension(filename: string): string {
   const parts = filename.toLowerCase().split('.');
@@ -46,7 +139,19 @@ export function getFileType(filename: string): FileType {
 
 export function isPreviewable(filename: string): boolean {
   const type = getFileType(filename);
-  return ['video', 'audio', 'image', 'text', 'code', 'markdown', 'pdf', 'docx', 'xlsx', 'pptx', 'archive'].includes(type);
+  return [
+    'video',
+    'audio',
+    'image',
+    'text',
+    'code',
+    'markdown',
+    'pdf',
+    'docx',
+    'xlsx',
+    'pptx',
+    'archive',
+  ].includes(type);
 }
 
 export function getMimeType(filename: string): string {
@@ -168,10 +273,15 @@ export function isUnsafeInlineType(contentType: string): boolean {
 }
 
 // 文件响应安全头：nosniff 防 MIME 嗅探；内联渲染套 CSP sandbox 沙箱，直接打开 URL 也无法执行脚本
-export function fileResponseHeaders(contentType: string, inline: boolean): Record<string, string> {
-  const headers: Record<string, string> = { "X-Content-Type-Options": "nosniff" };
+export function fileResponseHeaders(
+  contentType: string,
+  inline: boolean,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'X-Content-Type-Options': 'nosniff',
+  };
   if (inline && !isUnsafeInlineType(contentType)) {
-    headers["Content-Security-Policy"] = "sandbox";
+    headers['Content-Security-Policy'] = 'sandbox';
   }
   return headers;
 }
@@ -179,7 +289,9 @@ export function fileResponseHeaders(contentType: string, inline: boolean): Recor
 export type ByteRange = { start: number; end?: number };
 
 // Range 仅支持单区间；bytes=-N 表示末尾 N 字节，用负 start 表达
-export function parseByteRange(header: string | null | undefined): ByteRange | null {
+export function parseByteRange(
+  header: string | null | undefined,
+): ByteRange | null {
   if (!header) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim().toLowerCase());
   if (!match || (!match[1] && !match[2])) return null;
@@ -191,27 +303,33 @@ export function parseByteRange(header: string | null | undefined): ByteRange | n
 // 越界或无法满足的区间返回 null，调用方按完整响应处理
 export function resolveByteRange(
   range: ByteRange | null,
-  size: number
+  size: number,
 ): { start: number; end: number } | null {
   if (!range || size <= 0) return null;
   const start = range.start < 0 ? Math.max(0, size + range.start) : range.start;
   if (start >= size) return null;
-  const end = range.end === undefined ? size - 1 : Math.min(range.end, size - 1);
+  const end =
+    range.end === undefined ? size - 1 : Math.min(range.end, size - 1);
   return end >= start ? { start, end } : null;
 }
 
 // 浏览器拖动进度条时请求 bytes=<offset>-，透传给支持 Range 的存储换回 206 分段内容
-export function contentRangeHeader(start: number, end: number, size: number): string {
+export function contentRangeHeader(
+  start: number,
+  end: number,
+  size: number,
+): string {
   return `bytes ${start}-${end}/${size}`;
 }
 
 // 透传分段响应的 Accept-Ranges 与 Content-Range
-export function makeRangeResponseHeaders(upstream: Headers): Record<string, string> {
-  const headers: Record<string, string> = { "Accept-Ranges": "bytes" };
-  const contentRange = upstream.get("content-range");
+export function makeRangeResponseHeaders(
+  upstream: Headers,
+): Record<string, string> {
+  const headers: Record<string, string> = { 'Accept-Ranges': 'bytes' };
+  const contentRange = upstream.get('content-range');
   if (contentRange) {
-    headers["Content-Range"] = contentRange;
+    headers['Content-Range'] = contentRange;
   }
   return headers;
 }
-

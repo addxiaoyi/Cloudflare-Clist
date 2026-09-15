@@ -1,6 +1,6 @@
-import { createRequestHandler, type AppLoadContext } from "react-router";
+import { createRequestHandler, type AppLoadContext } from 'react-router';
 
-declare module "react-router" {
+declare module 'react-router' {
   export interface AppLoadContext {
     cloudflare: {
       env: Env;
@@ -9,28 +9,39 @@ declare module "react-router" {
   }
 }
 
-const getServerBuild = () => import("virtual:react-router/server-build");
+const getServerBuild = () => import('virtual:react-router/server-build');
 
-const requestHandler = createRequestHandler(getServerBuild, import.meta.env.MODE);
+const requestHandler = createRequestHandler(
+  getServerBuild,
+  import.meta.env.MODE,
+);
 
 async function handleWebdavRequest(
   request: Request,
-  params: { storageId: string; "*": string },
-  context: AppLoadContext
+  params: { storageId: string; '*': string },
+  context: AppLoadContext,
 ): Promise<Response> {
   const build = await getServerBuild();
-  const route = build.routes["routes/dav.$storageId.$"];
+  const route = build.routes['routes/dav.$storageId.$'];
   const module = route?.module as
-    | { handleWebdavRequest?: (request: Request, params: { storageId: string; "*": string }, context: AppLoadContext) => Promise<Response> }
+    | {
+        handleWebdavRequest?: (
+          request: Request,
+          params: { storageId: string; '*': string },
+          context: AppLoadContext,
+        ) => Promise<Response>;
+      }
     | undefined;
   const handler = module?.handleWebdavRequest;
-  if (typeof handler !== "function") {
-    return new Response("WebDAV handler not found", { status: 500 });
+  if (typeof handler !== 'function') {
+    return new Response('WebDAV handler not found', { status: 500 });
   }
   return handler(request, params, context);
 }
 
-function getWebdavParams(request: Request): { storageId: string; "*": string } | null {
+function getWebdavParams(
+  request: Request,
+): { storageId: string; '*': string } | null {
   const url = new URL(request.url);
   const match = url.pathname.match(/^\/dav\/([^/]+)\/?(.*)$/);
   if (!match) {
@@ -38,7 +49,7 @@ function getWebdavParams(request: Request): { storageId: string; "*": string } |
   }
   return {
     storageId: match[1],
-    "*": match[2] || "",
+    '*': match[2] || '',
   };
 }
 

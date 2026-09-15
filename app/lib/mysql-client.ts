@@ -34,7 +34,7 @@ interface QueryResult {
 }
 
 function escapeIdentifier(id: string): string {
-  return `\`${id.replace(/`/g, "``")}\``;
+  return `\`${id.replace(/`/g, '``')}\``;
 }
 
 export class MySqlClient {
@@ -43,7 +43,7 @@ export class MySqlClient {
 
   constructor(
     config: MySqlConfig,
-    env?: { HD?: HyperdriveLike; HYPERDRIVE?: HyperdriveLike }
+    env?: { HD?: HyperdriveLike; HYPERDRIVE?: HyperdriveLike },
   ) {
     this.config = { ...config };
     // 优先使用 Hyperdrive 连接（生产环境必须通过 Hyperdrive 访问 MySQL，
@@ -72,7 +72,8 @@ export class MySqlClient {
   }
 
   async listDatabases(): Promise<string[]> {
-    const sql = "SELECT schema_name FROM information_schema.schemata ORDER BY schema_name";
+    const sql =
+      'SELECT schema_name FROM information_schema.schemata ORDER BY schema_name';
     const results = await this.rawQuery(sql);
     return results.map((r: any) => r.schema_name);
   }
@@ -96,7 +97,7 @@ export class MySqlClient {
         columns: columns.map((c: any) => ({
           name: c.column_name,
           type: c.data_type,
-          nullable: c.is_nullable === "YES",
+          nullable: c.is_nullable === 'YES',
           defaultValue: c.column_default,
         })),
         rowCount: countResult[0]?.count || 0,
@@ -123,11 +124,14 @@ export class MySqlClient {
     const results = await this.rawQuery(sql, ...(params || []));
     // INSERT/UPDATE/DELETE 返回 ResultSetHeader，受影响行数在 affectedRows 字段
     const header = results as unknown as { affectedRows?: number };
-    return { affectedRows: typeof header?.affectedRows === "number" ? header.affectedRows : 0 };
+    return {
+      affectedRows:
+        typeof header?.affectedRows === 'number' ? header.affectedRows : 0,
+    };
   }
 
   private async rawQuery(sql: string, ...params: any[]): Promise<any[]> {
-    const { createConnection } = await import("mysql2/promise");
+    const { createConnection } = await import('mysql2/promise');
     const conn = await createConnection(this.buildConnectionOptions());
     try {
       const [rows] = await conn.query(sql, params);

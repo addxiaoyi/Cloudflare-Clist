@@ -1,4 +1,4 @@
-import type { Route } from "./api.r2-oauth";
+import type { Route } from './api.r2-oauth';
 
 declare namespace Route {
   interface LoaderArgs {

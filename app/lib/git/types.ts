@@ -38,7 +38,7 @@ export interface GitDirEntry {
   path: string;
   sha: string;
   size: number;
-  type: "file" | "dir" | "other";
+  type: 'file' | 'dir' | 'other';
 }
 
 /** 提交元信息（HEAD 解析 + 列表 lastModified 用）。 */
@@ -74,7 +74,7 @@ export interface GitPlatformAdapter {
   listDir(
     conn: GitConnection,
     repoPath: string,
-    opts: { maxItems?: number; token?: string }
+    opts: { maxItems?: number; token?: string },
   ): Promise<{ entries: GitDirEntry[]; nextToken: string | null } | null>;
 
   /** 递归列出全部 blob；平台不支持或超限时返回 null（编排层回退到逐目录遍历）。 */
@@ -84,13 +84,25 @@ export interface GitPlatformAdapter {
   statFile(conn: GitConnection, repoPath: string): Promise<GitFileStat | null>;
 
   /** 读原始内容（尽量走 blob sha 端点绕开 1MB 限制）。 */
-  readFile(conn: GitConnection, repoPath: string): Promise<{ bytes: ArrayBuffer; size: number }>;
+  readFile(
+    conn: GitConnection,
+    repoPath: string,
+  ): Promise<{ bytes: ArrayBuffer; size: number }>;
 
   /** 写文件（新建或覆盖，adapter 内部处理 create/update 差异）。 */
-  writeFile(conn: GitConnection, repoPath: string, bytes: Uint8Array, message: string): Promise<void>;
+  writeFile(
+    conn: GitConnection,
+    repoPath: string,
+    bytes: Uint8Array,
+    message: string,
+  ): Promise<void>;
 
   /** 删除文件；不存在时静默成功。 */
-  deleteFile(conn: GitConnection, repoPath: string, message: string): Promise<void>;
+  deleteFile(
+    conn: GitConnection,
+    repoPath: string,
+    message: string,
+  ): Promise<void>;
 
   /** 签名下载 URL（fallback 用，无法签名时返回 API 原始端点）。 */
   signedUrl(conn: GitConnection, repoPath: string): string;

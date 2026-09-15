@@ -1,4 +1,9 @@
-import { getMimeType, parseByteRange, resolveByteRange, contentRangeHeader } from "./file-utils";
+import {
+  getMimeType,
+  parseByteRange,
+  resolveByteRange,
+  contentRangeHeader,
+} from './file-utils';
 
 export interface R2ObjectItem {
   key: string;
@@ -26,16 +31,16 @@ export class R2Client {
 
   constructor(
     bucket: R2Bucket,
-    options: { bucketName?: string; storageId: number; basePath?: string }
+    options: { bucketName?: string; storageId: number; basePath?: string },
   ) {
     this.bucket = bucket;
-    this.bucketName = options.bucketName || "R2";
+    this.bucketName = options.bucketName || 'R2';
     this.storageId = options.storageId;
-    this.basePath = options.basePath?.replace(/^\/|\/$/g, "") || "";
+    this.basePath = options.basePath?.replace(/^\/|\/$/g, '') || '';
   }
 
   private getFullPath(path: string): string {
-    const cleanPath = path.replace(/^\//, "");
+    const cleanPath = path.replace(/^\//, '');
     return this.basePath ? `${this.basePath}/${cleanPath}` : cleanPath;
   }
 
@@ -43,20 +48,20 @@ export class R2Client {
     if (!this.basePath) {
       return fullKey;
     }
-    return fullKey.startsWith(this.basePath + "/")
+    return fullKey.startsWith(this.basePath + '/')
       ? fullKey.slice(this.basePath.length + 1)
       : fullKey;
   }
 
   async listObjects(
-    prefix: string = "",
-    delimiter: string = "/",
+    prefix: string = '',
+    delimiter: string = '/',
     maxKeys: number = 1000,
-    continuationToken?: string
+    continuationToken?: string,
   ): Promise<ListObjectsResult> {
     let normalizedPrefix = prefix;
-    if (normalizedPrefix && !normalizedPrefix.endsWith("/")) {
-      normalizedPrefix = normalizedPrefix + "/";
+    if (normalizedPrefix && !normalizedPrefix.endsWith('/')) {
+      normalizedPrefix = normalizedPrefix + '/';
     }
 
     const fullPrefix = this.getFullPath(normalizedPrefix);
@@ -65,7 +70,7 @@ export class R2Client {
       delimiter: delimiter || undefined,
       limit: Math.min(maxKeys, 1000),
       cursor: continuationToken,
-      include: ["httpMetadata"],
+      include: ['httpMetadata'],
     });
 
     const objects: R2ObjectItem[] = [];
@@ -76,14 +81,14 @@ export class R2Client {
       const name = key.startsWith(normalizedPrefix)
         ? key.slice(normalizedPrefix.length)
         : key;
-      if (!name || name.endsWith("/")) {
+      if (!name || name.endsWith('/')) {
         continue;
       }
       objects.push({
         key,
         name,
         size: obj.size,
-        lastModified: obj.uploaded ? obj.uploaded.toISOString() : "",
+        lastModified: obj.uploaded ? obj.uploaded.toISOString() : '',
         etag: obj.etag,
         isDirectory: false,
       });
@@ -92,15 +97,15 @@ export class R2Client {
     for (const p of result.delimitedPrefixes) {
       const display = this.getDisplayPath(p);
       const name = display.startsWith(normalizedPrefix)
-        ? display.slice(normalizedPrefix.length).replace(/\/$/, "")
-        : display.replace(/\/$/, "");
+        ? display.slice(normalizedPrefix.length).replace(/\/$/, '')
+        : display.replace(/\/$/, '');
       if (name) {
         prefixes.push(display);
         objects.push({
           key: display,
           name,
           size: 0,
-          lastModified: "",
+          lastModified: '',
           isDirectory: true,
         });
       }
@@ -119,54 +124,62 @@ export class R2Client {
     };
   }
 
-  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+  async getObject(
+    key: string,
+    options?: { range?: string },
+  ): Promise<Response> {
     const fullPath = this.getFullPath(key);
     const range = parseByteRange(options?.range);
-    const total = range ? (await this.bucket.head(fullPath))?.size ?? 0 : 0;
+    const total = range ? ((await this.bucket.head(fullPath))?.size ?? 0) : 0;
     const slice = resolveByteRange(range, total);
 
     if (slice) {
       const offset = slice.start;
       const length = slice.end - slice.start + 1;
-      const obj = await this.bucket.get(fullPath, { range: { offset, length } });
+      const obj = await this.bucket.get(fullPath, {
+        range: { offset, length },
+      });
       if (!obj) {
-        return new Response("Not Found", { status: 404 });
+        return new Response('Not Found', { status: 404 });
       }
       const headers = new Headers();
       const contentType = obj.httpMetadata?.contentType || getMimeType(key);
       if (contentType) {
-        headers.set("Content-Type", contentType);
+        headers.set('Content-Type', contentType);
       }
-      headers.set("Content-Length", String(obj.size));
+      headers.set('Content-Length', String(obj.size));
       if (obj.etag) {
-        headers.set("ETag", obj.etag);
+        headers.set('ETag', obj.etag);
       }
-      headers.set("Accept-Ranges", "bytes");
-      headers.set("Content-Range", contentRangeHeader(slice.start, slice.start + obj.size - 1, total));
+      headers.set('Accept-Ranges', 'bytes');
+      headers.set(
+        'Content-Range',
+        contentRangeHeader(slice.start, slice.start + obj.size - 1, total),
+      );
       const lastModified = obj.uploaded?.toUTCString();
       if (lastModified) {
-        headers.set("Last-Modified", lastModified);
+        headers.set('Last-Modified', lastModified);
       }
       return new Response(obj.body, { headers, status: 206 });
     }
 
     const obj = await this.bucket.get(fullPath);
     if (!obj) {
-      return new Response("Not Found", { status: 404 });
+      return new Response('Not Found', { status: 404 });
     }
     const headers = new Headers();
     const contentType = obj.httpMetadata?.contentType || getMimeType(key);
     if (contentType) {
-      headers.set("Content-Type", contentType);
+      headers.set('Content-Type', contentType);
     }
-    headers.set("Content-Length", String(obj.size));
+    headers.set('Content-Length', String(obj.size));
     if (obj.etag) {
-      headers.set("ETag", obj.etag);
+      headers.set('ETag', obj.etag);
     }
-    headers.set("Accept-Ranges", "bytes");
+    headers.set('Accept-Ranges', 'bytes');
     const lastModified = obj.uploaded?.toUTCString();
     if (lastModified) {
-      headers.set("Last-Modified", lastModified);
+      headers.set('Last-Modified', lastModified);
     }
     return new Response(obj.body, { headers });
   }
@@ -174,8 +187,13 @@ export class R2Client {
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
     // 部分 workerd 版本支持 binding 内建 createSignedUrl（需账户开通 R2 签名 URL），
     // 类型未声明时用 any 探测，不可用则退回站内代理下载
-    const bucket = this.bucket as R2Bucket & { createSignedUrl?: (path: string, opts: { expiresIn: number }) => Promise<string> };
-    if (typeof bucket.createSignedUrl === "function") {
+    const bucket = this.bucket as R2Bucket & {
+      createSignedUrl?: (
+        path: string,
+        opts: { expiresIn: number },
+      ) => Promise<string>;
+    };
+    if (typeof bucket.createSignedUrl === 'function') {
       try {
         return await bucket.createSignedUrl(this.getFullPath(key), {
           expiresIn: Math.floor(expiresIn),
@@ -185,9 +203,9 @@ export class R2Client {
       }
     }
     const encoded = this.getFullPath(key)
-      .split("/")
+      .split('/')
       .map((seg) => encodeURIComponent(seg))
-      .join("/");
+      .join('/');
     return `/api/files/${this.storageId}/download/${encoded}?inline=1`;
   }
 
@@ -195,13 +213,17 @@ export class R2Client {
     _key: string,
     _uploadId: string,
     _partNumber: number,
-    _expiresIn: number = 3600
+    _expiresIn: number = 3600,
   ): Promise<string> {
     // R2 多分片走站内代理上传（uploadPart），不提供直传签名 URL
-    return "";
+    return '';
   }
 
-  async putObject(key: string, body: ArrayBuffer | string, contentType?: string): Promise<void> {
+  async putObject(
+    key: string,
+    body: ArrayBuffer | string,
+    contentType?: string,
+  ): Promise<void> {
     await this.bucket.put(this.getFullPath(key), body, {
       httpMetadata: contentType ? { contentType } : undefined,
     });
@@ -214,7 +236,7 @@ export class R2Client {
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
     const src = await this.bucket.get(this.getFullPath(sourceKey));
     if (!src) {
-      throw new Error("R2 CopyObject failed: source not found");
+      throw new Error('R2 CopyObject failed: source not found');
     }
     await this.bucket.put(this.getFullPath(destKey), src.body, {
       httpMetadata: src.httpMetadata,
@@ -222,14 +244,14 @@ export class R2Client {
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
-    const isDirectory = path.endsWith("/");
-    const cleanPath = path.replace(/\/$/, "");
-    const parentPath = cleanPath.includes("/")
-      ? cleanPath.substring(0, cleanPath.lastIndexOf("/") + 1)
-      : "";
-    const newPath = parentPath + newName + (isDirectory ? "/" : "");
+    const isDirectory = path.endsWith('/');
+    const cleanPath = path.replace(/\/$/, '');
+    const parentPath = cleanPath.includes('/')
+      ? cleanPath.substring(0, cleanPath.lastIndexOf('/') + 1)
+      : '';
+    const newPath = parentPath + newName + (isDirectory ? '/' : '');
     if (isDirectory) {
-      const fullPrefix = this.getFullPath(cleanPath + "/");
+      const fullPrefix = this.getFullPath(cleanPath + '/');
       const fullNewPath = this.getFullPath(newPath);
       const keys = await this.listAll(fullPrefix);
       for (const key of keys) {
@@ -246,7 +268,7 @@ export class R2Client {
         await this.bucket.delete(key);
       }
       await this.bucket
-        .delete(this.getFullPath(cleanPath + "/"))
+        .delete(this.getFullPath(cleanPath + '/'))
         .catch(() => undefined);
     } else {
       await this.copyObject(path, newPath);
@@ -255,7 +277,7 @@ export class R2Client {
   }
 
   async moveObject(path: string, newPath: string): Promise<void> {
-    const isDirectory = path.endsWith("/");
+    const isDirectory = path.endsWith('/');
     if (isDirectory) {
       const fullPrefix = this.getFullPath(path);
       const fullDest = this.getFullPath(newPath);
@@ -298,34 +320,39 @@ export class R2Client {
   }
 
   async createFolder(folderPath: string): Promise<void> {
-    const normalized = folderPath.endsWith("/") ? folderPath : folderPath + "/";
-    await this.bucket.put(this.getFullPath(normalized), "", {
-      httpMetadata: { contentType: "application/x-directory" },
+    const normalized = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+    await this.bucket.put(this.getFullPath(normalized), '', {
+      httpMetadata: { contentType: 'application/x-directory' },
     });
   }
 
-  async headObject(
-    key: string
-  ): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
+  async headObject(key: string): Promise<{
+    contentLength: number;
+    contentType: string;
+    lastModified: string;
+  } | null> {
     const obj = await this.bucket.head(this.getFullPath(key));
     if (!obj) {
       return null;
     }
     return {
       contentLength: obj.size,
-      contentType: obj.httpMetadata?.contentType || "application/octet-stream",
-      lastModified: obj.uploaded ? obj.uploaded.toISOString() : "",
+      contentType: obj.httpMetadata?.contentType || 'application/octet-stream',
+      lastModified: obj.uploaded ? obj.uploaded.toISOString() : '',
     };
   }
 
   async initiateMultipartUpload(
     key: string,
     contentType: string,
-    _options?: { size?: number; chunkSize?: number }
+    _options?: { size?: number; chunkSize?: number },
   ): Promise<string> {
-    const upload = await this.bucket.createMultipartUpload(this.getFullPath(key), {
-      httpMetadata: { contentType },
-    });
+    const upload = await this.bucket.createMultipartUpload(
+      this.getFullPath(key),
+      {
+        httpMetadata: { contentType },
+      },
+    );
     return upload.uploadId;
   }
 
@@ -334,26 +361,35 @@ export class R2Client {
     uploadId: string,
     partNumber: number,
     body: ReadableStream | ArrayBuffer,
-    _contentLength?: number
+    _contentLength?: number,
   ): Promise<string> {
-    const upload = await this.bucket.resumeMultipartUpload(this.getFullPath(key), uploadId);
+    const upload = await this.bucket.resumeMultipartUpload(
+      this.getFullPath(key),
+      uploadId,
+    );
     const part = await upload.uploadPart(partNumber, body);
-    return part.etag.replace(/"/g, "");
+    return part.etag.replace(/"/g, '');
   }
 
   async completeMultipartUpload(
     key: string,
     uploadId: string,
-    parts: { partNumber: number; etag: string }[]
+    parts: { partNumber: number; etag: string }[],
   ): Promise<void> {
-    const upload = await this.bucket.resumeMultipartUpload(this.getFullPath(key), uploadId);
+    const upload = await this.bucket.resumeMultipartUpload(
+      this.getFullPath(key),
+      uploadId,
+    );
     await upload.complete(
-      parts.map((p) => ({ partNumber: p.partNumber, etag: p.etag }))
+      parts.map((p) => ({ partNumber: p.partNumber, etag: p.etag })),
     );
   }
 
   async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
-    const upload = await this.bucket.resumeMultipartUpload(this.getFullPath(key), uploadId);
+    const upload = await this.bucket.resumeMultipartUpload(
+      this.getFullPath(key),
+      uploadId,
+    );
     await upload.abort();
   }
 }

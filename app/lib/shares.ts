@@ -22,12 +22,12 @@ interface ShareRow {
 
 /** 分享密码哈希：PBKDF2-SHA256（100k 次迭代 + 随机盐）。旧的无盐 SHA-256 哈希仍可校验（向后兼容）。 */
 const PBKDF2_ITERATIONS = 100_000;
-const PBKDF2_PREFIX = "pbkdf2$";
+const PBKDF2_PREFIX = 'pbkdf2$';
 // 密码长度上限：PBKDF2 计算成本随输入长度增长，防超大密码拖垮 Workers
 const MAX_PASSWORD_LEN = 256;
 
 function toBase64(buf: ArrayBuffer): string {
-  let bin = "";
+  let bin = '';
   const bytes = new Uint8Array(buf);
   for (let i = 0; i < bytes.length; i++) {
     bin += String.fromCharCode(bytes[i]);
@@ -47,16 +47,16 @@ function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
 async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const keyMaterial = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     new TextEncoder().encode(password),
-    "PBKDF2",
+    'PBKDF2',
     false,
-    ["deriveBits"]
+    ['deriveBits'],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial,
-    256
+    256,
   );
   return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}$${toBase64(salt.buffer)}$${toBase64(bits)}`;
 }
@@ -71,21 +71,29 @@ function timingSafeEqualHex(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
+async function verifyPassword(
+  password: string,
+  stored: string,
+): Promise<boolean> {
   if (stored.startsWith(PBKDF2_PREFIX)) {
-    const [, iterStr, saltB64, hashB64] = stored.split("$");
+    const [, iterStr, saltB64, hashB64] = stored.split('$');
     const iterations = parseInt(iterStr, 10) || PBKDF2_ITERATIONS;
     const keyMaterial = await crypto.subtle.importKey(
-      "raw",
+      'raw',
       new TextEncoder().encode(password),
-      "PBKDF2",
+      'PBKDF2',
       false,
-      ["deriveBits"]
+      ['deriveBits'],
     );
     const bits = await crypto.subtle.deriveBits(
-      { name: "PBKDF2", salt: fromBase64(saltB64), iterations, hash: "SHA-256" },
+      {
+        name: 'PBKDF2',
+        salt: fromBase64(saltB64),
+        iterations,
+        hash: 'SHA-256',
+      },
       keyMaterial,
-      256
+      256,
     );
     return timingSafeEqualHex(toBase64(bits), hashB64);
   }
@@ -95,16 +103,22 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 }
 
 async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(input),
+  );
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function generateRandomToken(length: number = 24): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const n = alphabet.length;
   // 256 无法整除 62，拒绝 >= limit 的字节以消除取模偏置，保证均匀分布
   const limit = 256 - (256 % n);
-  let result = "";
+  let result = '';
   while (result.length < length) {
     const buf = new Uint8Array(length * 2);
     crypto.getRandomValues(buf);
@@ -123,13 +137,13 @@ function generateRandomToken(length: number = 24): string {
 function generateShareId(): string {
   const buf = new Uint8Array(6);
   crypto.getRandomValues(buf);
-  const rand = [...buf].map((b) => b.toString(36).padStart(2, "0")).join("");
+  const rand = [...buf].map((b) => b.toString(36).padStart(2, '0')).join('');
   return `share_${Date.now()}_${rand}`;
 }
 
 function validateShareToken(shareToken: string): void {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(shareToken)) {
-    throw new Error("分享令牌只能包含字母、数字、下划线或短横线，长度 1-64 位");
+    throw new Error('分享令牌只能包含字母、数字、下划线或短横线，长度 1-64 位');
   }
 }
 
@@ -154,7 +168,10 @@ function rowToShare(row: ShareRow): Share | null {
   };
 }
 
-export async function shareTokenExists(db: D1Database, shareToken: string): Promise<boolean> {
+export async function shareTokenExists(
+  db: D1Database,
+  shareToken: string,
+): Promise<boolean> {
   const result = await db
     .prepare(`SELECT id FROM shares WHERE share_token = ? LIMIT 1`)
     .bind(shareToken)
@@ -170,20 +187,22 @@ export async function createShare(
   isDirectory: boolean,
   expiresAt?: string,
   customShareToken?: string,
-  password?: string
+  password?: string,
 ): Promise<Share> {
   const id = generateShareId();
   const shareToken = customShareToken?.trim() || generateRandomToken();
   const createdAt = new Date().toISOString();
-  const trimmedPassword = password?.trim() || "";
+  const trimmedPassword = password?.trim() || '';
   if (trimmedPassword.length > MAX_PASSWORD_LEN) {
     throw new Error(`分享密码不能超过 ${MAX_PASSWORD_LEN} 个字符`);
   }
-  const passwordHash = trimmedPassword ? await hashPassword(trimmedPassword) : null;
+  const passwordHash = trimmedPassword
+    ? await hashPassword(trimmedPassword)
+    : null;
 
   validateShareToken(shareToken);
   if (await shareTokenExists(db, shareToken)) {
-    throw new Error("分享令牌已存在，请换一个");
+    throw new Error('分享令牌已存在，请换一个');
   }
 
   const query = `
@@ -191,7 +210,19 @@ export async function createShare(
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
-  await db.prepare(query).bind(id, storageId, filePath, isDirectory ? 1 : 0, shareToken, expiresAt || null, createdAt, passwordHash).run();
+  await db
+    .prepare(query)
+    .bind(
+      id,
+      storageId,
+      filePath,
+      isDirectory ? 1 : 0,
+      shareToken,
+      expiresAt || null,
+      createdAt,
+      passwordHash,
+    )
+    .run();
 
   return {
     id,
@@ -205,19 +236,34 @@ export async function createShare(
   };
 }
 
-export async function getShareByToken(db: D1Database, token: string): Promise<Share | null> {
-  const result = await db.prepare(`SELECT * FROM shares WHERE share_token = ?`).bind(token).first<ShareRow>();
+export async function getShareByToken(
+  db: D1Database,
+  token: string,
+): Promise<Share | null> {
+  const result = await db
+    .prepare(`SELECT * FROM shares WHERE share_token = ?`)
+    .bind(token)
+    .first<ShareRow>();
   if (!result) return null;
   return rowToShare(result);
 }
 
-export async function getShareById(db: D1Database, id: string): Promise<Share | null> {
-  const result = await db.prepare(`SELECT * FROM shares WHERE id = ?`).bind(id).first<ShareRow>();
+export async function getShareById(
+  db: D1Database,
+  id: string,
+): Promise<Share | null> {
+  const result = await db
+    .prepare(`SELECT * FROM shares WHERE id = ?`)
+    .bind(id)
+    .first<ShareRow>();
   if (!result) return null;
   return rowToShare(result);
 }
 
-export async function getAllShares(db: D1Database, storageId?: number): Promise<Share[]> {
+export async function getAllShares(
+  db: D1Database,
+  storageId?: number,
+): Promise<Share[]> {
   let query = `SELECT * FROM shares WHERE 1=1`;
   const bindings: (string | number)[] = [];
 
@@ -228,16 +274,21 @@ export async function getAllShares(db: D1Database, storageId?: number): Promise<
 
   query += ` ORDER BY created_at DESC`;
 
-  const result = await db.prepare(query).bind(...bindings).all<ShareRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...bindings)
+    .all<ShareRow>();
 
-  return (result.results || []).map((row) => rowToShare(row)).filter((s): s is Share => s !== null);
+  return (result.results || [])
+    .map((row) => rowToShare(row))
+    .filter((s): s is Share => s !== null);
 }
 
 /** 校验访问密码：分享未设密码时返回 true；否则比对 SHA-256 */
 export async function verifySharePassword(
   db: D1Database,
   token: string,
-  password?: string
+  password?: string,
 ): Promise<boolean> {
   const row = await db
     .prepare(`SELECT password_hash FROM shares WHERE share_token = ?`)

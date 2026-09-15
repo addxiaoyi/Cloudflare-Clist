@@ -1,10 +1,10 @@
-import type { Route } from "./+types/api.storage-stats.$storageId";
-import { requireAuth } from "~/lib/auth";
-import { getStorageById, initDatabase, updateStorage } from "~/lib/storage";
-import { createClient } from "~/lib/client-factory";
-import { getFileExtension } from "~/lib/file-utils";
+import type { Route } from './+types/api.storage-stats.$storageId';
+import { requireAuth } from '~/lib/auth';
+import { getStorageById, initDatabase, updateStorage } from '~/lib/storage';
+import { createClient } from '~/lib/client-factory';
+import { getFileExtension } from '~/lib/file-utils';
 
-type StorageClient = import("~/lib/client-factory").StorageClient;
+type StorageClient = import('~/lib/client-factory').StorageClient;
 
 interface StorageStats {
   totalSize: number;
@@ -27,7 +27,10 @@ interface ListedObjectsResult {
 }
 
 type StatefulClient = {
-  getStateUpdates: () => { config?: Record<string, any>; saving?: Record<string, any> } | null;
+  getStateUpdates: () => {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  } | null;
 };
 
 function isMissingDirectoryError(error: unknown): boolean {
@@ -40,17 +43,18 @@ function isMissingDirectoryError(error: unknown): boolean {
 async function persistClientState(
   client: StorageClient,
   db: D1Database,
-  storageId: number
+  storageId: number,
 ): Promise<void> {
   const stateful = client as unknown as StatefulClient;
-  if (typeof stateful.getStateUpdates !== "function") {
+  if (typeof stateful.getStateUpdates !== 'function') {
     return;
   }
   const updates = stateful.getStateUpdates();
   if (!updates) {
     return;
   }
-  const input: { config?: Record<string, any>; saving?: Record<string, any> } = {};
+  const input: { config?: Record<string, any>; saving?: Record<string, any> } =
+    {};
   if (updates.config) {
     input.config = updates.config;
   }
@@ -67,7 +71,7 @@ async function withClientState<T>(
   client: StorageClient,
   db: D1Database,
   storageId: number,
-  action: () => Promise<T>
+  action: () => Promise<T>,
 ): Promise<T> {
   try {
     return await action();
@@ -75,14 +79,14 @@ async function withClientState<T>(
     try {
       await persistClientState(client, db, storageId);
     } catch (error) {
-      console.error("Failed to persist storage state:", error);
+      console.error('Failed to persist storage state:', error);
     }
   }
 }
 
 async function collectStats(
   client: StorageClient,
-  prefix: string = ""
+  prefix: string = '',
 ): Promise<StorageStats> {
   const stats: StorageStats = {
     totalSize: 0,
@@ -103,7 +107,7 @@ async function collectStats(
     visited.add(currentPrefix);
 
     try {
-      const result = await client.listObjects(currentPrefix, "/", 1000);
+      const result = await client.listObjects(currentPrefix, '/', 1000);
 
       // Process files
       for (const obj of result.objects) {
@@ -111,7 +115,8 @@ async function collectStats(
           stats.fileCount++;
           stats.totalSize += obj.size;
 
-          const ext = getFileExtension(obj.name).toLowerCase() || "no-extension";
+          const ext =
+            getFileExtension(obj.name).toLowerCase() || 'no-extension';
           if (!stats.typeDistribution[ext]) {
             stats.typeDistribution[ext] = { count: 0, size: 0 };
           }
@@ -128,13 +133,14 @@ async function collectStats(
 
       // Handle pagination
       if (result.isTruncated && result.nextContinuationToken) {
-        let continuationToken: string | undefined = result.nextContinuationToken;
+        let continuationToken: string | undefined =
+          result.nextContinuationToken;
         while (continuationToken) {
           const nextResult: ListedObjectsResult = await client.listObjects(
             currentPrefix,
-            "/",
+            '/',
             1000,
-            continuationToken
+            continuationToken,
           );
 
           for (const obj of nextResult.objects) {
@@ -142,7 +148,8 @@ async function collectStats(
               stats.fileCount++;
               stats.totalSize += obj.size;
 
-              const ext = getFileExtension(obj.name).toLowerCase() || "no-extension";
+              const ext =
+                getFileExtension(obj.name).toLowerCase() || 'no-extension';
               if (!stats.typeDistribution[ext]) {
                 stats.typeDistribution[ext] = { count: 0, size: 0 };
               }
@@ -163,7 +170,9 @@ async function collectStats(
       }
     } catch (error) {
       if (currentPrefix && isMissingDirectoryError(error)) {
-        console.warn(`Skipping missing directory while collecting stats: ${currentPrefix}`);
+        console.warn(
+          `Skipping missing directory while collecting stats: ${currentPrefix}`,
+        );
         continue;
       }
       console.error(`Error listing objects at ${currentPrefix}:`, error);
@@ -179,41 +188,43 @@ export async function loader({ params, request, context }: Route.LoaderArgs) {
   await initDatabase(db);
 
   // Require admin authentication
-  const { isAdmin } = await requireAuth(request, db, "admin");
+  const { isAdmin } = await requireAuth(request, db, 'admin');
   if (!isAdmin) {
-    return Response.json({ error: "Unauthorized" }, { status: 403 });
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
   const storageId = parseInt(params.storageId, 10);
   if (!storageId) {
-    return Response.json({ error: "Invalid storage ID" }, { status: 400 });
+    return Response.json({ error: 'Invalid storage ID' }, { status: 400 });
   }
 
   try {
     const storage = await getStorageById(db, storageId);
     if (!storage) {
-      return Response.json({ error: "Storage not found" }, { status: 404 });
+      return Response.json({ error: 'Storage not found' }, { status: 404 });
     }
 
-    if (storage.type === "mysql") {
-      return Response.json({ error: "MySQL 不支持目录统计" }, { status: 400 });
+    if (storage.type === 'mysql') {
+      return Response.json({ error: 'MySQL 不支持目录统计' }, { status: 400 });
     }
 
     const env = context.cloudflare.env;
     const client: StorageClient = createClient(storage, env, storageId);
 
-    const stats = await withClientState(client, db, storageId, () => collectStats(client));
+    const stats = await withClientState(client, db, storageId, () =>
+      collectStats(client),
+    );
     return Response.json({ stats });
   } catch (error) {
-    console.error("Error collecting storage stats:", error);
+    console.error('Error collecting storage stats:', error);
     return Response.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Failed to collect storage statistics",
+            : 'Failed to collect storage statistics',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -8,15 +8,15 @@ export function parseRepoSegments(
   input: unknown,
   hostPattern: RegExp,
 ): string[] | null {
-  const s = typeof input === "string" ? input.trim() : "";
+  const s = typeof input === 'string' ? input.trim() : '';
   if (!s) return null;
   const cleaned = s
-    .replace(/^(?:https?:\/\/|git@|ssh:\/\/)/i, "")
-    .replace(hostPattern, "")
-    .replace(/\.git$/i, "")
-    .replace(/\/+$/i, "");
+    .replace(/^(?:https?:\/\/|git@|ssh:\/\/)/i, '')
+    .replace(hostPattern, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/i, '');
   const segments = cleaned
-    .split("/")
+    .split('/')
     .map((seg) => decodeURIComponent(seg.trim()))
     .filter((seg) => seg.length > 0);
   if (segments.length < 2) return null;
@@ -31,10 +31,10 @@ export function requireTwoSegments(segments: string[] | null): string[] | null {
 
 // GitLab 用 URL 编码后的 "group%2Fsub%2Fproject" 作为 API 中的项目标识。
 export function encodedIdPath(segments: string[]): string {
-  return segments.map(encodeURIComponent).join("%2F");
+  return segments.map(encodeURIComponent).join('%2F');
 }
 
 // 直接拼进路径的 owner/repo（GitHub 风格）。
 export function plainIdPath(segments: string[]): string {
-  return segments.map(encodeURIComponent).join("/");
+  return segments.map(encodeURIComponent).join('/');
 }

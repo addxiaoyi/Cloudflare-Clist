@@ -1,8 +1,14 @@
-import { useNavigate, useLoaderData, Form } from "react-router";
-import { getStorageById, initDatabase } from "~/lib/storage";
-import { createMysqlClient } from "~/lib/client-factory";
-import { requireAuth } from "~/lib/auth";
-import { Database, TableIcon as Table, RefreshCw, Play as Execute, ChevronLeft } from "~/components/icons";
+import { useNavigate, useLoaderData, Form } from 'react-router';
+import { getStorageById, initDatabase } from '~/lib/storage';
+import { createMysqlClient } from '~/lib/client-factory';
+import { requireAuth } from '~/lib/auth';
+import {
+  Database,
+  TableIcon as Table,
+  RefreshCw,
+  Play as Execute,
+  ChevronLeft,
+} from '~/components/icons';
 
 interface LoaderData {
   storage?: { id: number; name: string; config: any };
@@ -18,7 +24,12 @@ interface LoaderData {
 
 interface TableInfo {
   name: string;
-  columns: { name: string; type: string; nullable: boolean; defaultValue: string | null }[];
+  columns: {
+    name: string;
+    type: string;
+    nullable: boolean;
+    defaultValue: string | null;
+  }[];
   rowCount: number;
 }
 
@@ -31,38 +42,38 @@ interface QueryResult {
 export async function loader({ request, params, context }: any) {
   const env = (context as any).cloudflare.env;
   const search = new URL(request.url).searchParams;
-  const storageId = parseInt(params.storageId || "0", 10);
+  const storageId = parseInt(params.storageId || '0', 10);
 
   const authResult = await requireAuth(request, env.DB);
   if (!authResult.session) {
-    return { error: "Unauthorized" };
+    return { error: 'Unauthorized' };
   }
 
   await initDatabase(env.DB);
   const storage = await getStorageById(env.DB, storageId);
-  if (!storage || storage.type !== "mysql") {
-    return { error: "MySQL storage not found" };
+  if (!storage || storage.type !== 'mysql') {
+    return { error: 'MySQL storage not found' };
   }
 
   const client = createMysqlClient(storage, { HYPERDRIVE: env.HD });
-  const action = search.get("action");
-  const db = search.get("db");
-  const table = search.get("table");
-  const sql = search.get("sql");
+  const action = search.get('action');
+  const db = search.get('db');
+  const table = search.get('table');
+  const sql = search.get('sql');
 
-  let result: LoaderData = { storage, query: sql || "" };
+  const result: LoaderData = { storage, query: sql || '' };
 
   try {
-    if (action === "listDatabases") {
+    if (action === 'listDatabases') {
       result.databases = await client.listDatabases();
-    } else if (action === "listTables" && db) {
+    } else if (action === 'listTables' && db) {
       result.selectedDb = db;
       result.tables = await client.listTables(db);
-    } else if (action === "tableInfo" && db && table) {
+    } else if (action === 'tableInfo' && db && table) {
       result.selectedDb = db;
       result.selectedTable = table;
-      result.tableInfo = await client.getTableInfo(db, table) || undefined;
-    } else if (action === "query" && sql) {
+      result.tableInfo = (await client.getTableInfo(db, table)) || undefined;
+    } else if (action === 'query' && sql) {
       result.queryResult = await client.query(sql);
     }
   } catch (e: any) {
@@ -74,15 +85,15 @@ export async function loader({ request, params, context }: any) {
 
 export async function action({ request, params }: any) {
   const formData = await request.formData();
-  const action = formData.get("action") as string;
-  const storageId = parseInt(params.storageId || "0", 10);
+  const action = formData.get('action') as string;
+  const storageId = parseInt(params.storageId || '0', 10);
 
   const body = {
     storageId,
     action,
-    db: formData.get("db") as string || undefined,
-    table: formData.get("table") as string || undefined,
-    sql: formData.get("sql") as string || undefined,
+    db: (formData.get('db') as string) || undefined,
+    table: (formData.get('table') as string) || undefined,
+    sql: (formData.get('sql') as string) || undefined,
   };
 
   return body;
@@ -99,7 +110,7 @@ export default function MySqlPage() {
         <div className="flex items-center gap-2 mb-4">
           <button
             className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            onClick={() => navigate("/")}
+            onClick={() => navigate('/')}
             aria-label="返回首页"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -109,9 +120,9 @@ export default function MySqlPage() {
         </div>
         <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded p-3">
           <p className="text-red-700 dark:text-red-200">
-            {data.error === "Unauthorized"
-              ? "请先登录管理员账号后再访问 MySQL 管理页面"
-              : data.error || "MySQL 存储不存在或类型不正确，请检查存储配置"}
+            {data.error === 'Unauthorized'
+              ? '请先登录管理员账号后再访问 MySQL 管理页面'
+              : data.error || 'MySQL 存储不存在或类型不正确，请检查存储配置'}
           </p>
         </div>
       </div>
@@ -123,13 +134,16 @@ export default function MySqlPage() {
       <div className="flex items-center gap-2 mb-4">
         <button
           className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          onClick={() => navigate("/")}
+          onClick={() => navigate('/')}
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <Database className="h-6 w-6 text-blue-500" />
         <h1 className="text-lg font-semibold">{data.storage.name}</h1>
-        <RefreshCw className="h-4 w-4 ml-auto cursor-pointer" onClick={() => window.location.reload()} />
+        <RefreshCw
+          className="h-4 w-4 ml-auto cursor-pointer"
+          onClick={() => window.location.reload()}
+        />
       </div>
 
       {data.error && (
@@ -174,7 +188,8 @@ export default function MySqlPage() {
                       <Table className="h-4 w-4" />
                       {table}
                       <span className="text-xs text-zinc-500 ml-auto">
-                        {data.tableInfo?.name === table && `${data.tableInfo.rowCount} 行`}
+                        {data.tableInfo?.name === table &&
+                          `${data.tableInfo.rowCount} 行`}
                       </span>
                     </button>
                   </form>
@@ -196,11 +211,22 @@ export default function MySqlPage() {
                       </thead>
                       <tbody>
                         {data.tableInfo.columns.map((col) => (
-                          <tr key={col.name} className="border-t border-zinc-200 dark:border-zinc-700">
-                            <td className="px-3 py-1.5 font-mono">{col.name}</td>
-                            <td className="px-3 py-1.5 font-mono text-xs">{col.type}</td>
-                            <td className="px-3 py-1.5 text-xs">{col.nullable ? "YES" : "NO"}</td>
-                            <td className="px-3 py-1.5 font-mono text-xs">{String(col.defaultValue || "")}</td>
+                          <tr
+                            key={col.name}
+                            className="border-t border-zinc-200 dark:border-zinc-700"
+                          >
+                            <td className="px-3 py-1.5 font-mono">
+                              {col.name}
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-xs">
+                              {col.type}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs">
+                              {col.nullable ? 'YES' : 'NO'}
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-xs">
+                              {String(col.defaultValue || '')}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -223,44 +249,56 @@ export default function MySqlPage() {
             placeholder="SELECT * FROM table LIMIT 10"
             className="w-full px-3 py-2 border rounded text-sm"
           />
-          <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+          <button
+            type="submit"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
             <Execute className="h-4 w-4" />
             执行查询
           </button>
         </Form>
 
-        {data.queryResult && (() => {
-          const qr = data.queryResult;
-          return (
-            <div className="mt-4">
-              <div className="text-xs text-zinc-500 mb-2">
-                返回 {qr.rowCount} 行
-              </div>
-              <div className="border rounded overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-zinc-100 dark:bg-zinc-800">
-                    <tr>
-                      {qr.columns.map((col) => (
-                        <th key={col} className="px-3 py-2 font-mono text-xs">{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {qr.rows.map((row, i) => (
-                      <tr key={i} className="border-t border-zinc-200 dark:border-zinc-700">
+        {data.queryResult &&
+          (() => {
+            const qr = data.queryResult;
+            return (
+              <div className="mt-4">
+                <div className="text-xs text-zinc-500 mb-2">
+                  返回 {qr.rowCount} 行
+                </div>
+                <div className="border rounded overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-zinc-100 dark:bg-zinc-800">
+                      <tr>
                         {qr.columns.map((col) => (
-                          <td key={col} className="px-3 py-1.5 font-mono text-xs">
-                            {String(row[col] ?? "")}
-                          </td>
+                          <th key={col} className="px-3 py-2 font-mono text-xs">
+                            {col}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {qr.rows.map((row, i) => (
+                        <tr
+                          key={i}
+                          className="border-t border-zinc-200 dark:border-zinc-700"
+                        >
+                          {qr.columns.map((col) => (
+                            <td
+                              key={col}
+                              className="px-3 py-1.5 font-mono text-xs"
+                            >
+                              {String(row[col] ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
       </div>
     </div>
   );

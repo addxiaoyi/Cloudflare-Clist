@@ -6,15 +6,21 @@ const coverageDir = './coverage';
 const finalPath = path.join(coverageDir, 'coverage-final.json');
 
 if (!fs.existsSync(finalPath)) {
-  console.error('Coverage final JSON not found. Run npm run test:coverage first.');
+  console.error(
+    'Coverage final JSON not found. Run npm run test:coverage first.',
+  );
   process.exit(1);
 }
 
 const data = JSON.parse(fs.readFileSync(finalPath, 'utf-8'));
-let lines = 0, linesHit = 0;
-let functions = 0, functionsHit = 0;
-let statements = 0, statementsHit = 0;
-let branches = 0, branchesHit = 0;
+let lines = 0,
+  linesHit = 0;
+let functions = 0,
+  functionsHit = 0;
+let statements = 0,
+  statementsHit = 0;
+let branches = 0,
+  branchesHit = 0;
 
 for (const file of Object.values(data)) {
   const summary = file;
@@ -28,7 +34,7 @@ for (const file of Object.values(data)) {
   branchesHit += summary.branches.found - (summary.branches.uncovered || 0);
 }
 
-const pct = (found, hit) => found === 0 ? 0 : Math.round((hit / found) * 100);
+const pct = (found, hit) => (found === 0 ? 0 : Math.round((hit / found) * 100));
 
 console.log('Coverage Report');
 console.log('===============');

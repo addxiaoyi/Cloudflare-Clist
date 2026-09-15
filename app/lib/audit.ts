@@ -1,4 +1,4 @@
-export type AuditUserType = "guest" | "admin" | "share";
+export type AuditUserType = 'guest' | 'admin' | 'share';
 
 export interface AuditLogEntry {
   action: string;
@@ -23,25 +23,29 @@ export interface AuditLogRow {
 }
 
 function pickClientIp(request: Request): string | null {
-  const cfIp = request.headers.get("CF-Connecting-IP");
+  const cfIp = request.headers.get('CF-Connecting-IP');
   if (cfIp) return cfIp;
-  const xff = request.headers.get("X-Forwarded-For");
-  if (xff) return xff.split(",")[0]?.trim() || null;
-  const realIp = request.headers.get("X-Real-IP");
+  const xff = request.headers.get('X-Forwarded-For');
+  if (xff) return xff.split(',')[0]?.trim() || null;
+  const realIp = request.headers.get('X-Real-IP');
   if (realIp) return realIp;
   return null;
 }
 
-export function getRequestMeta(request: Request): { ip: string | null; userAgent: string | null } {
+export function getRequestMeta(request: Request): {
+  ip: string | null;
+  userAgent: string | null;
+} {
   return {
     ip: pickClientIp(request),
-    userAgent: request.headers.get("User-Agent"),
+    userAgent: request.headers.get('User-Agent'),
   };
 }
 
-function normalizeDetail(detail: AuditLogEntry["detail"]): string | null {
+function normalizeDetail(detail: AuditLogEntry['detail']): string | null {
   if (detail === undefined || detail === null) return null;
-  if (typeof detail === "string") return detail.length > 2000 ? detail.slice(0, 2000) : detail;
+  if (typeof detail === 'string')
+    return detail.length > 2000 ? detail.slice(0, 2000) : detail;
   try {
     const json = JSON.stringify(detail);
     return json.length > 2000 ? json.slice(0, 2000) : json;
@@ -53,20 +57,20 @@ function normalizeDetail(detail: AuditLogEntry["detail"]): string | null {
 // 公开读取操作：guest/share 高频访问时若每笔都写审计，D1 行数会被刷爆（存储计费 + 查询变慢）。
 // 用 isolate 级内存计数按 IP 限速，超限静默丢弃成功日志；管理员与失败/写操作不受影响。
 const THROTTLED_READ_ACTIONS = new Set([
-  "file.list",
-  "file.preview",
-  "file.download",
-  "share.view",
-  "share.list",
+  'file.list',
+  'file.preview',
+  'file.download',
+  'share.view',
+  'share.list',
 ]);
 const READ_THROTTLE_WINDOW_MS = 60_000;
 const READ_THROTTLE_MAX = 30;
 const readThrottle = new Map<string, number[]>();
 
 function isReadThrottled(entry: AuditLogEntry): boolean {
-  if (entry.userType !== "guest" && entry.userType !== "share") return false;
+  if (entry.userType !== 'guest' && entry.userType !== 'share') return false;
   if (!entry.action || !THROTTLED_READ_ACTIONS.has(entry.action)) return false;
-  const ip = entry.ip || "unknown";
+  const ip = entry.ip || 'unknown';
   const now = Date.now();
   const timestamps = readThrottle.get(ip) || [];
   const recent = timestamps.filter((t) => now - t < READ_THROTTLE_WINDOW_MS);
@@ -79,7 +83,10 @@ function isReadThrottled(entry: AuditLogEntry): boolean {
   return false;
 }
 
-export async function logAudit(db: D1Database, entry: AuditLogEntry): Promise<void> {
+export async function logAudit(
+  db: D1Database,
+  entry: AuditLogEntry,
+): Promise<void> {
   // 公开读取的高频日志按 IP 限速丢弃，防止恶意请求灌爆审计表
   if (isReadThrottled(entry)) {
     return;
@@ -88,16 +95,16 @@ export async function logAudit(db: D1Database, entry: AuditLogEntry): Promise<vo
   await db
     .prepare(
       `INSERT INTO audit_logs (action, storage_id, path, user_type, ip, user_agent, detail)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       entry.action,
       entry.storageId ?? null,
       entry.path ?? null,
-      entry.userType ?? "guest",
+      entry.userType ?? 'guest',
       entry.ip ?? null,
       entry.userAgent ?? null,
-      detail
+      detail,
     )
     .run();
 }
@@ -116,29 +123,32 @@ export async function getAuditLogs(
     action?: string;
     storageId?: number;
     userType?: AuditUserType;
-  }
+  },
 ): Promise<AuditLogRow[]> {
   let query = `SELECT id, action, storage_id as storageId, path, user_type as userType, ip, user_agent as userAgent, detail, created_at as createdAt
                FROM audit_logs WHERE 1=1`;
   const bindings: Array<string | number> = [];
 
   if (action) {
-    query += " AND action = ?";
+    query += ' AND action = ?';
     bindings.push(action);
   }
-  if (typeof storageId === "number" && !Number.isNaN(storageId)) {
-    query += " AND storage_id = ?";
+  if (typeof storageId === 'number' && !Number.isNaN(storageId)) {
+    query += ' AND storage_id = ?';
     bindings.push(storageId);
   }
   if (userType) {
-    query += " AND user_type = ?";
+    query += ' AND user_type = ?';
     bindings.push(userType);
   }
 
-  query += " ORDER BY id DESC LIMIT ? OFFSET ?";
+  query += ' ORDER BY id DESC LIMIT ? OFFSET ?';
   bindings.push(limit, offset);
 
-  const result = await db.prepare(query).bind(...bindings).all<AuditLogRow>();
+  const result = await db
+    .prepare(query)
+    .bind(...bindings)
+    .all<AuditLogRow>();
   return result.results || [];
 }
 
@@ -147,13 +157,13 @@ export async function isRateLimited(
   db: D1Database,
   ip: string | null,
   action: string,
-  { windowMinutes = 15, maxFailures = 10 } = {}
+  { windowMinutes = 15, maxFailures = 10 } = {},
 ): Promise<boolean> {
   if (!ip) return false;
   const row = await db
     .prepare(
       `SELECT COUNT(*) as cnt FROM audit_logs
-       WHERE action = ? AND ip = ? AND created_at >= datetime('now', ?)`
+       WHERE action = ? AND ip = ? AND created_at >= datetime('now', ?)`,
     )
     .bind(action, ip, `-${windowMinutes} minutes`)
     .first<{ cnt: number }>();

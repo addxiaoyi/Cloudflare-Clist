@@ -6,7 +6,7 @@ export interface S3Config {
   bucket: string;
   basePath?: string;
   usePathStyle?: boolean;
-  signatureVersion?: "v2" | "v4";
+  signatureVersion?: 'v2' | 'v4';
   // STS temporary credentials (e.g. Qiniu get_federation_token) require x-amz-security-token
   sessionToken?: string;
 }
@@ -27,132 +27,155 @@ export interface ListObjectsResult {
   nextContinuationToken?: string;
 }
 
-async function hmacSha256(key: ArrayBuffer, message: string): Promise<ArrayBuffer> {
+async function hmacSha256(
+  key: ArrayBuffer,
+  message: string,
+): Promise<ArrayBuffer> {
   const cryptoKey = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     key,
-    { name: "HMAC", hash: "SHA-256" },
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ["sign"]
+    ['sign'],
   );
-  return crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+  return crypto.subtle.sign(
+    'HMAC',
+    cryptoKey,
+    new TextEncoder().encode(message),
+  );
 }
 
-async function hmacSha1(keyString: string, message: string): Promise<ArrayBuffer> {
+async function hmacSha1(
+  keyString: string,
+  message: string,
+): Promise<ArrayBuffer> {
   const cryptoKey = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     new TextEncoder().encode(keyString),
-    { name: "HMAC", hash: "SHA-1" },
+    { name: 'HMAC', hash: 'SHA-1' },
     false,
-    ["sign"]
+    ['sign'],
   );
-  return crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+  return crypto.subtle.sign(
+    'HMAC',
+    cryptoKey,
+    new TextEncoder().encode(message),
+  );
 }
 
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  let binary = "";
+  let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 
 // SigV2 signs with HMAC-SHA1 and emits a base64 (not hex) signature.
-async function hmacSha1Base64(secret: string, message: string): Promise<string> {
+async function hmacSha1Base64(
+  secret: string,
+  message: string,
+): Promise<string> {
   return toBase64(await hmacSha1(secret, message));
 }
 
 async function sha256(message: string): Promise<string> {
   const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function toHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 // AWS SigV4 URI encoding is stricter than encodeURIComponent: ! ' ( ) *
 // must also be percent-encoded in canonical URI/query strings.
 function encodeAwsUriComponent(value: string): string {
-  return encodeURIComponent(value).replace(/[!'()*]/g, (char) =>
-    `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
 
-function buildCanonicalQueryString(queryParams: Record<string, string>): string {
+function buildCanonicalQueryString(
+  queryParams: Record<string, string>,
+): string {
   return Object.keys(queryParams)
     .sort()
-    .map((key) => `${encodeAwsUriComponent(key)}=${encodeAwsUriComponent(queryParams[key])}`)
-    .join("&");
+    .map(
+      (key) =>
+        `${encodeAwsUriComponent(key)}=${encodeAwsUriComponent(queryParams[key])}`,
+    )
+    .join('&');
 }
 
 // S3 URI encoding - encode each path segment (same for signature and URL)
 function encodeS3Path(path: string): string {
   return path
-    .split("/")
+    .split('/')
     .map((segment) => encodeAwsUriComponent(segment))
-    .join("/");
+    .join('/');
 }
 
 async function getSignatureKey(
   key: string,
   dateStamp: string,
   regionName: string,
-  serviceName: string
+  serviceName: string,
 ): Promise<ArrayBuffer> {
-  const keyData = new TextEncoder().encode("AWS4" + key);
+  const keyData = new TextEncoder().encode('AWS4' + key);
   const kDate = await hmacSha256(keyData.buffer as ArrayBuffer, dateStamp);
   const kRegion = await hmacSha256(kDate, regionName);
   const kService = await hmacSha256(kRegion, serviceName);
-  return hmacSha256(kService, "aws4_request");
+  return hmacSha256(kService, 'aws4_request');
 }
 
 export class S3Client {
   private config: S3Config;
-  private hostStyle: "path" | "vhost";
-  private signatureVersion: "v2" | "v4";
+  private hostStyle: 'path' | 'vhost';
+  private signatureVersion: 'v2' | 'v4';
 
   private static readonly SIGV2_SUBRESOURCES = new Set([
-    "acl",
-    "lifecycle",
-    "location",
-    "logging",
-    "notification",
-    "partNumber",
-    "policy",
-    "requestPayment",
-    "torrent",
-    "uploadId",
-    "uploads",
-    "versionId",
-    "versioning",
-    "versions",
-    "website",
-    "delete",
-    "cors",
-    "replicate",
-    "replication",
-    "tagging",
+    'acl',
+    'lifecycle',
+    'location',
+    'logging',
+    'notification',
+    'partNumber',
+    'policy',
+    'requestPayment',
+    'torrent',
+    'uploadId',
+    'uploads',
+    'versionId',
+    'versioning',
+    'versions',
+    'website',
+    'delete',
+    'cors',
+    'replicate',
+    'replication',
+    'tagging',
   ]);
 
   constructor(config: S3Config) {
-    const raw = config.endpoint?.trim() || "";
+    const raw = config.endpoint?.trim() || '';
     if (!raw) {
-      throw new Error("Endpoint 未配置，请编辑存储后填写服务器地址");
+      throw new Error('Endpoint 未配置，请编辑存储后填写服务器地址');
     }
     // 用户常漏掉协议头，补上 https:// 避免 new URL() 抛 "Invalid URL string"
     const endpoint = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
     this.config = { ...config, endpoint };
-    this.hostStyle = config.usePathStyle === false ? "vhost" : "path";
-    this.signatureVersion = config.signatureVersion || "v4";
+    this.hostStyle = config.usePathStyle === false ? 'vhost' : 'path';
+    this.signatureVersion = config.signatureVersion || 'v4';
   }
 
   private getBaseHost(url: URL): string {
-    if (this.hostStyle === "vhost") {
+    if (this.hostStyle === 'vhost') {
       return `${this.config.bucket}.${url.host}`;
     }
     return url.host;
@@ -160,23 +183,23 @@ export class S3Client {
 
   private getRequestUrl(objectPath: string): string {
     const url = new URL(this.config.endpoint);
-    if (this.hostStyle === "vhost") {
+    if (this.hostStyle === 'vhost') {
       return `${url.protocol}//${this.getBaseHost(url)}${objectPath}`;
     }
     return `${url.protocol}//${url.host}${objectPath}`;
   }
 
   private getFullPath(path: string): string {
-    const basePath = this.config.basePath?.replace(/^\/|\/$/g, "") || "";
-    const cleanPath = path.replace(/^\//, "");
+    const basePath = this.config.basePath?.replace(/^\/|\/$/g, '') || '';
+    const cleanPath = path.replace(/^\//, '');
     return basePath ? `${basePath}/${cleanPath}` : cleanPath;
   }
 
   // Canonical/URL path for an object key, consistent with the host header we sign.
   // path-style: /bucket/key  |  vhost-style: /key (bucket lives in the host, not the path)
   private objectPath(fullKey: string): string {
-    const key = fullKey.startsWith("/") ? fullKey : `/${fullKey}`;
-    return this.hostStyle === "path" ? `/${this.config.bucket}${key}` : key;
+    const key = fullKey.startsWith('/') ? fullKey : `/${fullKey}`;
+    return this.hostStyle === 'path' ? `/${this.config.bucket}${key}` : key;
   }
 
   // Absolute request URL matching objectPath + the signed host.
@@ -193,7 +216,7 @@ export class S3Client {
     method: string,
     path: string,
     queryParams: Record<string, string> = {},
-    headers: Record<string, string> = {}
+    headers: Record<string, string> = {},
   ): Promise<Record<string, string>> {
     const now = new Date();
     const dateGMT = now.toUTCString();
@@ -208,16 +231,18 @@ export class S3Client {
       .filter(([key]) => S3Client.SIGV2_SUBRESOURCES.has(key))
       .sort(([a], [b]) => a.localeCompare(b));
     if (subParams.length > 0) {
-      canonicalResource += "?" + subParams
-        .map(([key, value]) => (value === "" ? key : `${key}=${value}`))
-        .join("&");
+      canonicalResource +=
+        '?' +
+        subParams
+          .map(([key, value]) => (value === '' ? key : `${key}=${value}`))
+          .join('&');
     }
 
     // Extract x-amz-* headers for canonicalization
     const amzHeaders: Record<string, string> = {};
     const otherHeaders: Record<string, string> = {};
     for (const [key, value] of Object.entries(headers)) {
-      if (key.toLowerCase().startsWith("x-amz-")) {
+      if (key.toLowerCase().startsWith('x-amz-')) {
         amzHeaders[key.toLowerCase()] = value.trim();
       } else {
         otherHeaders[key] = value;
@@ -226,19 +251,26 @@ export class S3Client {
 
     // Canonicalized x-amz-* headers: sorted alphabetically
     const sortedAmzKeys = Object.keys(amzHeaders).sort();
-    const canonicalAmzHeaders = sortedAmzKeys.map((k) => `${k}:${amzHeaders[k]}`).join("\n");
+    const canonicalAmzHeaders = sortedAmzKeys
+      .map((k) => `${k}:${amzHeaders[k]}`)
+      .join('\n');
 
     // String to sign format for SigV2
     // Note: Content-MD5 is typically empty unless explicitly set
     const stringToSign = [
       method,
-      "", // Content-MD5 (usually empty)
-      otherHeaders["Content-Type"] || "",
+      '', // Content-MD5 (usually empty)
+      otherHeaders['Content-Type'] || '',
       dateGMT,
-      canonicalAmzHeaders ? canonicalAmzHeaders + "\n" + canonicalResource : canonicalResource,
-    ].join("\n");
+      canonicalAmzHeaders
+        ? canonicalAmzHeaders + '\n' + canonicalResource
+        : canonicalResource,
+    ].join('\n');
 
-    const signature = await hmacSha1Base64(this.config.secretAccessKey, stringToSign);
+    const signature = await hmacSha1Base64(
+      this.config.secretAccessKey,
+      stringToSign,
+    );
 
     const signedHeaders: Record<string, string> = {
       Date: dateGMT,
@@ -256,17 +288,24 @@ export class S3Client {
     path: string,
     queryParams: Record<string, string> = {},
     headers: Record<string, string> = {},
-    payload: string = "",
-    useUnsignedPayload: boolean = false
+    payload: string = '',
+    useUnsignedPayload: boolean = false,
   ): Promise<Record<string, string>> {
     // Temporary credentials must carry x-amz-security-token in the signed headers
     const headersWithToken = this.config.sessionToken
-      ? { ...headers, "x-amz-security-token": this.config.sessionToken }
+      ? { ...headers, 'x-amz-security-token': this.config.sessionToken }
       : headers;
-    if (this.signatureVersion === "v2") {
+    if (this.signatureVersion === 'v2') {
       return this.signRequestV2(method, path, queryParams, headersWithToken);
     }
-    return this.signRequestV4(method, path, queryParams, headersWithToken, payload, useUnsignedPayload);
+    return this.signRequestV4(
+      method,
+      path,
+      queryParams,
+      headersWithToken,
+      payload,
+      useUnsignedPayload,
+    );
   }
 
   private async signRequestV4(
@@ -274,102 +313,107 @@ export class S3Client {
     path: string,
     queryParams: Record<string, string> = {},
     headers: Record<string, string> = {},
-    payload: string = "",
-    useUnsignedPayload: boolean = false
+    payload: string = '',
+    useUnsignedPayload: boolean = false,
   ): Promise<Record<string, string>> {
     const url = new URL(this.config.endpoint);
     const host = this.getBaseHost(url);
     const now = new Date();
-    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = amzDate.slice(0, 8);
 
-    const payloadHash = useUnsignedPayload ? "UNSIGNED-PAYLOAD" : await sha256(payload);
+    const payloadHash = useUnsignedPayload
+      ? 'UNSIGNED-PAYLOAD'
+      : await sha256(payload);
 
     const headersToSign: Record<string, string> = {
       host,
-      "x-amz-content-sha256": payloadHash,
-      "x-amz-date": amzDate,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
       ...headers,
     };
 
     const sortedHeaderKeys = Object.keys(headersToSign).sort();
     const canonicalHeaders = sortedHeaderKeys
       .map((key) => `${key.toLowerCase()}:${headersToSign[key].trim()}`)
-      .join("\n");
-    const signedHeadersStr = sortedHeaderKeys.map((k) => k.toLowerCase()).join(";");
+      .join('\n');
+    const signedHeadersStr = sortedHeaderKeys
+      .map((k) => k.toLowerCase())
+      .join(';');
 
     const canonicalQueryString = buildCanonicalQueryString(queryParams);
 
-    const rawCanonicalUri = path.startsWith("/") ? path : "/" + path;
+    const rawCanonicalUri = path.startsWith('/') ? path : '/' + path;
     const canonicalUri = encodeS3Path(rawCanonicalUri);
     const canonicalRequest = [
       method,
       canonicalUri,
       canonicalQueryString,
-      canonicalHeaders + "\n",
+      canonicalHeaders + '\n',
       signedHeadersStr,
       payloadHash,
-    ].join("\n");
+    ].join('\n');
 
     const credentialScope = `${dateStamp}/${this.config.region}/s3/aws4_request`;
     const stringToSign = [
-      "AWS4-HMAC-SHA256",
+      'AWS4-HMAC-SHA256',
       amzDate,
       credentialScope,
       await sha256(canonicalRequest),
-    ].join("\n");
+    ].join('\n');
 
     const signingKey = await getSignatureKey(
       this.config.secretAccessKey,
       dateStamp,
       this.config.region,
-      "s3"
+      's3',
     );
     const signature = toHex(await hmacSha256(signingKey, stringToSign));
 
     const authorization = `AWS4-HMAC-SHA256 Credential=${this.config.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeadersStr}, Signature=${signature}`;
 
     return {
-      "x-amz-content-sha256": payloadHash,
-      "x-amz-date": amzDate,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
       ...headers,
       Authorization: authorization,
     };
   }
 
   async listObjects(
-    prefix: string = "",
-    delimiter: string = "/",
+    prefix: string = '',
+    delimiter: string = '/',
     maxKeys: number = 1000,
-    continuationToken?: string
+    continuationToken?: string,
   ): Promise<ListObjectsResult> {
     let normalizedPrefix = prefix;
-    if (normalizedPrefix && !normalizedPrefix.endsWith("/")) {
-      normalizedPrefix = normalizedPrefix + "/";
+    if (normalizedPrefix && !normalizedPrefix.endsWith('/')) {
+      normalizedPrefix = normalizedPrefix + '/';
     }
 
     const fullPrefix = this.getFullPath(normalizedPrefix);
 
     const queryParams: Record<string, string> = {
-      "list-type": "2",
+      'list-type': '2',
       prefix: fullPrefix,
       delimiter,
-      "max-keys": maxKeys.toString(),
+      'max-keys': maxKeys.toString(),
     };
 
     if (continuationToken) {
-      queryParams["continuation-token"] = continuationToken;
+      queryParams['continuation-token'] = continuationToken;
     }
 
-    const path = this.hostStyle === "vhost" ? `/${fullPrefix}` : `/${this.config.bucket}`;
+    const path =
+      this.hostStyle === 'vhost' ? `/${fullPrefix}` : `/${this.config.bucket}`;
 
-    const headers = await this.signRequest("GET", path, queryParams);
+    const headers = await this.signRequest('GET', path, queryParams);
 
     const queryString = buildCanonicalQueryString(queryParams);
 
-    const url = this.getRequestUrl(path.startsWith("/") ? path : "/" + path);
+    const url = this.getRequestUrl(path.startsWith('/') ? path : '/' + path);
     const response = await fetch(`${url}?${queryString}`, {
-      method: "GET",
+      method: 'GET',
       headers,
     });
 
@@ -382,45 +426,56 @@ export class S3Client {
     return this.parseListObjectsResponse(xml, fullPrefix);
   }
 
-  private parseListObjectsResponse(xml: string, fullPrefix: string): ListObjectsResult {
+  private parseListObjectsResponse(
+    xml: string,
+    fullPrefix: string,
+  ): ListObjectsResult {
     const objects: S3Object[] = [];
     const prefixes: string[] = [];
-    const basePath = this.config.basePath?.replace(/^\/|\/$/g, "") || "";
+    const basePath = this.config.basePath?.replace(/^\/|\/$/g, '') || '';
 
     // Decode XML entities
-    const decodeXml = (str: string) => str
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&apos;/g, "'");
+    const decodeXml = (str: string) =>
+      str
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'");
 
     const contentsRegex = /<Contents>([\s\S]*?)<\/Contents>/g;
-    const prefixRegex = /<CommonPrefixes>[\s\S]*?<Prefix>(.*?)<\/Prefix>[\s\S]*?<\/CommonPrefixes>/g;
+    const prefixRegex =
+      /<CommonPrefixes>[\s\S]*?<Prefix>(.*?)<\/Prefix>[\s\S]*?<\/CommonPrefixes>/g;
 
     let match;
     while ((match = contentsRegex.exec(xml)) !== null) {
       const content = match[1];
-      const key = decodeXml(content.match(/<Key>(.*?)<\/Key>/)?.[1] || "");
-      const size = parseInt(content.match(/<Size>(.*?)<\/Size>/)?.[1] || "0", 10);
-      const lastModified = content.match(/<LastModified>(.*?)<\/LastModified>/)?.[1] || "";
-      const etag = content.match(/<ETag>"?(.*?)"?<\/ETag>/)?.[1] || "";
+      const key = decodeXml(content.match(/<Key>(.*?)<\/Key>/)?.[1] || '');
+      const size = parseInt(
+        content.match(/<Size>(.*?)<\/Size>/)?.[1] || '0',
+        10,
+      );
+      const lastModified =
+        content.match(/<LastModified>(.*?)<\/LastModified>/)?.[1] || '';
+      const etag = content.match(/<ETag>"?(.*?)"?<\/ETag>/)?.[1] || '';
 
       // Remove basePath prefix to get display key
-      const displayKey = basePath && key.startsWith(basePath + "/")
-        ? key.slice(basePath.length + 1)
-        : key;
+      const displayKey =
+        basePath && key.startsWith(basePath + '/')
+          ? key.slice(basePath.length + 1)
+          : key;
 
       // Remove the current folder prefix to get just the name
-      const relativePrefix = basePath && fullPrefix.startsWith(basePath + "/")
-        ? fullPrefix.slice(basePath.length + 1)
-        : fullPrefix;
+      const relativePrefix =
+        basePath && fullPrefix.startsWith(basePath + '/')
+          ? fullPrefix.slice(basePath.length + 1)
+          : fullPrefix;
 
       const name = displayKey.startsWith(relativePrefix)
         ? displayKey.slice(relativePrefix.length)
         : displayKey;
 
-      if (name && !name.endsWith("/")) {
+      if (name && !name.endsWith('/')) {
         objects.push({
           key: displayKey,
           name,
@@ -436,18 +491,20 @@ export class S3Client {
       const p = decodeXml(match[1]);
 
       // Remove basePath prefix to get display prefix
-      const displayPrefix = basePath && p.startsWith(basePath + "/")
-        ? p.slice(basePath.length + 1)
-        : p;
+      const displayPrefix =
+        basePath && p.startsWith(basePath + '/')
+          ? p.slice(basePath.length + 1)
+          : p;
 
       // Remove the current folder prefix to get just the name
-      const relativePrefix = basePath && fullPrefix.startsWith(basePath + "/")
-        ? fullPrefix.slice(basePath.length + 1)
-        : fullPrefix;
+      const relativePrefix =
+        basePath && fullPrefix.startsWith(basePath + '/')
+          ? fullPrefix.slice(basePath.length + 1)
+          : fullPrefix;
 
       const name = displayPrefix.startsWith(relativePrefix)
-        ? displayPrefix.slice(relativePrefix.length).replace(/\/$/, "")
-        : displayPrefix.replace(/\/$/, "");
+        ? displayPrefix.slice(relativePrefix.length).replace(/\/$/, '')
+        : displayPrefix.replace(/\/$/, '');
 
       if (name) {
         prefixes.push(displayPrefix);
@@ -455,14 +512,16 @@ export class S3Client {
           key: displayPrefix,
           name,
           size: 0,
-          lastModified: "",
+          lastModified: '',
           isDirectory: true,
         });
       }
     }
 
-    const isTruncated = xml.includes("<IsTruncated>true</IsTruncated>");
-    const nextToken = xml.match(/<NextContinuationToken>(.*?)<\/NextContinuationToken>/)?.[1];
+    const isTruncated = xml.includes('<IsTruncated>true</IsTruncated>');
+    const nextToken = xml.match(
+      /<NextContinuationToken>(.*?)<\/NextContinuationToken>/,
+    )?.[1];
 
     return {
       objects: objects.sort((a, b) => {
@@ -477,22 +536,25 @@ export class S3Client {
     };
   }
 
-  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+  async getObject(
+    key: string,
+    options?: { range?: string },
+  ): Promise<Response> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
     const signHeaders: Record<string, string> = {};
     if (options?.range) {
       signHeaders.Range = options.range;
     }
-    const headers = await this.signRequest("GET", path, {}, signHeaders);
+    const headers = await this.signRequest('GET', path, {}, signHeaders);
 
     const fetchHeaders = new Headers(headers);
     if (options?.range) {
-      fetchHeaders.set("Range", options.range);
+      fetchHeaders.set('Range', options.range);
     }
 
     const response = await fetch(this.objectUrl(fullKey), {
-      method: "GET",
+      method: 'GET',
       headers: fetchHeaders,
     });
 
@@ -509,7 +571,7 @@ export class S3Client {
     method: string,
     path: string,
     subresources: Record<string, string>,
-    expiresIn: number
+    expiresIn: number,
   ): Promise<string> {
     const url = new URL(this.config.endpoint);
     const host = this.getBaseHost(url);
@@ -518,13 +580,19 @@ export class S3Client {
     // Canonicalized resource includes only the subresource params (not AWSAccessKeyId etc.)
     const subKeys = Object.keys(subresources).sort();
     const subParts = subKeys.map((k) =>
-      subresources[k] === "" ? k : `${k}=${subresources[k]}`
+      subresources[k] === '' ? k : `${k}=${subresources[k]}`,
     );
-    const resource = subParts.length > 0 ? `${path}?${subParts.join("&")}` : path;
+    const resource =
+      subParts.length > 0 ? `${path}?${subParts.join('&')}` : path;
 
     const expires = Math.floor(Date.now() / 1000) + expiresIn;
-    const stringToSign = [method, "", "", expires.toString(), resource].join("\n");
-    const signature = await hmacSha1Base64(this.config.secretAccessKey, stringToSign);
+    const stringToSign = [method, '', '', expires.toString(), resource].join(
+      '\n',
+    );
+    const signature = await hmacSha1Base64(
+      this.config.secretAccessKey,
+      stringToSign,
+    );
 
     const params = new URLSearchParams({
       AWSAccessKeyId: this.config.accessKeyId,
@@ -533,7 +601,8 @@ export class S3Client {
     });
     for (const k of subKeys) params.set(k, subresources[k]);
     // SigV2 query auth carries the STS token as an unsigned security-token param
-    if (this.config.sessionToken) params.set("security-token", this.config.sessionToken);
+    if (this.config.sessionToken)
+      params.set('security-token', this.config.sessionToken);
 
     return `${url.protocol}//${host}${encodedPath}?${params.toString()}`;
   }
@@ -541,53 +610,53 @@ export class S3Client {
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
-    if (this.signatureVersion === "v2") {
-      return this.presignUrlV2("GET", path, {}, expiresIn);
+    if (this.signatureVersion === 'v2') {
+      return this.presignUrlV2('GET', path, {}, expiresIn);
     }
     const encodedPath = encodeS3Path(path);
     const url = new URL(this.config.endpoint);
     const host = this.getBaseHost(url);
 
     const now = new Date();
-    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = amzDate.slice(0, 8);
     const credentialScope = `${dateStamp}/${this.config.region}/s3/aws4_request`;
 
     const queryParams: Record<string, string> = {
-      "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
-      "X-Amz-Credential": `${this.config.accessKeyId}/${credentialScope}`,
-      "X-Amz-Date": amzDate,
-      "X-Amz-Expires": expiresIn.toString(),
-      "X-Amz-SignedHeaders": "host",
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': `${this.config.accessKeyId}/${credentialScope}`,
+      'X-Amz-Date': amzDate,
+      'X-Amz-Expires': expiresIn.toString(),
+      'X-Amz-SignedHeaders': 'host',
     };
     // X-Amz-Security-Token joins the canonical query string, so it is covered by the signature
     if (this.config.sessionToken) {
-      queryParams["X-Amz-Security-Token"] = this.config.sessionToken;
+      queryParams['X-Amz-Security-Token'] = this.config.sessionToken;
     }
 
     const canonicalQueryString = buildCanonicalQueryString(queryParams);
 
     const canonicalRequest = [
-      "GET",
+      'GET',
       encodedPath,
       canonicalQueryString,
       `host:${host}\n`,
-      "host",
-      "UNSIGNED-PAYLOAD",
-    ].join("\n");
+      'host',
+      'UNSIGNED-PAYLOAD',
+    ].join('\n');
 
     const stringToSign = [
-      "AWS4-HMAC-SHA256",
+      'AWS4-HMAC-SHA256',
       amzDate,
       credentialScope,
       await sha256(canonicalRequest),
-    ].join("\n");
+    ].join('\n');
 
     const signingKey = await getSignatureKey(
       this.config.secretAccessKey,
       dateStamp,
       this.config.region,
-      "s3"
+      's3',
     );
     const signature = toHex(await hmacSha256(signingKey, stringToSign));
 
@@ -598,16 +667,16 @@ export class S3Client {
     key: string,
     uploadId: string,
     partNumber: number,
-    expiresIn: number = 3600
+    expiresIn: number = 3600,
   ): Promise<string> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
-    if (this.signatureVersion === "v2") {
+    if (this.signatureVersion === 'v2') {
       return this.presignUrlV2(
-        "PUT",
+        'PUT',
         path,
         { partNumber: partNumber.toString(), uploadId },
-        expiresIn
+        expiresIn,
       );
     }
     const encodedPath = encodeS3Path(path);
@@ -615,71 +684,75 @@ export class S3Client {
     const host = this.getBaseHost(url);
 
     const now = new Date();
-    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = amzDate.slice(0, 8);
     const credentialScope = `${dateStamp}/${this.config.region}/s3/aws4_request`;
 
     const queryParams: Record<string, string> = {
-      "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
-      "X-Amz-Credential": `${this.config.accessKeyId}/${credentialScope}`,
-      "X-Amz-Date": amzDate,
-      "X-Amz-Expires": expiresIn.toString(),
-      "X-Amz-SignedHeaders": "host",
-      "partNumber": partNumber.toString(),
-      "uploadId": uploadId,
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': `${this.config.accessKeyId}/${credentialScope}`,
+      'X-Amz-Date': amzDate,
+      'X-Amz-Expires': expiresIn.toString(),
+      'X-Amz-SignedHeaders': 'host',
+      partNumber: partNumber.toString(),
+      uploadId: uploadId,
     };
     if (this.config.sessionToken) {
-      queryParams["X-Amz-Security-Token"] = this.config.sessionToken;
+      queryParams['X-Amz-Security-Token'] = this.config.sessionToken;
     }
 
     const canonicalQueryString = buildCanonicalQueryString(queryParams);
 
     const canonicalRequest = [
-      "PUT",
+      'PUT',
       encodedPath,
       canonicalQueryString,
       `host:${host}\n`,
-      "host",
-      "UNSIGNED-PAYLOAD",
-    ].join("\n");
+      'host',
+      'UNSIGNED-PAYLOAD',
+    ].join('\n');
 
     const stringToSign = [
-      "AWS4-HMAC-SHA256",
+      'AWS4-HMAC-SHA256',
       amzDate,
       credentialScope,
       await sha256(canonicalRequest),
-    ].join("\n");
+    ].join('\n');
 
     const signingKey = await getSignatureKey(
       this.config.secretAccessKey,
       dateStamp,
       this.config.region,
-      "s3"
+      's3',
     );
     const signature = toHex(await hmacSha256(signingKey, stringToSign));
 
     return `${url.protocol}//${host}${encodedPath}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
   }
 
-  async putObject(key: string, body: ArrayBuffer | string, contentType?: string): Promise<void> {
+  async putObject(
+    key: string,
+    body: ArrayBuffer | string,
+    contentType?: string,
+  ): Promise<void> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
 
     let bodyData: ArrayBuffer;
-    if (typeof body === "string") {
+    if (typeof body === 'string') {
       bodyData = new TextEncoder().encode(body).buffer as ArrayBuffer;
     } else {
       bodyData = body;
     }
 
     // Use UNSIGNED-PAYLOAD for binary uploads
-    const headers = await this.signRequest("PUT", path, {}, {}, "", true);
+    const headers = await this.signRequest('PUT', path, {}, {}, '', true);
 
     const response = await fetch(this.objectUrl(fullKey), {
-      method: "PUT",
+      method: 'PUT',
       headers: {
         ...headers,
-        "Content-Type": contentType || "application/octet-stream",
+        'Content-Type': contentType || 'application/octet-stream',
       },
       body: bodyData,
     });
@@ -693,10 +766,10 @@ export class S3Client {
   async deleteObject(key: string): Promise<void> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
-    const headers = await this.signRequest("DELETE", path);
+    const headers = await this.signRequest('DELETE', path);
 
     const response = await fetch(this.objectUrl(fullKey), {
-      method: "DELETE",
+      method: 'DELETE',
       headers,
     });
 
@@ -713,19 +786,24 @@ export class S3Client {
 
     // x-amz-copy-source is always bucket/key regardless of host style, URL encoded
     const copySource = `/${this.config.bucket}/${fullSourceKey}`
-      .split("/")
+      .split('/')
       .map((segment) => encodeAwsUriComponent(segment))
-      .join("/");
+      .join('/');
 
-    const headers = await this.signRequest("PUT", path, {}, {
-      "x-amz-copy-source": copySource,
-    });
+    const headers = await this.signRequest(
+      'PUT',
+      path,
+      {},
+      {
+        'x-amz-copy-source': copySource,
+      },
+    );
 
     const response = await fetch(this.objectUrl(fullDestKey), {
-      method: "PUT",
+      method: 'PUT',
       headers: {
         ...headers,
-        "x-amz-copy-source": copySource,
+        'x-amz-copy-source': copySource,
       },
     });
 
@@ -737,17 +815,23 @@ export class S3Client {
 
   async createFolder(folderPath: string): Promise<void> {
     // S3 folders are represented by empty objects with trailing slash
-    const normalizedPath = folderPath.endsWith("/") ? folderPath : folderPath + "/";
-    await this.putObject(normalizedPath, "", "application/x-directory");
+    const normalizedPath = folderPath.endsWith('/')
+      ? folderPath
+      : folderPath + '/';
+    await this.putObject(normalizedPath, '', 'application/x-directory');
   }
 
-  async headObject(key: string): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
+  async headObject(key: string): Promise<{
+    contentLength: number;
+    contentType: string;
+    lastModified: string;
+  } | null> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
-    const headers = await this.signRequest("HEAD", path);
+    const headers = await this.signRequest('HEAD', path);
 
     const response = await fetch(this.objectUrl(fullKey), {
-      method: "HEAD",
+      method: 'HEAD',
       headers,
     });
 
@@ -760,42 +844,53 @@ export class S3Client {
     }
 
     return {
-      contentLength: parseInt(response.headers.get("content-length") || "0", 10),
-      contentType: response.headers.get("content-type") || "application/octet-stream",
-      lastModified: response.headers.get("last-modified") || "",
+      contentLength: parseInt(
+        response.headers.get('content-length') || '0',
+        10,
+      ),
+      contentType:
+        response.headers.get('content-type') || 'application/octet-stream',
+      lastModified: response.headers.get('last-modified') || '',
     };
   }
 
   async initiateMultipartUpload(
     key: string,
     contentType: string,
-    _options?: { size?: number; chunkSize?: number }
+    _options?: { size?: number; chunkSize?: number },
   ): Promise<string> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
 
-    const headers = await this.signRequest("POST", path, { uploads: "" }, {
-      "Content-Type": contentType,
-    });
+    const headers = await this.signRequest(
+      'POST',
+      path,
+      { uploads: '' },
+      {
+        'Content-Type': contentType,
+      },
+    );
 
-    const queryString = buildCanonicalQueryString({ uploads: "" });
+    const queryString = buildCanonicalQueryString({ uploads: '' });
     const response = await fetch(this.objectUrl(fullKey) + `?${queryString}`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         ...headers,
-        "Content-Type": contentType,
+        'Content-Type': contentType,
       },
     });
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`S3 InitiateMultipartUpload failed: ${response.status} ${text}`);
+      throw new Error(
+        `S3 InitiateMultipartUpload failed: ${response.status} ${text}`,
+      );
     }
 
     const xml = await response.text();
     const uploadIdMatch = xml.match(/<UploadId>(.*?)<\/UploadId>/);
     if (!uploadIdMatch) {
-      throw new Error("Failed to parse UploadId from response");
+      throw new Error('Failed to parse UploadId from response');
     }
 
     return uploadIdMatch[1];
@@ -806,7 +901,7 @@ export class S3Client {
     uploadId: string,
     partNumber: number,
     body: ReadableStream | ArrayBuffer,
-    contentLength?: number
+    contentLength?: number,
   ): Promise<string> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
@@ -817,22 +912,29 @@ export class S3Client {
       uploadId: uploadId,
     };
 
-    const headers = await this.signRequest("PUT", path, queryParams, {}, "", true);
+    const headers = await this.signRequest(
+      'PUT',
+      path,
+      queryParams,
+      {},
+      '',
+      true,
+    );
 
     // Build query string in same sorted order as signature
     const queryString = buildCanonicalQueryString(queryParams);
 
     const fetchHeaders: Record<string, string> = { ...headers };
     if (contentLength !== undefined) {
-      fetchHeaders["Content-Length"] = contentLength.toString();
+      fetchHeaders['Content-Length'] = contentLength.toString();
     }
 
     const response = await fetch(`${this.objectUrl(fullKey)}?${queryString}`, {
-      method: "PUT",
+      method: 'PUT',
       headers: fetchHeaders,
       body,
       // @ts-expect-error - duplex is required for streaming body
-      duplex: "half",
+      duplex: 'half',
     });
 
     if (!response.ok) {
@@ -840,18 +942,18 @@ export class S3Client {
       throw new Error(`S3 UploadPart failed: ${response.status} ${text}`);
     }
 
-    const etag = response.headers.get("ETag");
+    const etag = response.headers.get('ETag');
     if (!etag) {
-      throw new Error("No ETag returned from UploadPart");
+      throw new Error('No ETag returned from UploadPart');
     }
 
-    return etag.replace(/"/g, "");
+    return etag.replace(/"/g, '');
   }
 
   async completeMultipartUpload(
     key: string,
     uploadId: string,
-    parts: { partNumber: number; etag: string }[]
+    parts: { partNumber: number; etag: string }[],
   ): Promise<void> {
     const fullKey = this.getFullPath(key);
     const path = this.objectPath(fullKey);
@@ -860,33 +962,39 @@ export class S3Client {
     const partsXml = parts
       .sort((a, b) => a.partNumber - b.partNumber)
       .map(
-        (p) => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>"${p.etag}"</ETag></Part>`
+        (p) =>
+          `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>"${p.etag}"</ETag></Part>`,
       )
-      .join("");
+      .join('');
     const body = `<CompleteMultipartUpload>${partsXml}</CompleteMultipartUpload>`;
 
-    const headers = await this.signRequest("POST", path, queryParams, {
-      "Content-Type": "application/xml",
-    }, body);
+    const headers = await this.signRequest(
+      'POST',
+      path,
+      queryParams,
+      {
+        'Content-Type': 'application/xml',
+      },
+      body,
+    );
 
     // Build query string in same sorted order as signature
     const queryString = buildCanonicalQueryString(queryParams);
 
-    const response = await fetch(
-      `${this.objectUrl(fullKey)}?${queryString}`,
-      {
-        method: "POST",
-        headers: {
-          ...headers,
-          "Content-Type": "application/xml",
-        },
-        body,
-      }
-    );
+    const response = await fetch(`${this.objectUrl(fullKey)}?${queryString}`, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/xml',
+      },
+      body,
+    });
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`S3 CompleteMultipartUpload failed: ${response.status} ${text}`);
+      throw new Error(
+        `S3 CompleteMultipartUpload failed: ${response.status} ${text}`,
+      );
     }
   }
 
@@ -895,19 +1003,18 @@ export class S3Client {
     const path = this.objectPath(fullKey);
     const queryString = buildCanonicalQueryString({ uploadId });
 
-    const headers = await this.signRequest("DELETE", path, { uploadId });
+    const headers = await this.signRequest('DELETE', path, { uploadId });
 
-    const response = await fetch(
-      `${this.objectUrl(fullKey)}?${queryString}`,
-      {
-        method: "DELETE",
-        headers,
-      }
-    );
+    const response = await fetch(`${this.objectUrl(fullKey)}?${queryString}`, {
+      method: 'DELETE',
+      headers,
+    });
 
     if (!response.ok && response.status !== 204) {
       const text = await response.text();
-      throw new Error(`S3 AbortMultipartUpload failed: ${response.status} ${text}`);
+      throw new Error(
+        `S3 AbortMultipartUpload failed: ${response.status} ${text}`,
+      );
     }
   }
 }

@@ -1,4 +1,4 @@
-import { stripLeadingSlash } from "./drive-utils";
+import { stripLeadingSlash } from './drive-utils';
 
 export interface DriveObject {
   key: string;
@@ -16,8 +16,8 @@ export interface ListObjectsResult {
   nextContinuationToken?: string;
 }
 
-const API_BASE = "https://api.dropboxapi.com";
-const CONTENT_BASE = "https://content.dropboxapi.com";
+const API_BASE = 'https://api.dropboxapi.com';
+const CONTENT_BASE = 'https://content.dropboxapi.com';
 
 interface DropboxFile {
   name: string;
@@ -40,13 +40,19 @@ export class DropboxClient {
   private saving: Record<string, any>;
   private basePath: string;
 
-  constructor(options: { config?: Record<string, any>; saving?: Record<string, any> }) {
+  constructor(options: {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  }) {
     this.config = options.config || {};
     this.saving = options.saving || {};
-    this.basePath = this.config.root_path?.replace(/^\/|\/$/g, "") || "";
+    this.basePath = this.config.root_path?.replace(/^\/|\/$/g, '') || '';
   }
 
-  getStateUpdates(): { config?: Record<string, any>; saving?: Record<string, any> } | null {
+  getStateUpdates(): {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  } | null {
     if (!this.savingChanged && !this.configChanged) return null;
     return {
       config: this.configChanged ? this.config : undefined,
@@ -64,64 +70,69 @@ export class DropboxClient {
   }
 
   private getDisplayPath(fullKey: string): string {
-    if (!this.basePath) return fullKey.replace(/^\//, "");
-    if (fullKey.startsWith(this.basePath + "/")) {
+    if (!this.basePath) return fullKey.replace(/^\//, '');
+    if (fullKey.startsWith(this.basePath + '/')) {
       return fullKey.slice(this.basePath.length + 1);
     }
-    return fullKey.replace(/^\/+/, "");
+    return fullKey.replace(/^\/+/, '');
   }
 
   // 把展示层 key 转成 Dropbox API 绝对路径，并加上 root_path(basePath) 前缀做沙箱隔离
   private toApiPath(displayPath: string): string {
-    const clean = stripLeadingSlash(displayPath).replace(/\/+$/, "") || "";
+    const clean = stripLeadingSlash(displayPath).replace(/\/+$/, '') || '';
     if (!this.basePath) {
-      return clean ? `/${clean}` : "";
+      return clean ? `/${clean}` : '';
     }
     return clean ? `/${this.basePath}/${clean}` : `/${this.basePath}`;
   }
 
   private getAccessToken(): string {
-    return this.config.access_token || this.saving.access_token || "";
+    return this.config.access_token || this.saving.access_token || '';
   }
 
   private headers(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.getAccessToken()}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     };
   }
 
   private request(path: string, body?: any): Promise<any> {
     return fetch(`${API_BASE}${path}`, {
-      method: "POST",
+      method: 'POST',
       headers: this.headers(),
       body: body ? JSON.stringify(body) : undefined,
     }).then(async (res) => {
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Dropbox API error: ${res.status} ${text.substring(0, 200)}`);
+        throw new Error(
+          `Dropbox API error: ${res.status} ${text.substring(0, 200)}`,
+        );
       }
       return res.json();
     });
   }
 
-  private async listFiles(path: string = ""): Promise<DropboxFile[]> {
-    const result: ListFolderResult = await this.request("/2/files/list_folder", {
-      path,
-      recursive: false,
-      include_media_info: false,
-      include_deleted: false,
-      include_has_explicit_shared_members: false,
-      include_mounted_folders: true,
-    });
+  private async listFiles(path: string = ''): Promise<DropboxFile[]> {
+    const result: ListFolderResult = await this.request(
+      '/2/files/list_folder',
+      {
+        path,
+        recursive: false,
+        include_media_info: false,
+        include_deleted: false,
+        include_has_explicit_shared_members: false,
+        include_mounted_folders: true,
+      },
+    );
     return result.entries || [];
   }
 
   public async listObjects(
-    prefix = "",
-    _delimiter = "/",
+    prefix = '',
+    _delimiter = '/',
     _maxKeys = 1000,
-    _continuationToken?: string
+    _continuationToken?: string,
   ): Promise<ListObjectsResult> {
     const targetPath = this.toApiPath(prefix);
     const files = await this.listFiles(targetPath);
@@ -159,18 +170,21 @@ export class DropboxClient {
     };
   }
 
-  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+  async getObject(
+    key: string,
+    options?: { range?: string },
+  ): Promise<Response> {
     const path = this.toApiPath(key);
-    const result = await this.request("/2/files/get_metadata", { path });
+    const result = await this.request('/2/files/get_metadata', { path });
     if (result.is_folder) {
-      return new Response("Directory", { status: 400 });
+      return new Response('Directory', { status: 400 });
     }
 
     const content = await fetch(`${CONTENT_BASE}/2/files/download`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${this.getAccessToken()}`,
-        "Dropbox-API-Arg": JSON.stringify({ path }),
+        'Dropbox-API-Arg': JSON.stringify({ path }),
         ...(options?.range ? { Range: options.range } : {}),
       },
     });
@@ -184,33 +198,43 @@ export class DropboxClient {
 
   async getSignedUrl(key: string, _expiresIn: number = 3600): Promise<string> {
     const path = this.toApiPath(key);
-    const result = await this.request("/2/files/get_temporary_link", { path });
-    return result.link || "";
+    const result = await this.request('/2/files/get_temporary_link', { path });
+    return result.link || '';
   }
 
-  async headObject(key: string): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
-    const result = await this.request("/2/files/get_metadata", { path: this.toApiPath(key) });
+  async headObject(key: string): Promise<{
+    contentLength: number;
+    contentType: string;
+    lastModified: string;
+  } | null> {
+    const result = await this.request('/2/files/get_metadata', {
+      path: this.toApiPath(key),
+    });
     if (result.is_folder) return null;
     return {
       contentLength: result.size || 0,
-      contentType: "application/octet-stream",
+      contentType: 'application/octet-stream',
       lastModified: result.server_modified
         ? new Date(result.server_modified).toISOString()
         : new Date().toISOString(),
     };
   }
 
-  async putObject(key: string, body: ArrayBuffer | string, contentType: string): Promise<void> {
+  async putObject(
+    key: string,
+    body: ArrayBuffer | string,
+    contentType: string,
+  ): Promise<void> {
     const path = this.toApiPath(key);
-    const arg = { path, mode: "overwrite", autorename: false, mute: false };
+    const arg = { path, mode: 'overwrite', autorename: false, mute: false };
     const result = await fetch(`${CONTENT_BASE}/2/files/upload`, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${this.getAccessToken()}`,
-        "Content-Type": "application/octet-stream",
-        "Dropbox-API-Arg": JSON.stringify(arg),
+        'Content-Type': 'application/octet-stream',
+        'Dropbox-API-Arg': JSON.stringify(arg),
       },
-      body: typeof body === "string" ? body : new Uint8Array(body),
+      body: typeof body === 'string' ? body : new Uint8Array(body),
     });
 
     if (!result.ok) {
@@ -220,16 +244,16 @@ export class DropboxClient {
   }
 
   async deleteObject(key: string): Promise<void> {
-    await this.request("/2/files/delete_v2", { path: this.toApiPath(key) });
+    await this.request('/2/files/delete_v2', { path: this.toApiPath(key) });
   }
 
   async createFolder(folderPath: string): Promise<void> {
     const path = this.toApiPath(folderPath);
-    await this.request("/2/files/create_folder", { path });
+    await this.request('/2/files/create_folder', { path });
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
-    await this.request("/2/files/copy_v2", {
+    await this.request('/2/files/copy_v2', {
       from_path: this.toApiPath(sourceKey),
       to_path: this.toApiPath(destKey),
       autorename: false,
@@ -237,14 +261,14 @@ export class DropboxClient {
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
-    await this.request("/2/files/update_name", {
+    await this.request('/2/files/update_name', {
       path: this.toApiPath(path),
       new_name: newName,
     });
   }
 
   async moveObject(path: string, newPath: string): Promise<void> {
-    await this.request("/2/files/move_v2", {
+    await this.request('/2/files/move_v2', {
       from_path: this.toApiPath(path),
       to_path: this.toApiPath(newPath),
       autorename: false,
@@ -254,12 +278,14 @@ export class DropboxClient {
   async initiateMultipartUpload(
     _key: string,
     _contentType: string,
-    _options?: { size?: number; chunkSize?: number }
+    _options?: { size?: number; chunkSize?: number },
   ): Promise<string> {
-    throw new Error("Dropbox multipart upload not supported, use direct upload");
+    throw new Error(
+      'Dropbox multipart upload not supported, use direct upload',
+    );
   }
   async uploadPart(): Promise<string> {
-    throw new Error("Dropbox multipart upload not supported");
+    throw new Error('Dropbox multipart upload not supported');
   }
   async completeMultipartUpload(): Promise<void> {
     return;
@@ -268,6 +294,6 @@ export class DropboxClient {
     return;
   }
   async getSignedUploadPartUrl(): Promise<string> {
-    return "";
+    return '';
   }
 }

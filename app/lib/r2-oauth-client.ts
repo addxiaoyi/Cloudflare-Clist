@@ -1,5 +1,5 @@
-import { getMimeType } from "./file-utils";
-import { type R2ObjectItem, type ListObjectsResult } from "./r2-client";
+import { getMimeType } from './file-utils';
+import { type R2ObjectItem, type ListObjectsResult } from './r2-client';
 
 // 通过 Cloudflare API 访问其他账户的 R2 存储桶
 // 使用用户授权的 access token；过期时用 refresh_token 自动续期并回写存储配置
@@ -9,8 +9,8 @@ export class R2OAuthClient {
   private accessToken: string;
   private basePath: string;
   private storageId: number;
-  private apiBase = "https://api.cloudflare.com/client/v4/accounts";
-  private tokenEndpoint = "https://dash.cloudflare.com/oauth2/token";
+  private apiBase = 'https://api.cloudflare.com/client/v4/accounts';
+  private tokenEndpoint = 'https://dash.cloudflare.com/oauth2/token';
   private refreshToken: string;
   private clientId: string;
   private clientSecret: string;
@@ -31,22 +31,27 @@ export class R2OAuthClient {
     this.accountId = config.accountId;
     this.bucketName = config.bucketName;
     this.accessToken = config.accessToken;
-    this.basePath = config.basePath?.replace(/^\/|\/$/g, "") || "";
+    this.basePath = config.basePath?.replace(/^\/|\/$/g, '') || '';
     this.storageId = config.storageId || 0;
-    this.refreshToken = config.refreshToken || "";
-    this.clientId = config.clientId || "";
-    this.clientSecret = config.clientSecret || "";
+    this.refreshToken = config.refreshToken || '';
+    this.clientId = config.clientId || '';
+    this.clientSecret = config.clientSecret || '';
     this.expiresAt = config.expiresAt || 0;
   }
 
   // 刷新后把新令牌回写，由路由层 persistClientState 落库
-  getStateUpdates(): { config?: Record<string, any>; saving?: Record<string, any> } | null {
+  getStateUpdates(): {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  } | null {
     if (!this.tokenDirty) {
       return null;
     }
     return {
       config: { cloudflare_access_token: this.accessToken },
-      saving: { access_token_expires_at: new Date(this.expiresAt).toISOString() },
+      saving: {
+        access_token_expires_at: new Date(this.expiresAt).toISOString(),
+      },
     };
   }
 
@@ -64,17 +69,17 @@ export class R2OAuthClient {
       return;
     }
     if (!this.refreshToken || !this.clientId || !this.clientSecret) {
-      throw new Error("R2 OAuth 访问令牌已过期，请重新授权");
+      throw new Error('R2 OAuth 访问令牌已过期，请重新授权');
     }
 
     const formData = new URLSearchParams({
-      grant_type: "refresh_token",
+      grant_type: 'refresh_token',
       refresh_token: this.refreshToken,
     });
     const res = await fetch(this.tokenEndpoint, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/x-www-form-urlencoded',
         Authorization: `Basic ${btoa(`${this.clientId}:${this.clientSecret}`)}`,
       },
       body: formData.toString(),
@@ -84,10 +89,11 @@ export class R2OAuthClient {
     }
     const data: Record<string, any> = await res.json();
     if (!data.access_token) {
-      throw new Error("R2 OAuth 令牌刷新返回空 access_token，请重新授权");
+      throw new Error('R2 OAuth 令牌刷新返回空 access_token，请重新授权');
     }
     this.accessToken = data.access_token;
-    this.expiresAt = Date.now() + (data.expires_in ? data.expires_in * 1000 : 3600 * 1000);
+    this.expiresAt =
+      Date.now() + (data.expires_in ? data.expires_in * 1000 : 3600 * 1000);
     if (data.refresh_token) {
       this.refreshToken = data.refresh_token;
     }
@@ -95,7 +101,7 @@ export class R2OAuthClient {
   }
 
   private getFullPath(path: string): string {
-    const cleanPath = path.replace(/^\//, "");
+    const cleanPath = path.replace(/^\//, '');
     return this.basePath ? `${this.basePath}/${cleanPath}` : cleanPath;
   }
 
@@ -103,7 +109,7 @@ export class R2OAuthClient {
     if (!this.basePath) {
       return fullKey;
     }
-    return fullKey.startsWith(this.basePath + "/")
+    return fullKey.startsWith(this.basePath + '/')
       ? fullKey.slice(this.basePath.length + 1)
       : fullKey;
   }
@@ -111,30 +117,30 @@ export class R2OAuthClient {
   private headers(): HeadersInit {
     return {
       Authorization: `Bearer ${this.accessToken}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     };
   }
 
   async listObjects(
-    prefix: string = "",
-    delimiter: string = "/",
+    prefix: string = '',
+    delimiter: string = '/',
     maxKeys: number = 1000,
-    continuationToken?: string
+    continuationToken?: string,
   ): Promise<ListObjectsResult> {
     await this.ensureAccessToken();
     let normalizedPrefix = prefix;
-    if (normalizedPrefix && !normalizedPrefix.endsWith("/")) {
-      normalizedPrefix += "/";
+    if (normalizedPrefix && !normalizedPrefix.endsWith('/')) {
+      normalizedPrefix += '/';
     }
 
     const fullPrefix = this.getFullPath(normalizedPrefix);
     const params = new URLSearchParams({
-      prefix: fullPrefix || "",
-      delimiter: delimiter || "",
+      prefix: fullPrefix || '',
+      delimiter: delimiter || '',
       limit: Math.min(maxKeys, 1000).toString(),
     });
     if (continuationToken) {
-      params.set("cursor", continuationToken);
+      params.set('cursor', continuationToken);
     }
 
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects?${params}`;
@@ -153,14 +159,14 @@ export class R2OAuthClient {
       const name = key.startsWith(normalizedPrefix)
         ? key.slice(normalizedPrefix.length)
         : key;
-      if (!name || name.endsWith("/")) {
+      if (!name || name.endsWith('/')) {
         continue;
       }
       objects.push({
         key,
         name,
         size: obj.size,
-        lastModified: obj.uploaded || "",
+        lastModified: obj.uploaded || '',
         etag: obj.etag,
         isDirectory: false,
       });
@@ -169,15 +175,15 @@ export class R2OAuthClient {
     for (const p of result.delimitedPrefixes || []) {
       const display = this.getDisplayPath(p);
       const name = display.startsWith(normalizedPrefix)
-        ? display.slice(normalizedPrefix.length).replace(/\/$/, "")
-        : display.replace(/\/$/, "");
+        ? display.slice(normalizedPrefix.length).replace(/\/$/, '')
+        : display.replace(/\/$/, '');
       if (name) {
         prefixes.push(display);
         objects.push({
           key: display,
           name,
           size: 0,
-          lastModified: "",
+          lastModified: '',
           isDirectory: true,
         });
       }
@@ -196,7 +202,10 @@ export class R2OAuthClient {
     };
   }
 
-  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+  async getObject(
+    key: string,
+    options?: { range?: string },
+  ): Promise<Response> {
     await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
@@ -212,45 +221,52 @@ export class R2OAuthClient {
     }
 
     const headers = new Headers(res.headers);
-    if (!headers.get("Content-Type")) {
-      headers.set("Content-Type", getMimeType(key));
+    if (!headers.get('Content-Type')) {
+      headers.set('Content-Type', getMimeType(key));
     }
     const status = res.status;
     const body = res.body;
     return new Response(body, { headers, status });
   }
 
-  async headObject(
-    key: string
-  ): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
+  async headObject(key: string): Promise<{
+    contentLength: number;
+    contentType: string;
+    lastModified: string;
+  } | null> {
     await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
-      method: "HEAD",
+      method: 'HEAD',
       headers: { Authorization: `Bearer ${this.accessToken}` },
     });
     if (!res.ok) {
       return null;
     }
     return {
-      contentLength: parseInt(res.headers.get("Content-Length") || "0", 10),
-      contentType: res.headers.get("Content-Type") || "application/octet-stream",
-      lastModified: res.headers.get("Last-Modified") || "",
+      contentLength: parseInt(res.headers.get('Content-Length') || '0', 10),
+      contentType:
+        res.headers.get('Content-Type') || 'application/octet-stream',
+      lastModified: res.headers.get('Last-Modified') || '',
     };
   }
 
-  async putObject(key: string, body: ArrayBuffer | string, contentType?: string): Promise<void> {
+  async putObject(
+    key: string,
+    body: ArrayBuffer | string,
+    contentType?: string,
+  ): Promise<void> {
     await this.ensureAccessToken();
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
-      method: "PUT",
+      method: 'PUT',
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
-        ...(contentType ? { "Content-Type": contentType } : {}),
+        ...(contentType ? { 'Content-Type': contentType } : {}),
       },
-      body: typeof body === "string" ? new TextEncoder().encode(body) : body,
+      body: typeof body === 'string' ? new TextEncoder().encode(body) : body,
     });
     if (!res.ok) {
       const text = await res.text();
@@ -263,7 +279,7 @@ export class R2OAuthClient {
     const path = this.getFullPath(key);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(path)}`;
     const res = await fetch(url, {
-      method: "DELETE",
+      method: 'DELETE',
       headers: { Authorization: `Bearer ${this.accessToken}` },
     });
     if (!res.ok && res.status !== 404) {
@@ -275,15 +291,16 @@ export class R2OAuthClient {
     await this.ensureAccessToken();
     const src = await this.getObject(sourceKey);
     if (!src.ok) {
-      throw new Error("R2 CopyObject failed: source not found");
+      throw new Error('R2 CopyObject failed: source not found');
     }
     const destPath = this.getFullPath(destKey);
     const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects/${encodeURIComponent(destPath)}`;
     const res = await fetch(url, {
-      method: "PUT",
+      method: 'PUT',
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
-        "Content-Type": src.headers.get("Content-Type") || "application/octet-stream",
+        'Content-Type':
+          src.headers.get('Content-Type') || 'application/octet-stream',
       },
       body: await src.arrayBuffer(),
     });
@@ -293,26 +310,29 @@ export class R2OAuthClient {
   }
 
   async createFolder(folderPath: string): Promise<void> {
-    const normalized = folderPath.endsWith("/") ? folderPath : folderPath + "/";
-    await this.putObject(normalized, "", "application/x-directory");
+    const normalized = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+    await this.putObject(normalized, '', 'application/x-directory');
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
-    const isDirectory = path.endsWith("/");
-    const cleanPath = path.replace(/\/$/, "");
-    const parentPath = cleanPath.includes("/")
-      ? cleanPath.substring(0, cleanPath.lastIndexOf("/") + 1)
-      : "";
-    const newPath = parentPath + newName + (isDirectory ? "/" : "");
+    const isDirectory = path.endsWith('/');
+    const cleanPath = path.replace(/\/$/, '');
+    const parentPath = cleanPath.includes('/')
+      ? cleanPath.substring(0, cleanPath.lastIndexOf('/') + 1)
+      : '';
+    const newPath = parentPath + newName + (isDirectory ? '/' : '');
     if (isDirectory) {
-      const keys = await this.listAllKeys(cleanPath + "/");
+      const keys = await this.listAllKeys(cleanPath + '/');
       for (const key of keys) {
-        await this.copyObject(key, newPath + key.substring(cleanPath.length + 1));
+        await this.copyObject(
+          key,
+          newPath + key.substring(cleanPath.length + 1),
+        );
       }
       for (const key of keys) {
         await this.deleteObject(key);
       }
-      await this.deleteObject(cleanPath + "/").catch(() => undefined);
+      await this.deleteObject(cleanPath + '/').catch(() => undefined);
     } else {
       await this.copyObject(path, newPath);
       await this.deleteObject(path);
@@ -320,9 +340,9 @@ export class R2OAuthClient {
   }
 
   async moveObject(path: string, newPath: string): Promise<void> {
-    const isDirectory = path.endsWith("/");
+    const isDirectory = path.endsWith('/');
     if (isDirectory) {
-      const keys = await this.listAllKeys(path.replace(/\/$/, "") + "/");
+      const keys = await this.listAllKeys(path.replace(/\/$/, '') + '/');
       for (const key of keys) {
         await this.copyObject(key, newPath + key.substring(path.length));
       }
@@ -343,15 +363,15 @@ export class R2OAuthClient {
     do {
       const params = new URLSearchParams({
         prefix,
-        limit: "1000",
+        limit: '1000',
       });
       if (cursor) {
-        params.set("cursor", cursor);
+        params.set('cursor', cursor);
       }
       const url = `${this.apiBase}/${this.accountId}/r2/buckets/${this.bucketName}/objects?${params}`;
       const res = await fetch(url, { headers: this.headers() });
       if (!res.ok) {
-        throw new Error("Failed to list objects");
+        throw new Error('Failed to list objects');
       }
       const data: Record<string, any> = await res.json();
       for (const obj of data.result?.objects || []) {
@@ -366,18 +386,18 @@ export class R2OAuthClient {
   async initiateMultipartUpload(
     _key: string,
     _contentType: string,
-    _options?: { size?: number; chunkSize?: number }
+    _options?: { size?: number; chunkSize?: number },
   ): Promise<string> {
-    throw new Error("R2 OAuth 不支持分片上传");
+    throw new Error('R2 OAuth 不支持分片上传');
   }
 
   async getSignedUploadPartUrl(
     _key: string,
     _uploadId: string,
     _partNumber: number,
-    _expiresIn: number = 3600
+    _expiresIn: number = 3600,
   ): Promise<string> {
-    return "";
+    return '';
   }
 
   async uploadPart(
@@ -385,28 +405,28 @@ export class R2OAuthClient {
     _uploadId: string,
     _partNumber: number,
     _body: ReadableStream | ArrayBuffer,
-    _contentLength?: number
+    _contentLength?: number,
   ): Promise<string> {
-    throw new Error("R2 OAuth 不支持分片上传");
+    throw new Error('R2 OAuth 不支持分片上传');
   }
 
   async completeMultipartUpload(
     _key: string,
     _uploadId: string,
-    _parts: { partNumber: number; etag: string }[]
+    _parts: { partNumber: number; etag: string }[],
   ): Promise<void> {
-    throw new Error("R2 OAuth 不支持分片上传");
+    throw new Error('R2 OAuth 不支持分片上传');
   }
 
   async abortMultipartUpload(_key: string, _uploadId: string): Promise<void> {
-    throw new Error("R2 OAuth 不支持分片上传");
+    throw new Error('R2 OAuth 不支持分片上传');
   }
 
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {
     const encoded = this.getFullPath(key)
-      .split("/")
+      .split('/')
       .map((seg) => encodeURIComponent(seg))
-      .join("/");
+      .join('/');
     return `/api/files/${this.storageId}/download/${encoded}?inline=1&expires=${expiresIn}`;
   }
 }

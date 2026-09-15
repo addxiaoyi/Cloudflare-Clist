@@ -5,8 +5,8 @@ import {
   shouldUseOnlineApi,
   stripLeadingSlash,
   stripTrailingSlash,
-} from "./drive-utils";
-import { md5Hex } from "./md5";
+} from './drive-utils';
+import { md5Hex } from './md5';
 
 export interface DriveObject {
   key: string;
@@ -24,10 +24,10 @@ export interface ListObjectsResult {
   nextContinuationToken?: string;
 }
 
-const BAIDU_API_BASE = "https://pan.baidu.com/rest/2.0";
-const BAIDU_OAUTH_URL = "https://openapi.baidu.com/oauth/2.0/token";
-const BAIDU_PCS_BASE = "https://d.pcs.baidu.com";
-const DEFAULT_BAIDU_API_ADDRESS = "https://api.oplist.org/baiduyun/renewapi";
+const BAIDU_API_BASE = 'https://pan.baidu.com/rest/2.0';
+const BAIDU_OAUTH_URL = 'https://openapi.baidu.com/oauth/2.0/token';
+const BAIDU_PCS_BASE = 'https://d.pcs.baidu.com';
+const DEFAULT_BAIDU_API_ADDRESS = 'https://api.oplist.org/baiduyun/renewapi';
 
 interface BaiduFile {
   fs_id: number;
@@ -50,12 +50,18 @@ export class BaiduYunClient {
   private savingChanged = false;
   private configChanged = false;
 
-  constructor(options: { config?: Record<string, any>; saving?: Record<string, any> }) {
+  constructor(options: {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  }) {
     this.config = options.config || {};
     this.saving = options.saving || {};
   }
 
-  getStateUpdates(): { config?: Record<string, any>; saving?: Record<string, any> } | null {
+  getStateUpdates(): {
+    config?: Record<string, any>;
+    saving?: Record<string, any>;
+  } | null {
     if (!this.savingChanged && !this.configChanged) {
       return null;
     }
@@ -96,7 +102,9 @@ export class BaiduYunClient {
         lastError = error;
       }
     }
-    throw lastError instanceof Error ? lastError : new Error("Baidu refresh failed");
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Baidu refresh failed');
   }
 
   private async refreshTokenOnce(): Promise<void> {
@@ -110,71 +118,96 @@ export class BaiduYunClient {
   private async refreshTokenOnline(): Promise<void> {
     const refreshToken = getRefreshToken(this.config, this.saving);
     if (!refreshToken) {
-      throw new Error("Missing refresh_token");
+      throw new Error('Missing refresh_token');
     }
 
-    const url = new URL(getConfigString(this.config, ["api_address", "api_url_address"], DEFAULT_BAIDU_API_ADDRESS));
-    url.searchParams.set("refresh_ui", refreshToken);
-    url.searchParams.set("server_use", "true");
-    url.searchParams.set("driver_txt", "baiduyun_go");
+    const url = new URL(
+      getConfigString(
+        this.config,
+        ['api_address', 'api_url_address'],
+        DEFAULT_BAIDU_API_ADDRESS,
+      ),
+    );
+    url.searchParams.set('refresh_ui', refreshToken);
+    url.searchParams.set('server_use', 'true');
+    url.searchParams.set('driver_txt', 'baiduyun_go');
 
-    const response = await fetch(url.toString(), { method: "GET" });
+    const response = await fetch(url.toString(), { method: 'GET' });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Baidu online refresh failed: ${response.status} ${text}`);
+      throw new Error(
+        `Baidu online refresh failed: ${response.status} ${text}`,
+      );
     }
 
-    const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; text?: string };
+    const data = (await response.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      text?: string;
+    };
     if (!data.access_token || !data.refresh_token) {
-      throw new Error(data.text || "Baidu online refresh returned empty token");
+      throw new Error(data.text || 'Baidu online refresh returned empty token');
     }
 
     this.saving.access_token = data.access_token;
     this.saving.refresh_token = data.refresh_token;
-    this.saving.expires_at = data.expires_in ? Date.now() + data.expires_in * 1000 : undefined;
+    this.saving.expires_at = data.expires_in
+      ? Date.now() + data.expires_in * 1000
+      : undefined;
     this.config.refresh_token = data.refresh_token;
     this.markSavingChanged();
     this.markConfigChanged();
   }
 
   private async refreshTokenLocal(): Promise<void> {
-    const clientId = getConfigString(this.config, "client_id");
-    const clientSecret = getConfigString(this.config, "client_secret");
+    const clientId = getConfigString(this.config, 'client_id');
+    const clientSecret = getConfigString(this.config, 'client_secret');
     const refreshToken = getRefreshToken(this.config, this.saving);
     if (!clientId || !clientSecret) {
-      throw new Error("Missing client_id or client_secret");
+      throw new Error('Missing client_id or client_secret');
     }
     if (!refreshToken) {
-      throw new Error("Missing refresh_token");
+      throw new Error('Missing refresh_token');
     }
 
     const url = new URL(BAIDU_OAUTH_URL);
-    url.searchParams.set("grant_type", "refresh_token");
-    url.searchParams.set("refresh_token", refreshToken);
-    url.searchParams.set("client_id", clientId);
-    url.searchParams.set("client_secret", clientSecret);
+    url.searchParams.set('grant_type', 'refresh_token');
+    url.searchParams.set('refresh_token', refreshToken);
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('client_secret', clientSecret);
 
-    const response = await fetch(url.toString(), { method: "GET" });
-    const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
+    const response = await fetch(url.toString(), { method: 'GET' });
+    const data = (await response.json()) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      error?: string;
+      error_description?: string;
+    };
     if (!response.ok || data.error) {
-      throw new Error(data.error_description || data.error || "Baidu refresh failed");
+      throw new Error(
+        data.error_description || data.error || 'Baidu refresh failed',
+      );
     }
     if (!data.access_token || !data.refresh_token) {
-      throw new Error("Baidu refresh returned empty token");
+      throw new Error('Baidu refresh returned empty token');
     }
 
     this.saving.access_token = data.access_token;
     this.saving.refresh_token = data.refresh_token;
-    this.saving.expires_at = data.expires_in ? Date.now() + data.expires_in * 1000 : undefined;
+    this.saving.expires_at = data.expires_in
+      ? Date.now() + data.expires_in * 1000
+      : undefined;
     this.config.refresh_token = data.refresh_token;
     this.markSavingChanged();
     this.markConfigChanged();
   }
 
   private resolvePath(path: string): string {
-    const rootPath = this.config.root_path || "/";
+    const rootPath = this.config.root_path || '/';
     const joined = joinRootPath(rootPath, path);
-    if (!joined.startsWith("/")) {
+    if (!joined.startsWith('/')) {
       return `/${joined}`;
     }
     return joined;
@@ -182,15 +215,15 @@ export class BaiduYunClient {
 
   private async request(
     pathname: string,
-    method: string = "GET",
+    method: string = 'GET',
     params?: Record<string, string>,
     body?: any,
-    retryAuth: boolean = true
+    retryAuth: boolean = true,
   ): Promise<any> {
     await this.ensureToken();
-    const cleanPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
+    const cleanPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
     const url = new URL(`${BAIDU_API_BASE}${cleanPath}`);
-    url.searchParams.set("access_token", this.saving.access_token || "");
+    url.searchParams.set('access_token', this.saving.access_token || '');
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         url.searchParams.set(key, value);
@@ -198,7 +231,7 @@ export class BaiduYunClient {
     }
 
     const headers: Record<string, string> = {
-      "User-Agent": "pan.baidu.com",
+      'User-Agent': 'pan.baidu.com',
     };
     const options: RequestInit = {
       method,
@@ -208,9 +241,11 @@ export class BaiduYunClient {
     if (body) {
       if (body instanceof FormData) {
         options.body = body;
-      } else if (typeof body === "object") {
-        headers["Content-Type"] = "application/x-www-form-urlencoded";
-        options.body = new URLSearchParams(body as Record<string, string>).toString();
+      } else if (typeof body === 'object') {
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        options.body = new URLSearchParams(
+          body as Record<string, string>,
+        ).toString();
       } else {
         options.body = body;
       }
@@ -240,14 +275,14 @@ export class BaiduYunClient {
   }
 
   private async listFiles(dir: string): Promise<BaiduFile[]> {
-    const result: BaiduListResponse = await this.request("/xpan/file", "GET", {
-      method: "list",
+    const result: BaiduListResponse = await this.request('/xpan/file', 'GET', {
+      method: 'list',
       dir,
-      web: "web",
-      start: "0",
-      limit: "200",
-      order: this.config.order_by || "name",
-      desc: this.config.order_direction === "desc" ? "1" : "0",
+      web: 'web',
+      start: '0',
+      limit: '200',
+      order: this.config.order_by || 'name',
+      desc: this.config.order_direction === 'desc' ? '1' : '0',
     });
     return result.list || [];
   }
@@ -257,29 +292,37 @@ export class BaiduYunClient {
     if (!normalized) {
       return null;
     }
-    const parts = normalized.split("/").filter(Boolean);
-    const fileName = parts.pop() || "";
-    const dirPath = this.resolvePath(parts.length ? `/${parts.join("/")}` : "/");
+    const parts = normalized.split('/').filter(Boolean);
+    const fileName = parts.pop() || '';
+    const dirPath = this.resolvePath(
+      parts.length ? `/${parts.join('/')}` : '/',
+    );
     const files = await this.listFiles(dirPath);
     const found = files.find((f) => f.server_filename === fileName);
     return found || null;
   }
 
   async listObjects(
-    prefix: string = "",
-    _delimiter: string = "/",
+    prefix: string = '',
+    _delimiter: string = '/',
     _maxKeys: number = 1000,
-    _continuationToken?: string
+    _continuationToken?: string,
   ): Promise<ListObjectsResult> {
-    const path = this.resolvePath(prefix ? `/${stripLeadingSlash(prefix)}` : "/");
+    const path = this.resolvePath(
+      prefix ? `/${stripLeadingSlash(prefix)}` : '/',
+    );
     const files = await this.listFiles(path);
     const objects: DriveObject[] = [];
     const prefixes: string[] = [];
-    const keyBase = prefix ? `${stripTrailingSlash(stripLeadingSlash(prefix))}/` : "";
+    const keyBase = prefix
+      ? `${stripTrailingSlash(stripLeadingSlash(prefix))}/`
+      : '';
 
     for (const file of files) {
       const isDirectory = file.isdir === 1;
-      const key = isDirectory ? `${keyBase}${file.server_filename}/` : `${keyBase}${file.server_filename}`;
+      const key = isDirectory
+        ? `${keyBase}${file.server_filename}/`
+        : `${keyBase}${file.server_filename}`;
       objects.push({
         key,
         name: file.server_filename,
@@ -304,26 +347,29 @@ export class BaiduYunClient {
     };
   }
 
-  async getObject(key: string, options?: { range?: string }): Promise<Response> {
+  async getObject(
+    key: string,
+    options?: { range?: string },
+  ): Promise<Response> {
     const file = await this.findFileByPath(key);
     if (!file) {
-      throw new Error("Baidu file not found");
+      throw new Error('Baidu file not found');
     }
-    const result = await this.request("/xpan/multimedia", "GET", {
-      method: "filemetas",
+    const result = await this.request('/xpan/multimedia', 'GET', {
+      method: 'filemetas',
       fsids: `[${file.fs_id}]`,
-      dlink: "1",
+      dlink: '1',
     });
     const dlink = result?.list?.[0]?.dlink;
     if (!dlink) {
-      throw new Error("Baidu download link missing");
+      throw new Error('Baidu download link missing');
     }
 
     const url = `${dlink}&access_token=${this.saving.access_token}`;
     return fetch(url, {
       headers: {
-        "User-Agent": "pan.baidu.com",
-        "Referer": "https://pan.baidu.com/",
+        'User-Agent': 'pan.baidu.com',
+        Referer: 'https://pan.baidu.com/',
         ...(options?.range ? { Range: options.range } : {}),
       },
     });
@@ -332,35 +378,44 @@ export class BaiduYunClient {
   async getSignedUrl(key: string): Promise<string> {
     const file = await this.findFileByPath(key);
     if (!file) {
-      throw new Error("Baidu file not found");
+      throw new Error('Baidu file not found');
     }
-    const result = await this.request("/xpan/multimedia", "GET", {
-      method: "filemetas",
+    const result = await this.request('/xpan/multimedia', 'GET', {
+      method: 'filemetas',
       fsids: `[${file.fs_id}]`,
-      dlink: "1",
+      dlink: '1',
     });
     const dlink = result?.list?.[0]?.dlink;
     if (!dlink) {
-      throw new Error("Baidu download link missing");
+      throw new Error('Baidu download link missing');
     }
     return `${dlink}&access_token=${this.saving.access_token}`;
   }
 
-  async headObject(key: string): Promise<{ contentLength: number; contentType: string; lastModified: string } | null> {
+  async headObject(key: string): Promise<{
+    contentLength: number;
+    contentType: string;
+    lastModified: string;
+  } | null> {
     const file = await this.findFileByPath(key);
     if (!file || file.isdir === 1) {
       return null;
     }
     return {
       contentLength: file.size || 0,
-      contentType: "application/octet-stream",
+      contentType: 'application/octet-stream',
       lastModified: new Date(file.server_mtime * 1000).toISOString(),
     };
   }
 
-  async putObject(key: string, body: ArrayBuffer | string, _contentType?: string): Promise<void> {
+  async putObject(
+    key: string,
+    body: ArrayBuffer | string,
+    _contentType?: string,
+  ): Promise<void> {
     const path = this.resolvePath(key);
-    const data = typeof body === "string" ? new TextEncoder().encode(body).buffer : body;
+    const data =
+      typeof body === 'string' ? new TextEncoder().encode(body).buffer : body;
     const fileSize = data.byteLength;
 
     const sliceSize = this.getSliceSize(fileSize);
@@ -373,16 +428,21 @@ export class BaiduYunClient {
     const contentMd5 = md5Hex(data);
     const sliceMd5 = md5Hex(data.slice(0, Math.min(256 * 1024, fileSize)));
 
-    const precreate = await this.request("/xpan/file", "POST", { method: "precreate" }, {
-      path,
-      size: String(fileSize),
-      isdir: "0",
-      autoinit: "1",
-      rtype: "3",
-      block_list: JSON.stringify(blockList),
-      "content-md5": contentMd5,
-      "slice-md5": sliceMd5,
-    });
+    const precreate = await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'precreate' },
+      {
+        path,
+        size: String(fileSize),
+        isdir: '0',
+        autoinit: '1',
+        rtype: '3',
+        block_list: JSON.stringify(blockList),
+        'content-md5': contentMd5,
+        'slice-md5': sliceMd5,
+      },
+    );
 
     if (precreate.return_type === 2) {
       return;
@@ -390,7 +450,7 @@ export class BaiduYunClient {
 
     const uploadid = precreate.uploadid;
     if (!uploadid) {
-      throw new Error("Baidu upload id missing");
+      throw new Error('Baidu upload id missing');
     }
 
     for (let partseq = 0; partseq < blockList.length; partseq++) {
@@ -398,95 +458,138 @@ export class BaiduYunClient {
       const end = Math.min(start + sliceSize, fileSize);
       const chunk = data.slice(start, end);
       const uploadUrl = new URL(`${BAIDU_PCS_BASE}/rest/2.0/pcs/superfile2`);
-      uploadUrl.searchParams.set("method", "upload");
-      uploadUrl.searchParams.set("access_token", this.saving.access_token || "");
-      uploadUrl.searchParams.set("type", "tmpfile");
-      uploadUrl.searchParams.set("path", path);
-      uploadUrl.searchParams.set("uploadid", uploadid);
-      uploadUrl.searchParams.set("partseq", String(partseq));
+      uploadUrl.searchParams.set('method', 'upload');
+      uploadUrl.searchParams.set(
+        'access_token',
+        this.saving.access_token || '',
+      );
+      uploadUrl.searchParams.set('type', 'tmpfile');
+      uploadUrl.searchParams.set('path', path);
+      uploadUrl.searchParams.set('uploadid', uploadid);
+      uploadUrl.searchParams.set('partseq', String(partseq));
 
       const formData = new FormData();
-      formData.append("file", new Blob([chunk]), "file");
+      formData.append('file', new Blob([chunk]), 'file');
 
       const response = await fetch(uploadUrl.toString(), {
-        method: "POST",
+        method: 'POST',
         body: formData,
       });
-      const result = await response.json() as { errno?: number; error_code?: number };
+      const result = (await response.json()) as {
+        errno?: number;
+        error_code?: number;
+      };
       if (result.errno !== 0 && result.error_code !== 0) {
         throw new Error(`Baidu upload slice failed: ${JSON.stringify(result)}`);
       }
     }
 
-    await this.request("/xpan/file", "POST", { method: "create" }, {
-      path,
-      size: String(fileSize),
-      isdir: "0",
-      uploadid,
-      block_list: JSON.stringify(blockList),
-      rtype: "3",
-    });
+    await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'create' },
+      {
+        path,
+        size: String(fileSize),
+        isdir: '0',
+        uploadid,
+        block_list: JSON.stringify(blockList),
+        rtype: '3',
+      },
+    );
   }
 
   async deleteObject(key: string): Promise<void> {
     const path = this.resolvePath(key);
-    await this.request("/xpan/file", "POST", { method: "filemanager", opera: "delete" }, {
-      async: "0",
-      filelist: JSON.stringify([path]),
-      ondup: "fail",
-    });
+    await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'filemanager', opera: 'delete' },
+      {
+        async: '0',
+        filelist: JSON.stringify([path]),
+        ondup: 'fail',
+      },
+    );
   }
 
   async createFolder(folderPath: string): Promise<void> {
     const path = this.resolvePath(stripTrailingSlash(folderPath));
-    await this.request("/xpan/file", "POST", { method: "create" }, {
-      path,
-      size: "0",
-      isdir: "1",
-      rtype: "3",
-    });
+    await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'create' },
+      {
+        path,
+        size: '0',
+        isdir: '1',
+        rtype: '3',
+      },
+    );
   }
 
   async copyObject(sourceKey: string, destKey: string): Promise<void> {
     const source = this.resolvePath(sourceKey);
     const destFullPath = this.resolvePath(destKey);
-    const dest = destFullPath.substring(0, destFullPath.lastIndexOf("/")) || "/";
-    const newName = destFullPath.split("/").pop() || "";
-    await this.request("/xpan/file", "POST", { method: "filemanager", opera: "copy" }, {
-      async: "0",
-      filelist: JSON.stringify([{ path: source, dest, newname: newName }]),
-      ondup: "fail",
-    });
+    const dest =
+      destFullPath.substring(0, destFullPath.lastIndexOf('/')) || '/';
+    const newName = destFullPath.split('/').pop() || '';
+    await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'filemanager', opera: 'copy' },
+      {
+        async: '0',
+        filelist: JSON.stringify([{ path: source, dest, newname: newName }]),
+        ondup: 'fail',
+      },
+    );
   }
 
   async renameObject(path: string, newName: string): Promise<void> {
     const sourcePath = this.resolvePath(path);
-    const dest = sourcePath.substring(0, sourcePath.lastIndexOf("/")) || "/";
-    await this.request("/xpan/file", "POST", { method: "filemanager", opera: "rename" }, {
-      async: "0",
-      filelist: JSON.stringify([{ path: sourcePath, dest, newname: newName }]),
-      ondup: "fail",
-    });
+    const dest = sourcePath.substring(0, sourcePath.lastIndexOf('/')) || '/';
+    await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'filemanager', opera: 'rename' },
+      {
+        async: '0',
+        filelist: JSON.stringify([
+          { path: sourcePath, dest, newname: newName },
+        ]),
+        ondup: 'fail',
+      },
+    );
   }
 
   async moveObject(path: string, destPath: string): Promise<void> {
     const sourcePath = this.resolvePath(path);
     const destFullPath = this.resolvePath(destPath);
-    const dest = destFullPath.substring(0, destFullPath.lastIndexOf("/")) || "/";
-    const fileName = destFullPath.split("/").pop() || sourcePath.split("/").pop() || "";
-    await this.request("/xpan/file", "POST", { method: "filemanager", opera: "move" }, {
-      async: "0",
-      filelist: JSON.stringify([{ path: sourcePath, dest, newname: fileName }]),
-      ondup: "fail",
-    });
+    const dest =
+      destFullPath.substring(0, destFullPath.lastIndexOf('/')) || '/';
+    const fileName =
+      destFullPath.split('/').pop() || sourcePath.split('/').pop() || '';
+    await this.request(
+      '/xpan/file',
+      'POST',
+      { method: 'filemanager', opera: 'move' },
+      {
+        async: '0',
+        filelist: JSON.stringify([
+          { path: sourcePath, dest, newname: fileName },
+        ]),
+        ondup: 'fail',
+      },
+    );
   }
 
   async initiateMultipartUpload(
     _key: string,
     _contentType: string,
-    _options?: { size?: number; chunkSize?: number }
+    _options?: { size?: number; chunkSize?: number },
   ): Promise<string> {
-    throw new Error("BaiduYun does not support multipart upload in this mode");
+    throw new Error('BaiduYun does not support multipart upload in this mode');
   }
 
   async uploadPart(
@@ -494,15 +597,15 @@ export class BaiduYunClient {
     _uploadId: string,
     _partNumber: number,
     _body: ReadableStream | ArrayBuffer,
-    _contentLength?: number
+    _contentLength?: number,
   ): Promise<string> {
-    throw new Error("BaiduYun does not support multipart upload in this mode");
+    throw new Error('BaiduYun does not support multipart upload in this mode');
   }
 
   async completeMultipartUpload(
     _key: string,
     _uploadId: string,
-    _parts: { partNumber: number; etag: string }[]
+    _parts: { partNumber: number; etag: string }[],
   ): Promise<void> {
     return;
   }
@@ -515,9 +618,9 @@ export class BaiduYunClient {
     _key: string,
     _uploadId: string,
     _partNumber: number,
-    _expiresIn: number = 3600
+    _expiresIn: number = 3600,
   ): Promise<string> {
-    throw new Error("BaiduYun does not support direct signed upload URLs");
+    throw new Error('BaiduYun does not support direct signed upload URLs');
   }
 
   private getSliceSize(fileSize: number): number {
