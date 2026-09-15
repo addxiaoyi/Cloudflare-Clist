@@ -13,6 +13,7 @@ export const PAN_ACCOUNT_INFO = "/account/info";
 export const DRIVE_HOST = "https://drive.quark.cn";
 export const QR_BASE_URL = "https://su.quark.cn/4_eMHBJ";
 export const CAS_CLIENT_ID = "532";
+export const CAS_VERSION = "1.2";
 export const CAS_STATUS_OK = 2000000;
 export const CAS_STATUS_FAIL = new Set([50004002, 50004003, 50004004]);
 
@@ -233,7 +234,7 @@ export async function queryQrSession(session: QrSession, signal?: AbortSignal): 
   jar.absorbPlain(session.casCookie);
   let result: QueryResult = { status: "waiting" };
 
-  const q = new URLSearchParams({ client_id: CAS_CLIENT_ID, v: "1.2", request_id: requestId(), token: session.token });
+  const q = new URLSearchParams({ client_id: CAS_CLIENT_ID, v: CAS_VERSION, request_id: requestId(), token: session.token });
   const cas = await casRequest(q, jar, signal);
   const members = cas.data?.members;
   if (members?.service_ticket) {

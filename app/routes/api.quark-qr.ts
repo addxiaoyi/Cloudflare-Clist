@@ -13,6 +13,7 @@ import {
   encodeSession,
   queryQrSession,
   requestId,
+  CAS_VERSION,
 } from "~/lib/quark-login";
 import type { QueryResult } from "~/lib/quark-login";
 
@@ -37,7 +38,7 @@ export async function action({ request, context }: { request: Request; context: 
     const cas = await casRequest(
       new URLSearchParams({
         client_id: CAS_CLIENT_ID,
-        v: "1.2",
+        v: CAS_VERSION,
         request_id: requestId(),
       }),
       jar
