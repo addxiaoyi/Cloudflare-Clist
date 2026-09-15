@@ -1,52 +1,90 @@
-import type { Route } from "./+types/home";
-import { requireAuth } from "~/lib/auth";
-import { getAllStorages, getPublicStorages, initDatabase } from "~/lib/storage";
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FilePreview } from "~/components/FilePreview";
-import { useToast, useConfirm } from "~/components/feedback";
-import { getFileType, isPreviewable } from "~/lib/file-utils";
-import { GIT_TYPES, getGitMaxFileBytes, getGitMaxFileLabel } from "~/lib/git/registry";
-import { apiFileUrl } from "~/lib/api-path";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
+import type { Route } from './+types/home';
+import { requireAuth } from '~/lib/auth';
+import { getAllStorages, getPublicStorages, initDatabase } from '~/lib/storage';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { FilePreview } from '~/components/FilePreview';
+import { useToast, useConfirm } from '~/components/feedback';
+import { getFileType, isPreviewable } from '~/lib/file-utils';
 import {
-  X, Plus, Search, Sun, Moon, SlidersHorizontal, LogIn, LogOut, ShieldCheck, Cloud,
-  ChevronRight, ArrowLeft, ArrowRightLeft, RefreshCw, PanelLeft,
-  FolderPlus, Upload, Download, Copy, Share2, Pencil, Trash2, Play, BarChart3, FileText,
-  Folder, AlertCircle, fileTypeIcon, Globe, LayoutGrid, List, Star, Calculator,
-  Eye, EyeClosed, QrCode, Smartphone,
-} from "~/components/icons";
+  GIT_TYPES,
+  getGitMaxFileBytes,
+  getGitMaxFileLabel,
+} from '~/lib/git/registry';
+import { apiFileUrl } from '~/lib/api-path';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import {
+  X,
+  Plus,
+  Search,
+  Sun,
+  Moon,
+  SlidersHorizontal,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  Cloud,
+  ChevronRight,
+  ArrowLeft,
+  ArrowRightLeft,
+  RefreshCw,
+  PanelLeft,
+  FolderPlus,
+  Upload,
+  Download,
+  Copy,
+  Share2,
+  Pencil,
+  Trash2,
+  Play,
+  BarChart3,
+  FileText,
+  Folder,
+  AlertCircle,
+  fileTypeIcon,
+  Globe,
+  LayoutGrid,
+  List,
+  Star,
+  Calculator,
+  Eye,
+  EyeClosed,
+  QrCode,
+  Smartphone,
+} from '~/components/icons';
 
 export function meta({ data }: Route.MetaArgs) {
-  const title = data?.siteTitle || "Starx";
+  const title = data?.siteTitle || 'Starx';
   return [
     { title: `${title} - 存储聚合` },
-    { name: "description", content: "S3 兼容存储聚合服务" },
+    { name: 'description', content: 'S3 兼容存储聚合服务' },
   ];
 }
 
 // 下发给浏览器的存储 config 需脱敏：OAuth 密钥/令牌/会话 Cookie 不给前端
 const SENSITIVE_CONFIG_KEYS = new Set([
-  "client_secret",
-  "refresh_token",
-  "access_token",
-  "token",  // GitHub PAT
-  "cloudflare_access_token",
-  "cloudflare_refresh_token",
-  "cookie",
-  "bduss",
-  "stoken",
-  "access_key_id",
-  "secret_access_key",
-  "access_key",
-  "secret_key",
+  'client_secret',
+  'refresh_token',
+  'access_token',
+  'token', // GitHub PAT
+  'cloudflare_access_token',
+  'cloudflare_refresh_token',
+  'cookie',
+  'bduss',
+  'stoken',
+  'access_key_id',
+  'secret_access_key',
+  'access_key',
+  'secret_key',
 ]);
 
-function sanitizeConfigForClient(config: Record<string, any> | undefined): Record<string, any> {
+function sanitizeConfigForClient(
+  config: Record<string, any> | undefined,
+): Record<string, any> {
   if (!config) return {};
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(config)) {
-    out[k] = SENSITIVE_CONFIG_KEYS.has(k) ? "***" : v;
+    out[k] = SENSITIVE_CONFIG_KEYS.has(k) ? '***' : v;
   }
   return out;
 }
@@ -55,21 +93,32 @@ function sanitizeConfigForClient(config: Record<string, any> | undefined): Recor
 function stripMaskedConfig(config: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {};
   for (const [k, v] of Object.entries(config)) {
-    if (v !== "***") out[k] = v;
+    if (v !== '***') out[k] = v;
   }
   return out;
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const db = context.cloudflare.env.DB;
-  const siteTitle = context.cloudflare.env.SITE_TITLE || "Starx";
-  const siteAnnouncement = context.cloudflare.env.SITE_ANNOUNCEMENT || "";
-  const chunkSizeMB = parseInt(context.cloudflare.env.CHUNK_SIZE_MB || "50", 10);
-  const webdavEnabled = (context.cloudflare.env.WEBDAV_ENABLED as string) === "true";
+  const siteTitle = context.cloudflare.env.SITE_TITLE || 'Starx';
+  const siteAnnouncement = context.cloudflare.env.SITE_ANNOUNCEMENT || '';
+  const chunkSizeMB = parseInt(
+    context.cloudflare.env.CHUNK_SIZE_MB || '50',
+    10,
+  );
+  const webdavEnabled =
+    (context.cloudflare.env.WEBDAV_ENABLED as string) === 'true';
 
   if (!db) {
-    console.error("D1 Database not bound");
-    return { isAdmin: false, storages: [], siteTitle, siteAnnouncement, chunkSizeMB, webdavEnabled: false };
+    console.error('D1 Database not bound');
+    return {
+      isAdmin: false,
+      storages: [],
+      siteTitle,
+      siteAnnouncement,
+      chunkSizeMB,
+      webdavEnabled: false,
+    };
   }
 
   await initDatabase(db);
@@ -132,7 +181,7 @@ interface StorageInfo {
 type ConfigField = {
   key: string;
   label: string;
-  type: "text" | "password" | "textarea" | "select" | "boolean";
+  type: 'text' | 'password' | 'textarea' | 'select' | 'boolean';
   required?: boolean;
   placeholder?: string;
   options?: Array<{ value: string; label: string }>;
@@ -144,531 +193,968 @@ type ConfigField = {
   patternHint?: string;
 };
 
-const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean; fields: ConfigField[]; oauth?: boolean }> = {
+const driveConfigMap: Record<
+  string,
+  {
+    name: string;
+    supportsMultipart: boolean;
+    fields: ConfigField[];
+    oauth?: boolean;
+  }
+> = {
   onedrive: {
-    name: "OneDrive",
+    name: 'OneDrive',
     supportsMultipart: true,
     fields: [
       {
-        key: "region",
-        label: "区域",
-        type: "select",
+        key: 'region',
+        label: '区域',
+        type: 'select',
         required: true,
         options: [
-          { value: "global", label: "全球版" },
-          { value: "cn", label: "中国版（世纪互联）" },
-          { value: "us", label: "美国政府版" },
-          { value: "de", label: "德国版" },
+          { value: 'global', label: '全球版' },
+          { value: 'cn', label: '中国版（世纪互联）' },
+          { value: 'us', label: '美国政府版' },
+          { value: 'de', label: '德国版' },
         ],
-        defaultValue: "global",
+        defaultValue: 'global',
       },
       {
-        key: "refresh_token",
-        label: "刷新令牌",
-        type: "textarea",
+        key: 'refresh_token',
+        label: '刷新令牌',
+        type: 'textarea',
         required: true,
-        placeholder: "Microsoft OAuth 刷新令牌",
-        help: "最省事：点表单底部「通过 Microsoft 授权」按钮自动换取。手动获取需先在 Azure 注册应用并走授权码流程，详见 docs/CREDENTIAL_GUIDE.md。",
-        link: { url: "https://learn.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth", text: "Graph OAuth 教程 →" },
+        placeholder: 'Microsoft OAuth 刷新令牌',
+        help: '最省事：点表单底部「通过 Microsoft 授权」按钮自动换取。手动获取需先在 Azure 注册应用并走授权码流程，详见 docs/CREDENTIAL_GUIDE.md。',
+        link: {
+          url: 'https://learn.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth',
+          text: 'Graph OAuth 教程 →',
+        },
       },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true, help: "开启后由在线服务托管密钥并自动续期令牌" },
       {
-        key: "api_address",
-        label: "在线API地址",
-        type: "text",
-        defaultValue: "https://api.oplist.org/onedrive/renewapi",
-        placeholder: "自建刷新接口地址",
+        key: 'use_online_api',
+        label: '使用在线API',
+        type: 'boolean',
+        defaultValue: true,
+        help: '开启后由在线服务托管密钥并自动续期令牌',
+      },
+      {
+        key: 'api_address',
+        label: '在线API地址',
+        type: 'text',
+        defaultValue: 'https://api.oplist.org/onedrive/renewapi',
+        placeholder: '自建刷新接口地址',
         show: (values) => values.use_online_api === true,
-        help: "默认使用公共刷新网关；自建服务时替换为自己的 renewapi 地址",
+        help: '默认使用公共刷新网关；自建服务时替换为自己的 renewapi 地址',
       },
       {
-        key: "client_id",
-        label: "客户端ID",
-        type: "text",
-        placeholder: "本地客户端ID",
+        key: 'client_id',
+        label: '客户端ID',
+        type: 'text',
+        placeholder: '本地客户端ID',
         show: (values) => values.use_online_api !== true,
-        help: "Azure 应用注册里的 Application (client) ID",
-        link: { url: "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade", text: "Azure 应用注册 →" },
+        help: 'Azure 应用注册里的 Application (client) ID',
+        link: {
+          url: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
+          text: 'Azure 应用注册 →',
+        },
       },
       {
-        key: "client_secret",
-        label: "客户端密钥",
-        type: "password",
-        placeholder: "本地客户端密钥",
+        key: 'client_secret',
+        label: '客户端密钥',
+        type: 'password',
+        placeholder: '本地客户端密钥',
         show: (values) => values.use_online_api !== true,
-        help: "同一应用内 Certificates & secrets → New client secret，值只显示一次请立即复制",
+        help: '同一应用内 Certificates & secrets → New client secret，值只显示一次请立即复制',
       },
       {
-        key: "redirect_uri",
-        label: "重定向URI",
-        type: "text",
-        placeholder: "https://api.oplist.org/onedrive/callback",
-        defaultValue: "https://api.oplist.org/onedrive/callback",
+        key: 'redirect_uri',
+        label: '重定向URI',
+        type: 'text',
+        placeholder: 'https://api.oplist.org/onedrive/callback',
+        defaultValue: 'https://api.oplist.org/onedrive/callback',
         show: (values) => values.use_online_api !== true,
-        help: "必须与 Azure 应用 Authentication 页登记的 Redirect URI 完全一致，否则报 AADSTS50011",
+        help: '必须与 Azure 应用 Authentication 页登记的 Redirect URI 完全一致，否则报 AADSTS50011',
       },
-      { key: "is_sharepoint", label: "SharePoint 模式", type: "boolean", defaultValue: false },
       {
-        key: "site_id",
-        label: "SharePoint 站点ID",
-        type: "text",
-        placeholder: "SharePoint 站点ID",
+        key: 'is_sharepoint',
+        label: 'SharePoint 模式',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'site_id',
+        label: 'SharePoint 站点ID',
+        type: 'text',
+        placeholder: 'SharePoint 站点ID',
         show: (values) => values.is_sharepoint === true,
       },
-      { key: "root_folder_path", label: "根文件夹路径", type: "text", defaultValue: "/" },
-      { key: "chunk_size", label: "分块大小 (MB)", type: "text", defaultValue: "5" },
-      { key: "custom_host", label: "自定义下载主机", type: "text", placeholder: "可选：自定义下载域名" },
+      {
+        key: 'root_folder_path',
+        label: '根文件夹路径',
+        type: 'text',
+        defaultValue: '/',
+      },
+      {
+        key: 'chunk_size',
+        label: '分块大小 (MB)',
+        type: 'text',
+        defaultValue: '5',
+      },
+      {
+        key: 'custom_host',
+        label: '自定义下载主机',
+        type: 'text',
+        placeholder: '可选：自定义下载域名',
+      },
     ],
   },
   gdrive: {
-    name: "Google Drive",
+    name: 'Google Drive',
     supportsMultipart: true,
     fields: [
       {
-        key: "refresh_token",
-        label: "刷新令牌",
-        type: "textarea",
+        key: 'refresh_token',
+        label: '刷新令牌',
+        type: 'textarea',
         required: true,
-        placeholder: "Google OAuth 刷新令牌",
-        help: "最省事：点表单底部「通过 Google 授权」按钮。手动获取需在 Google Cloud 创建 Web 应用型 OAuth 客户端并换取 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。",
-        link: { url: "https://console.cloud.google.com/apis/credentials", text: "Google Cloud 凭据页 →" },
+        placeholder: 'Google OAuth 刷新令牌',
+        help: '最省事：点表单底部「通过 Google 授权」按钮。手动获取需在 Google Cloud 创建 Web 应用型 OAuth 客户端并换取 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。',
+        link: {
+          url: 'https://console.cloud.google.com/apis/credentials',
+          text: 'Google Cloud 凭据页 →',
+        },
       },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true, help: "开启后由在线服务托管密钥并自动续期令牌" },
       {
-        key: "api_address",
-        label: "在线API地址",
-        type: "text",
-        defaultValue: "https://api.oplist.org/googleui/renewapi",
-        placeholder: "自建刷新接口地址",
+        key: 'use_online_api',
+        label: '使用在线API',
+        type: 'boolean',
+        defaultValue: true,
+        help: '开启后由在线服务托管密钥并自动续期令牌',
+      },
+      {
+        key: 'api_address',
+        label: '在线API地址',
+        type: 'text',
+        defaultValue: 'https://api.oplist.org/googleui/renewapi',
+        placeholder: '自建刷新接口地址',
         show: (values) => values.use_online_api === true,
-        help: "默认使用公共刷新网关；自建服务时替换为自己的 renewapi 地址",
+        help: '默认使用公共刷新网关；自建服务时替换为自己的 renewapi 地址',
       },
       {
-        key: "client_id",
-        label: "客户端ID",
-        type: "text",
-        placeholder: "本地客户端ID",
+        key: 'client_id',
+        label: '客户端ID',
+        type: 'text',
+        placeholder: '本地客户端ID',
         show: (values) => values.use_online_api !== true,
-        help: "OAuth 客户端 ID；先在 OAuth 同意屏幕启用 Drive 范围",
-        link: { url: "https://console.cloud.google.com/apis/credentials", text: "创建 OAuth 客户端 →" },
+        help: 'OAuth 客户端 ID；先在 OAuth 同意屏幕启用 Drive 范围',
+        link: {
+          url: 'https://console.cloud.google.com/apis/credentials',
+          text: '创建 OAuth 客户端 →',
+        },
       },
       {
-        key: "client_secret",
-        label: "客户端密钥",
-        type: "password",
-        placeholder: "本地客户端密钥",
+        key: 'client_secret',
+        label: '客户端密钥',
+        type: 'password',
+        placeholder: '本地客户端密钥',
         show: (values) => values.use_online_api !== true,
-        help: "同一 OAuth 客户端的 Client secret",
+        help: '同一 OAuth 客户端的 Client secret',
       },
-      { key: "root_folder_id", label: "根目录ID", type: "text", defaultValue: "root", placeholder: "默认 root" },
-      { key: "order_by", label: "排序字段", type: "text", defaultValue: "folder,name,modifiedTime", placeholder: "folder,name,modifiedTime" },
       {
-        key: "order_direction",
-        label: "排序方向",
-        type: "select",
+        key: 'root_folder_id',
+        label: '根目录ID',
+        type: 'text',
+        defaultValue: 'root',
+        placeholder: '默认 root',
+      },
+      {
+        key: 'order_by',
+        label: '排序字段',
+        type: 'text',
+        defaultValue: 'folder,name,modifiedTime',
+        placeholder: 'folder,name,modifiedTime',
+      },
+      {
+        key: 'order_direction',
+        label: '排序方向',
+        type: 'select',
         options: [
-          { value: "asc", label: "升序" },
-          { value: "desc", label: "降序" },
+          { value: 'asc', label: '升序' },
+          { value: 'desc', label: '降序' },
         ],
-        defaultValue: "asc",
+        defaultValue: 'asc',
       },
-      { key: "chunk_size", label: "分块大小 (MB)", type: "text", defaultValue: "5" },
+      {
+        key: 'chunk_size',
+        label: '分块大小 (MB)',
+        type: 'text',
+        defaultValue: '5',
+      },
     ],
   },
   alicloud: {
-    name: "阿里云盘",
+    name: '阿里云盘',
     supportsMultipart: true,
     fields: [
       {
-        key: "drive_type",
-        label: "驱动类型",
-        type: "select",
+        key: 'drive_type',
+        label: '驱动类型',
+        type: 'select',
         required: true,
         options: [
-          { value: "resource", label: "资源库" },
-          { value: "backup", label: "备份盘" },
-          { value: "default", label: "默认" },
+          { value: 'resource', label: '资源库' },
+          { value: 'backup', label: '备份盘' },
+          { value: 'default', label: '默认' },
         ],
-        defaultValue: "resource",
+        defaultValue: 'resource',
       },
       {
-        key: "refresh_token",
-        label: "刷新令牌",
-        type: "textarea",
+        key: 'refresh_token',
+        label: '刷新令牌',
+        type: 'textarea',
         required: true,
-        help: "开启「使用在线API」时无需填写；本地模式需从阿里云盘开放平台或已登录会话中取得 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。",
-        link: { url: "https://open.alipan.com/", text: "阿里云盘开放平台 →" },
+        help: '开启「使用在线API」时无需填写；本地模式需从阿里云盘开放平台或已登录会话中取得 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。',
+        link: { url: 'https://open.alipan.com/', text: '阿里云盘开放平台 →' },
       },
-      { key: "root_folder_id", label: "根目录ID", type: "text", defaultValue: "root" },
       {
-        key: "order_by",
-        label: "排序方式",
-        type: "select",
+        key: 'root_folder_id',
+        label: '根目录ID',
+        type: 'text',
+        defaultValue: 'root',
+      },
+      {
+        key: 'order_by',
+        label: '排序方式',
+        type: 'select',
         options: [
-          { value: "name", label: "文件名" },
-          { value: "size", label: "文件大小" },
-          { value: "updated_at", label: "修改时间" },
-          { value: "created_at", label: "创建时间" },
+          { value: 'name', label: '文件名' },
+          { value: 'size', label: '文件大小' },
+          { value: 'updated_at', label: '修改时间' },
+          { value: 'created_at', label: '创建时间' },
         ],
-        defaultValue: "name",
+        defaultValue: 'name',
       },
       {
-        key: "order_direction",
-        label: "排序方向",
-        type: "select",
+        key: 'order_direction',
+        label: '排序方向',
+        type: 'select',
         options: [
-          { value: "ASC", label: "升序" },
-          { value: "DESC", label: "降序" },
+          { value: 'ASC', label: '升序' },
+          { value: 'DESC', label: '降序' },
         ],
-        defaultValue: "ASC",
+        defaultValue: 'ASC',
       },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true },
       {
-        key: "api_address",
-        label: "在线API地址",
-        type: "text",
-        defaultValue: "https://api.oplist.org/alicloud/renewapi",
-        placeholder: "自建刷新接口地址",
+        key: 'use_online_api',
+        label: '使用在线API',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'api_address',
+        label: '在线API地址',
+        type: 'text',
+        defaultValue: 'https://api.oplist.org/alicloud/renewapi',
+        placeholder: '自建刷新接口地址',
         show: (values) => values.use_online_api === true,
       },
       {
-        key: "client_id",
-        label: "客户端ID",
-        type: "text",
-        placeholder: "本地客户端ID",
+        key: 'client_id',
+        label: '客户端ID',
+        type: 'text',
+        placeholder: '本地客户端ID',
         show: (values) => values.use_online_api !== true,
-        help: "阿里云盘开放平台应用的 AppID",
-        link: { url: "https://open.alipan.com/", text: "申请应用 →" },
+        help: '阿里云盘开放平台应用的 AppID',
+        link: { url: 'https://open.alipan.com/', text: '申请应用 →' },
       },
       {
-        key: "client_secret",
-        label: "客户端密钥",
-        type: "password",
-        placeholder: "本地客户端密钥",
+        key: 'client_secret',
+        label: '客户端密钥',
+        type: 'password',
+        placeholder: '本地客户端密钥',
         show: (values) => values.use_online_api !== true,
-        help: "同一应用的 AppSecret，注意不要泄露给前端",
+        help: '同一应用的 AppSecret，注意不要泄露给前端',
       },
       {
-        key: "remove_way",
-        label: "删除方式",
-        type: "select",
+        key: 'remove_way',
+        label: '删除方式',
+        type: 'select',
         options: [
-          { value: "trash", label: "移到回收站" },
-          { value: "delete", label: "直接删除" },
+          { value: 'trash', label: '移到回收站' },
+          { value: 'delete', label: '直接删除' },
         ],
-        defaultValue: "trash",
-      },
-      { key: "rapid_upload", label: "秒传", type: "boolean", defaultValue: false },
-      { key: "internal_upload", label: "内网上传", type: "boolean", defaultValue: false },
-      {
-        key: "livp_download_format",
-        label: "LIVP 下载格式",
-        type: "select",
-        options: [
-          { value: "jpeg", label: "JPEG" },
-          { value: "mov", label: "MOV" },
-        ],
-        defaultValue: "jpeg",
+        defaultValue: 'trash',
       },
       {
-        key: "alipan_type",
-        label: "云盘类型",
-        type: "select",
+        key: 'rapid_upload',
+        label: '秒传',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'internal_upload',
+        label: '内网上传',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'livp_download_format',
+        label: 'LIVP 下载格式',
+        type: 'select',
         options: [
-          { value: "default", label: "默认" },
-          { value: "alipanTV", label: "阿里云盘TV" },
+          { value: 'jpeg', label: 'JPEG' },
+          { value: 'mov', label: 'MOV' },
         ],
-        defaultValue: "default",
+        defaultValue: 'jpeg',
+      },
+      {
+        key: 'alipan_type',
+        label: '云盘类型',
+        type: 'select',
+        options: [
+          { value: 'default', label: '默认' },
+          { value: 'alipanTV', label: '阿里云盘TV' },
+        ],
+        defaultValue: 'default',
       },
     ],
   },
   baiduyun: {
-    name: "百度网盘",
+    name: '百度网盘',
     supportsMultipart: false,
     fields: [
       {
-        key: "refresh_token",
-        label: "刷新令牌",
-        type: "textarea",
+        key: 'refresh_token',
+        label: '刷新令牌',
+        type: 'textarea',
         required: true,
-        help: "开启「使用在线API」时由后端自动续期。若本地使用，需在百度智能云创建应用并走授权码流程换取 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。",
-        link: { url: "https://console.bce.baidu.com/iam/app", text: "百度智能云应用管理 →" },
+        help: '开启「使用在线API」时由后端自动续期。若本地使用，需在百度智能云创建应用并走授权码流程换取 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。',
+        link: {
+          url: 'https://console.bce.baidu.com/iam/app',
+          text: '百度智能云应用管理 →',
+        },
       },
-      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "/" },
       {
-        key: "order_by",
-        label: "排序方式",
-        type: "select",
+        key: 'root_path',
+        label: '根目录路径',
+        type: 'text',
+        defaultValue: '/',
+      },
+      {
+        key: 'order_by',
+        label: '排序方式',
+        type: 'select',
         options: [
-          { value: "name", label: "文件名" },
-          { value: "time", label: "修改时间" },
-          { value: "size", label: "文件大小" },
+          { value: 'name', label: '文件名' },
+          { value: 'time', label: '修改时间' },
+          { value: 'size', label: '文件大小' },
         ],
-        defaultValue: "name",
+        defaultValue: 'name',
       },
       {
-        key: "order_direction",
-        label: "排序方向",
-        type: "select",
+        key: 'order_direction',
+        label: '排序方向',
+        type: 'select',
         options: [
-          { value: "asc", label: "升序" },
-          { value: "desc", label: "降序" },
+          { value: 'asc', label: '升序' },
+          { value: 'desc', label: '降序' },
         ],
-        defaultValue: "asc",
+        defaultValue: 'asc',
       },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true },
       {
-        key: "api_address",
-        label: "在线API地址",
-        type: "text",
-        defaultValue: "https://api.oplist.org/baiduyun/renewapi",
-        placeholder: "自建刷新接口地址",
+        key: 'use_online_api',
+        label: '使用在线API',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'api_address',
+        label: '在线API地址',
+        type: 'text',
+        defaultValue: 'https://api.oplist.org/baiduyun/renewapi',
+        placeholder: '自建刷新接口地址',
         show: (values) => values.use_online_api === true,
       },
       {
-        key: "client_id",
-        label: "客户端ID",
-        type: "text",
-        placeholder: "本地客户端ID",
+        key: 'client_id',
+        label: '客户端ID',
+        type: 'text',
+        placeholder: '本地客户端ID',
         show: (values) => values.use_online_api !== true,
-        help: "百度智能云应用的 Client ID（API Key），需在应用详情里查看",
-        link: { url: "https://console.bce.baidu.com/iam/app", text: "创建应用 →" },
+        help: '百度智能云应用的 Client ID（API Key），需在应用详情里查看',
+        link: {
+          url: 'https://console.bce.baidu.com/iam/app',
+          text: '创建应用 →',
+        },
       },
       {
-        key: "client_secret",
-        label: "客户端密钥",
-        type: "password",
-        placeholder: "本地客户端密钥",
+        key: 'client_secret',
+        label: '客户端密钥',
+        type: 'password',
+        placeholder: '本地客户端密钥',
         show: (values) => values.use_online_api !== true,
-        help: "同应用的 Secret Key，创建后请妥善保存",
+        help: '同应用的 Secret Key，创建后请妥善保存',
       },
     ],
   },
   quark: {
-    name: "夸克网盘",
+    name: '夸克网盘',
     supportsMultipart: false,
     fields: [
       {
-        key: "cookie",
-        label: "Cookie",
-        type: "textarea",
+        key: 'cookie',
+        label: 'Cookie',
+        type: 'textarea',
         required: true,
-        placeholder: "点下方「扫码登录获取 Cookie」自动填入；或登录 pan.quark.cn 后 F12 抓取",
-        help: "推荐用下方「扫码登录」按钮，夸克 App 扫码后 Cookie 自动回填；手动抓取步骤见 docs/CREDENTIAL_GUIDE.md。",
-        link: { url: "https://pan.quark.cn/", text: "夸克网盘网页版 →" },
+        placeholder:
+          '点下方「扫码登录获取 Cookie」自动填入；或登录 pan.quark.cn 后 F12 抓取',
+        help: '推荐用下方「扫码登录」按钮，夸克 App 扫码后 Cookie 自动回填；手动抓取步骤见 docs/CREDENTIAL_GUIDE.md。',
+        link: { url: 'https://pan.quark.cn/', text: '夸克网盘网页版 →' },
       },
-      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "/" },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: false },
       {
-        key: "api_address",
-        label: "在线API地址",
-        type: "text",
-        defaultValue: "https://api.oplist.org/quark/renewapi",
-        placeholder: "自建刷新接口地址",
+        key: 'root_path',
+        label: '根目录路径',
+        type: 'text',
+        defaultValue: '/',
+      },
+      {
+        key: 'use_online_api',
+        label: '使用在线API',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'api_address',
+        label: '在线API地址',
+        type: 'text',
+        defaultValue: 'https://api.oplist.org/quark/renewapi',
+        placeholder: '自建刷新接口地址',
         show: (values) => values.use_online_api === true,
       },
     ],
   },
   tigris: {
-    name: "Tigris 对象存储",
+    name: 'Tigris 对象存储',
     supportsMultipart: true,
     fields: [
       {
-        key: "region",
-        label: "区域",
-        type: "select",
+        key: 'region',
+        label: '区域',
+        type: 'select',
         required: true,
         options: [
-          { value: "us-east-1", label: "美国东部" },
-          { value: "eu-central-1", label: "欧洲中部" },
-          { value: "ap-southeast-1", label: "亚太东南" },
+          { value: 'us-east-1', label: '美国东部' },
+          { value: 'eu-central-1', label: '欧洲中部' },
+          { value: 'ap-southeast-1', label: '亚太东南' },
         ],
-        defaultValue: "us-east-1",
+        defaultValue: 'us-east-1',
       },
-      { key: "endpoint", label: "端点", type: "text", defaultValue: "https://fly/storage", placeholder: "https://fly/storage", help: "Tigris 的 S3 兼容端点，按区域选择", link: { url: "https://docs.tigrisdata.com/overview", text: "Tigris 端点说明 →" } },
-      { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-bucket" },
-      { key: "access_key_id", label: "访问密钥 ID", type: "password", required: true, placeholder: "Tigris Access Key ID", help: "控制台 Access Keys → Create New Access Key 生成", link: { url: "https://console.storage.dev/", text: "Tigris 控制台 →" } },
-      { key: "secret_access_key", label: "访问密钥", type: "password", required: true, placeholder: "Tigris Secret Access Key" },
-      { key: "session_token", label: "会话令牌", type: "password", placeholder: "可选：临时凭证" },
-      { key: "use_ssl", label: "启用 SSL", type: "boolean", defaultValue: true },
-      { key: "path_style", label: "路径风格访问", type: "boolean", defaultValue: false },
       {
-        key: "signature_version",
-        label: "签名版本",
-        type: "select",
-        options: [
-          { value: "v4", label: "SigV4 (推荐)" },
-          { value: "v2", label: "SigV2 (旧版兼容)" },
-        ],
-        defaultValue: "v4",
+        key: 'endpoint',
+        label: '端点',
+        type: 'text',
+        defaultValue: 'https://fly/storage',
+        placeholder: 'https://fly/storage',
+        help: 'Tigris 的 S3 兼容端点，按区域选择',
+        link: {
+          url: 'https://docs.tigrisdata.com/overview',
+          text: 'Tigris 端点说明 →',
+        },
       },
-      { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
+      {
+        key: 'bucket',
+        label: '存储桶名',
+        type: 'text',
+        required: true,
+        placeholder: 'my-bucket',
+      },
+      {
+        key: 'access_key_id',
+        label: '访问密钥 ID',
+        type: 'password',
+        required: true,
+        placeholder: 'Tigris Access Key ID',
+        help: '控制台 Access Keys → Create New Access Key 生成',
+        link: { url: 'https://console.storage.dev/', text: 'Tigris 控制台 →' },
+      },
+      {
+        key: 'secret_access_key',
+        label: '访问密钥',
+        type: 'password',
+        required: true,
+        placeholder: 'Tigris Secret Access Key',
+      },
+      {
+        key: 'session_token',
+        label: '会话令牌',
+        type: 'password',
+        placeholder: '可选：临时凭证',
+      },
+      {
+        key: 'use_ssl',
+        label: '启用 SSL',
+        type: 'boolean',
+        defaultValue: true,
+      },
+      {
+        key: 'path_style',
+        label: '路径风格访问',
+        type: 'boolean',
+        defaultValue: false,
+      },
+      {
+        key: 'signature_version',
+        label: '签名版本',
+        type: 'select',
+        options: [
+          { value: 'v4', label: 'SigV4 (推荐)' },
+          { value: 'v2', label: 'SigV2 (旧版兼容)' },
+        ],
+        defaultValue: 'v4',
+      },
+      {
+        key: 'root_folder_path',
+        label: '根目录路径',
+        type: 'text',
+        defaultValue: '/',
+      },
     ],
   },
   qiniu: {
-    name: "七牛云 KODO",
+    name: '七牛云 KODO',
     supportsMultipart: true,
     fields: [
       {
-        key: "region",
-        label: "区域",
-        type: "select",
+        key: 'region',
+        label: '区域',
+        type: 'select',
         required: true,
         options: [
-          { value: "z0", label: "华东" },
-          { value: "z1", label: "华北" },
-          { value: "z2", label: "华南" },
-          { value: "cn-east-2", label: "华东-2" },
-          { value: "na0", label: "北美-洛杉矶" },
-          { value: "as0", label: "亚太-新加坡" },
-          { value: "as2", label: "亚太-胡志明" },
+          { value: 'z0', label: '华东' },
+          { value: 'z1', label: '华北' },
+          { value: 'z2', label: '华南' },
+          { value: 'cn-east-2', label: '华东-2' },
+          { value: 'na0', label: '北美-洛杉矶' },
+          { value: 'as0', label: '亚太-新加坡' },
+          { value: 'as2', label: '亚太-胡志明' },
         ],
-        defaultValue: "z0",
+        defaultValue: 'z0',
       },
-      { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-kodo-bucket" },
       {
-        key: "access_key",
-        label: "Access Key",
-        type: "password",
+        key: 'bucket',
+        label: '存储桶名',
+        type: 'text',
         required: true,
-        placeholder: "七牛 Access Key",
-        help: "七牛云控制台 -> 个人中心 -> 密钥管理 -> AccessKey",
-        link: { url: "https://portal.qiniu.com/user/key", text: "密钥管理 →" },
+        placeholder: 'my-kodo-bucket',
       },
       {
-        key: "secret_key",
-        label: "Secret Key",
-        type: "password",
+        key: 'access_key',
+        label: 'Access Key',
+        type: 'password',
         required: true,
-        placeholder: "七牛 Secret Key",
-        help: "同上创建时显示一次的 SecretKey",
+        placeholder: '七牛 Access Key',
+        help: '七牛云控制台 -> 个人中心 -> 密钥管理 -> AccessKey',
+        link: { url: 'https://portal.qiniu.com/user/key', text: '密钥管理 →' },
       },
       {
-        key: "session_token",
-        label: "会话令牌",
-        type: "password",
-        placeholder: "可选：STS 临时凭证 Security Token",
-        help: "使用 STS Federated Token 时填写 SecurityToken，可提升安全性",
-        link: { url: "https://developer.qiniu.com/kodo/kb/3495/sts", text: "七牛 STS 文档 →" },
+        key: 'secret_key',
+        label: 'Secret Key',
+        type: 'password',
+        required: true,
+        placeholder: '七牛 Secret Key',
+        help: '同上创建时显示一次的 SecretKey',
       },
-      { key: "domain", label: "域名", type: "text", placeholder: "https://cdn.example.com（可选）" },
-      { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
-      { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
+      {
+        key: 'session_token',
+        label: '会话令牌',
+        type: 'password',
+        placeholder: '可选：STS 临时凭证 Security Token',
+        help: '使用 STS Federated Token 时填写 SecurityToken，可提升安全性',
+        link: {
+          url: 'https://developer.qiniu.com/kodo/kb/3495/sts',
+          text: '七牛 STS 文档 →',
+        },
+      },
+      {
+        key: 'domain',
+        label: '域名',
+        type: 'text',
+        placeholder: 'https://cdn.example.com（可选）',
+      },
+      {
+        key: 'root_folder_path',
+        label: '根目录路径',
+        type: 'text',
+        defaultValue: '/',
+      },
+      {
+        key: 'use_https',
+        label: '使用 HTTPS',
+        type: 'boolean',
+        defaultValue: true,
+      },
     ],
   },
   ftp: {
-    name: "FTP 文件网关",
+    name: 'FTP 文件网关',
     supportsMultipart: false,
     fields: [
       {
-        key: "endpoint",
-        label: "HTTP 网关地址",
-        type: "text",
+        key: 'endpoint',
+        label: 'HTTP 网关地址',
+        type: 'text',
         required: true,
-        placeholder: "https://ftp.example.com/dav",
-        help: "自建 FTP/WebDAV 网关的 HTTP 入口地址，需以 https:// 开头并以路径结尾",
+        placeholder: 'https://ftp.example.com/dav',
+        help: '自建 FTP/WebDAV 网关的 HTTP 入口地址，需以 https:// 开头并以路径结尾',
       },
-      { key: "username", label: "用户名", type: "text", required: true, placeholder: "FTP 用户名", help: "网关登录用户名" },
-      { key: "password", label: "密码", type: "password", required: true, placeholder: "FTP 密码", help: "网关登录密码" },
-      { key: "base_path", label: "根目录路径", type: "text", defaultValue: "/", help: "限定可访问的起始目录，越界路径会被拒绝" },
-      { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
+      {
+        key: 'username',
+        label: '用户名',
+        type: 'text',
+        required: true,
+        placeholder: 'FTP 用户名',
+        help: '网关登录用户名',
+      },
+      {
+        key: 'password',
+        label: '密码',
+        type: 'password',
+        required: true,
+        placeholder: 'FTP 密码',
+        help: '网关登录密码',
+      },
+      {
+        key: 'base_path',
+        label: '根目录路径',
+        type: 'text',
+        defaultValue: '/',
+        help: '限定可访问的起始目录，越界路径会被拒绝',
+      },
+      {
+        key: 'use_https',
+        label: '使用 HTTPS',
+        type: 'boolean',
+        defaultValue: true,
+      },
     ],
   },
   mysql: {
-    name: "MySQL 数据库",
+    name: 'MySQL 数据库',
     supportsMultipart: false,
     fields: [
-      { key: "database", label: "数据库名", type: "text", required: true, placeholder: "my_database", help: "通过 Hyperdrive 绑定时填写目标数据库名" },
-      { key: "table_prefix", label: "表前缀", type: "text", placeholder: "可选：wp_", help: "仅处理带该前缀的表，常用于 WordPress 等" },
       {
-        key: "connection_string",
-        label: "直连连接串（可选）",
-        type: "textarea",
+        key: 'database',
+        label: '数据库名',
+        type: 'text',
+        required: true,
+        placeholder: 'my_database',
+        help: '通过 Hyperdrive 绑定时填写目标数据库名',
+      },
+      {
+        key: 'table_prefix',
+        label: '表前缀',
+        type: 'text',
+        placeholder: '可选：wp_',
+        help: '仅处理带该前缀的表，常用于 WordPress 等',
+      },
+      {
+        key: 'connection_string',
+        label: '直连连接串（可选）',
+        type: 'textarea',
         required: false,
-        placeholder: "mysql://user:pass@host:port/db（未绑定 Hyperdrive 时使用）",
-        help: "未绑定 Hyperdrive 时才填写，建议仅在本地开发使用；生产推荐绑定 Cloudflare Hyperdrive",
-        link: { url: "https://developers.cloudflare.com/hyperdrive/", text: "Hyperdrive 文档 →" },
+        placeholder:
+          'mysql://user:pass@host:port/db（未绑定 Hyperdrive 时使用）',
+        help: '未绑定 Hyperdrive 时才填写，建议仅在本地开发使用；生产推荐绑定 Cloudflare Hyperdrive',
+        link: {
+          url: 'https://developers.cloudflare.com/hyperdrive/',
+          text: 'Hyperdrive 文档 →',
+        },
       },
     ],
   },
-  "r2-oauth": {
-    name: "Cloudflare R2 (OAuth)",
+  'r2-oauth': {
+    name: 'Cloudflare R2 (OAuth)',
     supportsMultipart: false,
     fields: [
       {
-        key: "account_id",
-        label: "Cloudflare 账户 ID",
-        type: "text",
+        key: 'account_id',
+        label: 'Cloudflare 账户 ID',
+        type: 'text',
         required: true,
-        placeholder: "e.g.: 1234567890abcdef",
-        help: "在 Cloudflare 控制台右侧「账户 ID」处复制",
-        link: { url: "https://dash.cloudflare.com/", text: "Cloudflare 控制台 →" },
+        placeholder: 'e.g.: 1234567890abcdef',
+        help: '在 Cloudflare 控制台右侧「账户 ID」处复制',
+        link: {
+          url: 'https://dash.cloudflare.com/',
+          text: 'Cloudflare 控制台 →',
+        },
       },
-      { key: "bucket", label: "R2 存储桶名", type: "text", required: true, placeholder: "my-r2-bucket", help: "授权方账户下可访问的 R2 Bucket 名称" },
+      {
+        key: 'bucket',
+        label: 'R2 存储桶名',
+        type: 'text',
+        required: true,
+        placeholder: 'my-r2-bucket',
+        help: '授权方账户下可访问的 R2 Bucket 名称',
+      },
     ],
     oauth: true,
   },
   dropbox: {
-    name: "Dropbox",
+    name: 'Dropbox',
     supportsMultipart: false,
     fields: [
       {
-        key: "access_token",
-        label: "Access Token",
-        type: "password",
+        key: 'access_token',
+        label: 'Access Token',
+        type: 'password',
         required: true,
-        help: "在 Dropbox App Console 创建 Scoped Access 应用，勾选权限后生成 Access Token。长期令牌需选择 Offline 授权并换取 refresh_token。",
-        link: { url: "https://www.dropbox.com/developers/apps", text: "Dropbox 应用控制台 →" },
+        help: '在 Dropbox App Console 创建 Scoped Access 应用，勾选权限后生成 Access Token。长期令牌需选择 Offline 授权并换取 refresh_token。',
+        link: {
+          url: 'https://www.dropbox.com/developers/apps',
+          text: 'Dropbox 应用控制台 →',
+        },
       },
-      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "", help: "限定在 /Appname 等目录内操作，留空表示账户根目录" },
+      {
+        key: 'root_path',
+        label: '根目录路径',
+        type: 'text',
+        defaultValue: '',
+        help: '限定在 /Appname 等目录内操作，留空表示账户根目录',
+      },
     ],
   },
   github: {
-    name: "GitHub 仓库",
+    name: 'GitHub 仓库',
     supportsMultipart: false,
     fields: [
-      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo 或 https://github.com/owner/repo", help: "支持 owner/repo 或完整 GitHub URL，粘贴自浏览器地址栏即可" },
-      { key: "token", label: "Personal Access Token", type: "password", required: true, placeholder: "ghp_xxx 或 github_pat_xxx", help: "Classic Token 请勾选 repo 范围；Fine-grained 需授予 Contents: Read/Write", link: { url: "https://github.com/settings/tokens/new?description=Sandbox%20Storage&scopes=repo", text: "前往 GitHub 生成 Token →" } },
-      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
-      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
-      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://api.github.com", placeholder: "https://api.github.com", help: "GitHub Enterprise 才需修改；公共 GitHub 保持默认即可", show: (v) => v.custom_api_base === true },
-      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，GitHub Enterprise 自建站点才需要" },
+      {
+        key: 'repo',
+        label: '仓库',
+        type: 'text',
+        required: true,
+        placeholder: 'owner/repo 或 https://github.com/owner/repo',
+        help: '支持 owner/repo 或完整 GitHub URL，粘贴自浏览器地址栏即可',
+      },
+      {
+        key: 'token',
+        label: 'Personal Access Token',
+        type: 'password',
+        required: true,
+        placeholder: 'ghp_xxx 或 github_pat_xxx',
+        help: 'Classic Token 请勾选 repo 范围；Fine-grained 需授予 Contents: Read/Write',
+        link: {
+          url: 'https://github.com/settings/tokens/new?description=Sandbox%20Storage&scopes=repo',
+          text: '前往 GitHub 生成 Token →',
+        },
+      },
+      {
+        key: 'branch',
+        label: '分支',
+        type: 'text',
+        defaultValue: 'main',
+        placeholder: 'main',
+        help: '仓库默认分支，一般为 main 或 master',
+      },
+      {
+        key: 'root_path',
+        label: '仓库内子目录',
+        type: 'text',
+        defaultValue: '',
+        placeholder: '如 docs/assets，留空用仓库根',
+        help: '给定时仅在该子目录内读写，越界路径会被拒绝',
+      },
+      {
+        key: 'api_base',
+        label: 'API 地址',
+        type: 'text',
+        defaultValue: 'https://api.github.com',
+        placeholder: 'https://api.github.com',
+        help: 'GitHub Enterprise 才需修改；公共 GitHub 保持默认即可',
+        show: (v) => v.custom_api_base === true,
+      },
+      {
+        key: 'custom_api_base',
+        label: '使用自定义 API 地址',
+        type: 'boolean',
+        defaultValue: false,
+        help: '勾选后显示 API 地址字段，GitHub Enterprise 自建站点才需要',
+      },
     ],
   },
   gitlab: {
-    name: "GitLab 仓库",
+    name: 'GitLab 仓库',
     supportsMultipart: false,
     fields: [
-      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "namespace/project 或 https://gitlab.com/group/subgroup/project", help: "支持 namespace/project 或完整 GitLab URL；嵌套分组会自动拼接" },
-      { key: "token", label: "Private Access Token", type: "password", required: true, placeholder: "glpat-xxx", help: "需授予 read_repository/write_repository 权限", link: { url: "https://gitlab.com/-/user_settings/personal_access_tokens", text: "前往 GitLab 生成 Token →" } },
-      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
-      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
-      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://gitlab.com/api/v4", placeholder: "https://gitlab.com/api/v4", help: "自建 GitLab 才需修改；公共 GitLab 保持默认即可", show: (v) => v.custom_api_base === true },
-      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，自建 GitLab 实例才需要" },
+      {
+        key: 'repo',
+        label: '仓库',
+        type: 'text',
+        required: true,
+        placeholder:
+          'namespace/project 或 https://gitlab.com/group/subgroup/project',
+        help: '支持 namespace/project 或完整 GitLab URL；嵌套分组会自动拼接',
+      },
+      {
+        key: 'token',
+        label: 'Private Access Token',
+        type: 'password',
+        required: true,
+        placeholder: 'glpat-xxx',
+        help: '需授予 read_repository/write_repository 权限',
+        link: {
+          url: 'https://gitlab.com/-/user_settings/personal_access_tokens',
+          text: '前往 GitLab 生成 Token →',
+        },
+      },
+      {
+        key: 'branch',
+        label: '分支',
+        type: 'text',
+        defaultValue: 'main',
+        placeholder: 'main',
+        help: '仓库默认分支，一般为 main 或 master',
+      },
+      {
+        key: 'root_path',
+        label: '仓库内子目录',
+        type: 'text',
+        defaultValue: '',
+        placeholder: '如 docs/assets，留空用仓库根',
+        help: '给定时仅在该子目录内读写，越界路径会被拒绝',
+      },
+      {
+        key: 'api_base',
+        label: 'API 地址',
+        type: 'text',
+        defaultValue: 'https://gitlab.com/api/v4',
+        placeholder: 'https://gitlab.com/api/v4',
+        help: '自建 GitLab 才需修改；公共 GitLab 保持默认即可',
+        show: (v) => v.custom_api_base === true,
+      },
+      {
+        key: 'custom_api_base',
+        label: '使用自定义 API 地址',
+        type: 'boolean',
+        defaultValue: false,
+        help: '勾选后显示 API 地址字段，自建 GitLab 实例才需要',
+      },
     ],
   },
   gitea: {
-    name: "Gitea / Forgejo 仓库",
+    name: 'Gitea / Forgejo 仓库',
     supportsMultipart: false,
     fields: [
-      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo 或 https://gitea.example.com/owner/repo", help: "支持 owner/repo 或完整仓库 URL" },
-      { key: "token", label: "Access Token", type: "password", required: true, placeholder: "gitea_token 或带上 API 地址", help: "在 Gitea/Forgejo 个人设置中生成 API Token", link: { url: "https://gitea.com/user/settings/applications", text: "前往生成 Token →" } },
-      { key: "branch", label: "分支", type: "text", defaultValue: "main", placeholder: "main", help: "仓库默认分支，一般为 main 或 master" },
-      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
-      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://gitea.com/api/v1", placeholder: "https://gitea.com/api/v1", help: "自建 Gitea/Forgejo 实例才需修改；公共 Gitea 保持默认即可", show: (v) => v.custom_api_base === true },
-      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段，自建实例才需要" },
+      {
+        key: 'repo',
+        label: '仓库',
+        type: 'text',
+        required: true,
+        placeholder: 'owner/repo 或 https://gitea.example.com/owner/repo',
+        help: '支持 owner/repo 或完整仓库 URL',
+      },
+      {
+        key: 'token',
+        label: 'Access Token',
+        type: 'password',
+        required: true,
+        placeholder: 'gitea_token 或带上 API 地址',
+        help: '在 Gitea/Forgejo 个人设置中生成 API Token',
+        link: {
+          url: 'https://gitea.com/user/settings/applications',
+          text: '前往生成 Token →',
+        },
+      },
+      {
+        key: 'branch',
+        label: '分支',
+        type: 'text',
+        defaultValue: 'main',
+        placeholder: 'main',
+        help: '仓库默认分支，一般为 main 或 master',
+      },
+      {
+        key: 'root_path',
+        label: '仓库内子目录',
+        type: 'text',
+        defaultValue: '',
+        placeholder: '如 docs/assets，留空用仓库根',
+        help: '给定时仅在该子目录内读写，越界路径会被拒绝',
+      },
+      {
+        key: 'api_base',
+        label: 'API 地址',
+        type: 'text',
+        defaultValue: 'https://gitea.com/api/v1',
+        placeholder: 'https://gitea.com/api/v1',
+        help: '自建 Gitea/Forgejo 实例才需修改；公共 Gitea 保持默认即可',
+        show: (v) => v.custom_api_base === true,
+      },
+      {
+        key: 'custom_api_base',
+        label: '使用自定义 API 地址',
+        type: 'boolean',
+        defaultValue: false,
+        help: '勾选后显示 API 地址字段，自建实例才需要',
+      },
     ],
   },
   gitee: {
-    name: "Gitee 仓库",
+    name: 'Gitee 仓库',
     supportsMultipart: false,
     fields: [
-      { key: "repo", label: "仓库", type: "text", required: true, placeholder: "owner/repo 或 https://gitee.com/owner/repo", help: "支持 owner/repo 或完整仓库 URL" },
-      { key: "token", label: "私人令牌", type: "password", required: true, placeholder: "gitee_xxx（Access Token）", help: "作为 access_token 查询参数传入，确保 token 拥有仓库读写权限", link: { url: "https://gitee.com/profile/personal_access_tokens", text: "前往 Gitee 生成令牌 →" } },
-      { key: "branch", label: "分支", type: "text", defaultValue: "master", placeholder: "master", help: "Gitee 默认分支一般为 master" },
-      { key: "root_path", label: "仓库内子目录", type: "text", defaultValue: "", placeholder: "如 docs/assets，留空用仓库根", help: "给定时仅在该子目录内读写，越界路径会被拒绝" },
-      { key: "api_base", label: "API 地址", type: "text", defaultValue: "https://gitee.com/api/v5", placeholder: "https://gitee.com/api/v5", help: "默认走官方 API；一般无需修改", show: (v) => v.custom_api_base === true },
-      { key: "custom_api_base", label: "使用自定义 API 地址", type: "boolean", defaultValue: false, help: "勾选后显示 API 地址字段" },
+      {
+        key: 'repo',
+        label: '仓库',
+        type: 'text',
+        required: true,
+        placeholder: 'owner/repo 或 https://gitee.com/owner/repo',
+        help: '支持 owner/repo 或完整仓库 URL',
+      },
+      {
+        key: 'token',
+        label: '私人令牌',
+        type: 'password',
+        required: true,
+        placeholder: 'gitee_xxx（Access Token）',
+        help: '作为 access_token 查询参数传入，确保 token 拥有仓库读写权限',
+        link: {
+          url: 'https://gitee.com/profile/personal_access_tokens',
+          text: '前往 Gitee 生成令牌 →',
+        },
+      },
+      {
+        key: 'branch',
+        label: '分支',
+        type: 'text',
+        defaultValue: 'master',
+        placeholder: 'master',
+        help: 'Gitee 默认分支一般为 master',
+      },
+      {
+        key: 'root_path',
+        label: '仓库内子目录',
+        type: 'text',
+        defaultValue: '',
+        placeholder: '如 docs/assets，留空用仓库根',
+        help: '给定时仅在该子目录内读写，越界路径会被拒绝',
+      },
+      {
+        key: 'api_base',
+        label: 'API 地址',
+        type: 'text',
+        defaultValue: 'https://gitee.com/api/v5',
+        placeholder: 'https://gitee.com/api/v5',
+        help: '默认走官方 API；一般无需修改',
+        show: (v) => v.custom_api_base === true,
+      },
+      {
+        key: 'custom_api_base',
+        label: '使用自定义 API 地址',
+        type: 'boolean',
+        defaultValue: false,
+        help: '勾选后显示 API 地址字段',
+      },
     ],
   },
 };
@@ -677,10 +1163,10 @@ function supportsMultipart(type?: string): boolean {
   if (!type) {
     return true;
   }
-  if (type === "webdev") {
+  if (type === 'webdev') {
     return false;
   }
-  if (type === "s3") {
+  if (type === 's3') {
     return true;
   }
   const config = driveConfigMap[type];
@@ -695,43 +1181,66 @@ interface AuditLog {
   action: string;
   storageId: number | null;
   path: string | null;
-  userType: "guest" | "admin" | "share";
+  userType: 'guest' | 'admin' | 'share';
   ip: string | null;
   userAgent: string | null;
   detail: string | null;
   createdAt: string;
 }
 
-
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "-";
+  if (bytes === 0) return '-';
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 function formatSpeed(bytesPerSecond: number): string {
-  if (bytesPerSecond === 0) return "0 B/s";
+  if (bytesPerSecond === 0) return '0 B/s';
   const k = 1024;
-  const sizes = ["B/s", "KB/s", "MB/s", "GB/s"];
+  const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
   const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k));
-  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return (
+    parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  );
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return "-";
+  if (!dateStr) return '-';
   const date = new Date(dateStr);
-  return date.toLocaleString("zh-CN");
+  return date.toLocaleString('zh-CN');
 }
 
-function Modal({ title, onClose, children, maxWidth = "max-w-sm" }: { title: string; onClose: () => void; children: React.ReactNode; maxWidth?: string }) {
+function Modal({
+  title,
+  onClose,
+  children,
+  maxWidth = 'max-w-sm',
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  maxWidth?: string;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className={`w-full ${maxWidth} rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl`} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className={`w-full ${maxWidth} rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl`}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {title}
+          </h3>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
             <X />
           </button>
         </div>
@@ -752,13 +1261,23 @@ interface PasswordInputProps {
   patternHint?: string;
 }
 
-function PasswordInput({ value, onChange, label, required, help, link, pattern, patternHint }: PasswordInputProps) {
+function PasswordInput({
+  value,
+  onChange,
+  label,
+  required,
+  help,
+  link,
+  pattern,
+  patternHint,
+}: PasswordInputProps) {
   const [showValue, setShowValue] = useState(false);
 
   return (
     <div>
       <label className="block text-xs text-zinc-500 mb-1.5">
-        {label}{required ? " *" : ""}
+        {label}
+        {required ? ' *' : ''}
         {link && (
           <a
             href={link.url}
@@ -772,7 +1291,7 @@ function PasswordInput({ value, onChange, label, required, help, link, pattern, 
       </label>
       <div className="relative">
         <input
-          type={showValue ? "text" : "password"}
+          type={showValue ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full field"
@@ -785,9 +1304,13 @@ function PasswordInput({ value, onChange, label, required, help, link, pattern, 
             type="button"
             onClick={() => setShowValue(!showValue)}
             className="text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-            title={showValue ? "隐藏密钥" : "显示密钥"}
+            title={showValue ? '隐藏密钥' : '显示密钥'}
           >
-            {showValue ? <EyeClosed className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showValue ? (
+              <EyeClosed className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
           </button>
           {value && (
             <button
@@ -811,44 +1334,64 @@ function PasswordInput({ value, onChange, label, required, help, link, pattern, 
   );
 }
 
-function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+function LoginModal({
+  onLogin,
+  onClose,
+}: {
+  onLogin: () => void;
+  onClose: () => void;
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
-      const res = await fetch("/api/storages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "login", username, password, remember }),
+      const res = await fetch('/api/storages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', username, password, remember }),
       });
 
       if (res.ok) {
         onLogin();
       } else {
         const data = (await res.json()) as { error?: string; hint?: string };
-        setError(data.hint || data.error || "登录失败");
+        setError(data.hint || data.error || '登录失败');
       }
     } catch {
-      setError("网络错误");
+      setError('网络错误');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-sm rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-sm rounded-xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
-          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">管理员登录</span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">
+            管理员登录
+          </span>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div>
@@ -881,7 +1424,11 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
             />
             记住我（30 天内免登录）
           </label>
-          {error && <div className="text-red-500 dark:text-red-400 text-xs font-medium">{error}</div>}
+          {error && (
+            <div className="text-red-500 dark:text-red-400 text-xs font-medium">
+              {error}
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -895,7 +1442,7 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
               disabled={loading}
               className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50 transition rounded"
             >
-              {loading ? "..." : "登录"}
+              {loading ? '...' : '登录'}
             </button>
           </div>
         </form>
@@ -923,63 +1470,78 @@ function StorageModal({
     if (base.api_address === undefined && base.api_url_address !== undefined) {
       base.api_address = base.api_url_address;
     }
-    const hasLocalClient = Boolean(String(base.client_id || "").trim() && String(base.client_secret || "").trim());
+    const hasLocalClient = Boolean(
+      String(base.client_id || '').trim() &&
+      String(base.client_secret || '').trim(),
+    );
     for (const field of fields) {
       if (base[field.key] === undefined && field.defaultValue !== undefined) {
         // 已有本地客户端凭据时默认走本地（官方）刷新，避免把原生授权存储切回在线聚合 API
-        if (field.key === "use_online_api" && hasLocalClient) {
+        if (field.key === 'use_online_api' && hasLocalClient) {
           base[field.key] = false;
           continue;
         }
         base[field.key] = field.defaultValue;
       }
     }
-    if (fields.some((field) => field.key === "use_online_api") && !hasLocalClient && base.use_online_api === undefined) {
+    if (
+      fields.some((field) => field.key === 'use_online_api') &&
+      !hasLocalClient &&
+      base.use_online_api === undefined
+    ) {
       base.use_online_api = true;
     }
     return base;
   };
 
   const [formData, setFormData] = useState({
-    name: storage?.name || "",
-    type: storage?.type || "s3",
-    endpoint: storage?.endpoint || "",
-    region: storage?.region || "us-east-1",
-    accessKeyId: storage?.accessKeyId || "",
-    secretAccessKey: "",
-    bucket: storage?.bucket || "",
-    basePath: storage?.basePath || "",
-    config: initConfig(storage?.type || "s3", storage?.config),
+    name: storage?.name || '',
+    type: storage?.type || 's3',
+    endpoint: storage?.endpoint || '',
+    region: storage?.region || 'us-east-1',
+    accessKeyId: storage?.accessKeyId || '',
+    secretAccessKey: '',
+    bucket: storage?.bucket || '',
+    basePath: storage?.basePath || '',
+    config: initConfig(storage?.type || 's3', storage?.config),
     isPublic: storage?.isPublic ?? false,
     guestList: storage?.guestList ?? false,
     guestDownload: storage?.guestDownload ?? false,
     guestUpload: storage?.guestUpload ?? false,
-    description: storage?.description || "",
+    description: storage?.description || '',
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; latencyMs?: number; items?: number; error?: string } | null>(null);
-  const driveConfig = driveConfigMap[formData.type || ""];
-const isS3 = formData.type === "s3";
-  const isS3Like = formData.type === "s3" || formData.type === "tigris" || formData.type === "qiniu";
-  const isR2 = formData.type === "r2";
-  const isR2OAuth = formData.type === "r2-oauth";
-  const isFtp = formData.type === "ftp";
-  const isWebdav = formData.type === "webdev" || isFtp;
-  const isMysql = formData.type === "mysql";
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    latencyMs?: number;
+    items?: number;
+    error?: string;
+  } | null>(null);
+  const driveConfig = driveConfigMap[formData.type || ''];
+  const isS3 = formData.type === 's3';
+  const isS3Like =
+    formData.type === 's3' ||
+    formData.type === 'tigris' ||
+    formData.type === 'qiniu';
+  const isR2 = formData.type === 'r2';
+  const isR2OAuth = formData.type === 'r2-oauth';
+  const isFtp = formData.type === 'ftp';
+  const isWebdav = formData.type === 'webdev' || isFtp;
+  const isMysql = formData.type === 'mysql';
 
   const handleTypeChange = (nextType: string) => {
-    const keepTopFields = nextType === "s3" || nextType === "webdev";
+    const keepTopFields = nextType === 's3' || nextType === 'webdev';
     setFormData({
       ...formData,
       type: nextType,
-      endpoint: keepTopFields ? formData.endpoint : "",
-      region: keepTopFields ? formData.region : "auto",
-      accessKeyId: keepTopFields ? formData.accessKeyId : "",
-      secretAccessKey: "",
-      bucket: keepTopFields ? formData.bucket : "",
-      basePath: keepTopFields ? formData.basePath : "",
+      endpoint: keepTopFields ? formData.endpoint : '',
+      region: keepTopFields ? formData.region : 'auto',
+      accessKeyId: keepTopFields ? formData.accessKeyId : '',
+      secretAccessKey: '',
+      bucket: keepTopFields ? formData.bucket : '',
+      basePath: keepTopFields ? formData.basePath : '',
       config: initConfig(nextType, {}),
     });
   };
@@ -997,29 +1559,44 @@ const isS3 = formData.type === "s3";
       return null;
     }
 
-    const commonClasses = "w-full field";
-    const value = values[field.key] ?? "";
-    const isPasswordLike = field.type === "password" || field.key.includes("secret") || field.key.includes("key") || field.key === "client_secret" || field.key === "refresh_token";
+    const commonClasses = 'w-full field';
+    const value = values[field.key] ?? '';
+    const isPasswordLike =
+      field.type === 'password' ||
+      field.key.includes('secret') ||
+      field.key.includes('key') ||
+      field.key === 'client_secret' ||
+      field.key === 'refresh_token';
 
-    if (field.type === "boolean") {
+    if (field.type === 'boolean') {
       return (
-        <label key={field.key} className="flex items-center gap-2 cursor-pointer">
+        <label
+          key={field.key}
+          className="flex items-center gap-2 cursor-pointer"
+        >
           <input
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => updateConfigValue(field.key, e.target.checked)}
             className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
           />
-          <span className="text-sm text-zinc-700 dark:text-zinc-300">{field.label}</span>
-          {field.help && <span className="text-xs text-zinc-500">{field.help}</span>}
+          <span className="text-sm text-zinc-700 dark:text-zinc-300">
+            {field.label}
+          </span>
+          {field.help && (
+            <span className="text-xs text-zinc-500">{field.help}</span>
+          )}
         </label>
       );
     }
 
-    if (field.type === "select") {
+    if (field.type === 'select') {
       return (
         <div key={field.key}>
-          <label className="block text-xs text-zinc-500 mb-1.5">{field.label}{field.required ? " *" : ""}</label>
+          <label className="block text-xs text-zinc-500 mb-1.5">
+            {field.label}
+            {field.required ? ' *' : ''}
+          </label>
           <select
             value={String(value)}
             onChange={(e) => updateConfigValue(field.key, e.target.value)}
@@ -1027,19 +1604,24 @@ const isS3 = formData.type === "s3";
             required={field.required}
           >
             {(field.options || []).map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
-          {field.help && <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>}
+          {field.help && (
+            <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>
+          )}
         </div>
       );
     }
 
-    if (field.type === "textarea") {
+    if (field.type === 'textarea') {
       return (
         <div key={field.key}>
           <label className="block text-xs text-zinc-500 mb-1.5">
-            {field.label}{field.required ? " *" : ""}
+            {field.label}
+            {field.required ? ' *' : ''}
             {field.link && (
               <a
                 href={field.link.url}
@@ -1055,10 +1637,12 @@ const isS3 = formData.type === "s3";
             value={String(value)}
             onChange={(e) => updateConfigValue(field.key, e.target.value)}
             className={`${commonClasses} h-24`}
-            placeholder={field.placeholder || ""}
+            placeholder={field.placeholder || ''}
             required={field.required}
           />
-          {field.help && <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>}
+          {field.help && (
+            <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>
+          )}
         </div>
       );
     }
@@ -1082,7 +1666,8 @@ const isS3 = formData.type === "s3";
     return (
       <div key={field.key}>
         <label className="block text-xs text-zinc-500 mb-1.5">
-          {field.label}{field.required ? " *" : ""}
+          {field.label}
+          {field.required ? ' *' : ''}
           {field.link && (
             <a
               href={field.link.url}
@@ -1099,12 +1684,14 @@ const isS3 = formData.type === "s3";
           value={String(value)}
           onChange={(e) => updateConfigValue(field.key, e.target.value)}
           className={commonClasses}
-          placeholder={field.placeholder || ""}
+          placeholder={field.placeholder || ''}
           required={field.required}
           pattern={field.pattern}
           title={field.patternHint}
         />
-        {field.help && <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>}
+        {field.help && (
+          <p className="text-xs text-zinc-500 mt-1.5">{field.help}</p>
+        )}
       </div>
     );
   };
@@ -1112,14 +1699,14 @@ const isS3 = formData.type === "s3";
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
-      const method = storage ? "PUT" : "POST";
+      const method = storage ? 'PUT' : 'POST';
       const configToSend = { ...(formData.config || {}) };
       // 服务端脱敏占位符 "***"：用户未改动的敏感字段不回传，避免覆盖真实密钥
       for (const [k, v] of Object.entries(configToSend)) {
-        if (v === "***") {
+        if (v === '***') {
           delete configToSend[k];
         }
       }
@@ -1136,7 +1723,7 @@ const isS3 = formData.type === "s3";
       }
       if (driveConfig) {
         for (const field of driveConfig.fields) {
-          if (field.type === "password" && !configToSend[field.key]) {
+          if (field.type === 'password' && !configToSend[field.key]) {
             delete configToSend[field.key];
           }
         }
@@ -1149,9 +1736,9 @@ const isS3 = formData.type === "s3";
         delete (body as Record<string, unknown>).secretAccessKey;
       }
 
-      const res = await fetch("/api/storages", {
+      const res = await fetch('/api/storages', {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
@@ -1159,10 +1746,10 @@ const isS3 = formData.type === "s3";
         onSave();
       } else {
         const data = (await res.json()) as { error?: string };
-        setError(data.error || "保存失败");
+        setError(data.error || '保存失败');
       }
     } catch {
-      setError("网络错误");
+      setError('网络错误');
     } finally {
       setLoading(false);
     }
@@ -1173,11 +1760,11 @@ const isS3 = formData.type === "s3";
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/storages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/storages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: "test-connection",
+          action: 'test-connection',
           storageId: storage?.id || 0,
           type: formData.type,
           endpoint: formData.endpoint,
@@ -1189,28 +1776,38 @@ const isS3 = formData.type === "s3";
           config: stripMaskedConfig(formData.config || {}),
         }),
       });
-      const data = (await res.json()) as { ok?: boolean; latencyMs?: number; items?: number; error?: string };
-      setTestResult({ ok: Boolean(data.ok), latencyMs: data.latencyMs, items: data.items, error: data.error });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        latencyMs?: number;
+        items?: number;
+        error?: string;
+      };
+      setTestResult({
+        ok: Boolean(data.ok),
+        latencyMs: data.latencyMs,
+        items: data.items,
+        error: data.error,
+      });
     } catch {
-      setTestResult({ ok: false, error: "网络错误" });
+      setTestResult({ ok: false, error: '网络错误' });
     } finally {
       setTesting(false);
     }
   };
 
   const [oauthLoading, setOauthLoading] = useState(false);
-  const [oauthError, setOauthError] = useState("");
+  const [oauthError, setOauthError] = useState('');
   const [oauthConfigured, setOauthConfigured] = useState(false);
   const [oauthAuthorized, setOauthAuthorized] = useState(false);
 
   // 夸克扫码登录：弹窗内的二维码、轮询状态与定时器
-  type QrStatus = "loading" | "waiting" | "success" | "expired" | "failed";
+  type QrStatus = 'loading' | 'waiting' | 'success' | 'expired' | 'failed';
   const [qrOpen, setQrOpen] = useState(false);
-  const [qrImage, setQrImage] = useState("");
-  const [qrStatus, setQrStatus] = useState<QrStatus>("loading");
-  const [qrHint, setQrHint] = useState("");
+  const [qrImage, setQrImage] = useState('');
+  const [qrStatus, setQrStatus] = useState<QrStatus>('loading');
+  const [qrHint, setQrHint] = useState('');
   const [qrCountdown, setQrCountdown] = useState(0);
-  const qrSessionRef = useRef("");
+  const qrSessionRef = useRef('');
   const qrPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1218,21 +1815,27 @@ const isS3 = formData.type === "s3";
 
   // gdrive 类型时查询 OAuth 配置与授权状态，用于显示按钮提示
   useEffect(() => {
-    if (formData.type !== "gdrive") {
+    if (formData.type !== 'gdrive') {
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/gdrive-oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "status", storageId: storage?.id || 0 }),
+        const res = await fetch('/api/gdrive-oauth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'status',
+            storageId: storage?.id || 0,
+          }),
         });
         if (!res.ok) {
           return;
         }
-        const data = (await res.json()) as { configured?: boolean; authorized?: boolean };
+        const data = (await res.json()) as {
+          configured?: boolean;
+          authorized?: boolean;
+        };
         if (!cancelled) {
           setOauthConfigured(Boolean(data.configured));
           setOauthAuthorized(Boolean(data.authorized));
@@ -1249,46 +1852,53 @@ const isS3 = formData.type === "s3";
   // 发起 Google OAuth：已有存储直接跳转；新存储先落库拿到 id 再跳转
   const startGdriveAuth = async () => {
     setOauthLoading(true);
-    setOauthError("");
+    setOauthError('');
     try {
       let storageId = storage?.id;
       if (!storageId) {
         const configToSend = { ...(formData.config || {}) };
         delete configToSend.refresh_token;
-        const res = await fetch("/api/storages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        const res = await fetch('/api/storages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...formData, config: configToSend }),
         });
-        const data = (await res.json()) as { error?: string; storage?: { id?: number } };
+        const data = (await res.json()) as {
+          error?: string;
+          storage?: { id?: number };
+        };
         if (!res.ok || !data.storage?.id) {
-          setOauthError(data.error || "保存存储失败，无法发起授权");
+          setOauthError(data.error || '保存存储失败，无法发起授权');
           setOauthLoading(false);
           return;
         }
         storageId = data.storage.id;
         onSave();
       }
-      const res = await fetch("/api/gdrive-oauth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start", storageId }),
+      const res = await fetch('/api/gdrive-oauth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', storageId }),
       });
       const data = (await res.json()) as { error?: string; url?: string };
       if (!res.ok || !data.url) {
-        setOauthError(data.error || "发起授权失败");
+        setOauthError(data.error || '发起授权失败');
         setOauthLoading(false);
         return;
       }
-      const popup = window.open(data.url, "_blank", "popup,width=600,height=700");
+      const popup = window.open(
+        data.url,
+        '_blank',
+        'popup,width=600,height=700',
+      );
       if (!popup) {
-        setOauthError("弹出窗口被阻止，请允许弹出窗");
+        setOauthError('弹出窗口被阻止，请允许弹出窗');
         setOauthLoading(false);
         return;
       }
       const handleMessage = (e: MessageEvent) => {
-        if (e.data?.type === "oauth" && e.data.provider === "google") {
-          window.removeEventListener("message", handleMessage);
+        if (e.data?.type === 'oauth' && e.data.provider === 'google') {
+          window.removeEventListener('message', handleMessage);
           popup.close();
           setOauthLoading(false);
           setTimeout(() => {
@@ -1296,9 +1906,9 @@ const isS3 = formData.type === "s3";
           }, 500);
         }
       };
-      window.addEventListener("message", handleMessage);
+      window.addEventListener('message', handleMessage);
     } catch {
-      setOauthError("网络错误");
+      setOauthError('网络错误');
       setOauthLoading(false);
     }
   };
@@ -1306,46 +1916,53 @@ const isS3 = formData.type === "s3";
   // OneDrive OAuth：弹窗 + postMessage
   const startOneDriveAuth = async () => {
     setOauthLoading(true);
-    setOauthError("");
+    setOauthError('');
     try {
       let storageId = storage?.id;
       if (!storageId) {
         const configToSend = { ...(formData.config || {}) };
         delete configToSend.refresh_token;
-        const res = await fetch("/api/storages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        const res = await fetch('/api/storages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...formData, config: configToSend }),
         });
-        const data = (await res.json()) as { error?: string; storage?: { id?: number } };
+        const data = (await res.json()) as {
+          error?: string;
+          storage?: { id?: number };
+        };
         if (!res.ok || !data.storage?.id) {
-          setOauthError(data.error || "保存存储失败，无法发起授权");
+          setOauthError(data.error || '保存存储失败，无法发起授权');
           setOauthLoading(false);
           return;
         }
         storageId = data.storage.id;
         onSave();
       }
-      const res = await fetch("/api/onedrive-oauth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start", storageId }),
+      const res = await fetch('/api/onedrive-oauth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', storageId }),
       });
       const data = (await res.json()) as { error?: string; url?: string };
       if (!res.ok || !data.url) {
-        setOauthError(data.error || "发起授权失败");
+        setOauthError(data.error || '发起授权失败');
         setOauthLoading(false);
         return;
       }
-      const popup = window.open(data.url, "_blank", "popup,width=600,height=700");
+      const popup = window.open(
+        data.url,
+        '_blank',
+        'popup,width=600,height=700',
+      );
       if (!popup) {
-        setOauthError("弹出窗口被阻止，请允许弹出窗");
+        setOauthError('弹出窗口被阻止，请允许弹出窗');
         setOauthLoading(false);
         return;
       }
       const handleMessage = (e: MessageEvent) => {
-        if (e.data?.type === "oauth" && e.data.provider === "microsoft") {
-          window.removeEventListener("message", handleMessage);
+        if (e.data?.type === 'oauth' && e.data.provider === 'microsoft') {
+          window.removeEventListener('message', handleMessage);
           popup.close();
           setOauthLoading(false);
           setTimeout(() => {
@@ -1353,9 +1970,9 @@ const isS3 = formData.type === "s3";
           }, 500);
         }
       };
-      window.addEventListener("message", handleMessage);
+      window.addEventListener('message', handleMessage);
     } catch {
-      setOauthError("网络错误");
+      setOauthError('网络错误');
       setOauthLoading(false);
     }
   };
@@ -1363,44 +1980,51 @@ const isS3 = formData.type === "s3";
   // R2 OAuth：弹窗 + postMessage
   const startR2OAuth = async () => {
     setOauthLoading(true);
-    setOauthError("");
+    setOauthError('');
     try {
       let storageId = storage?.id;
       if (!storageId) {
-        const res = await fetch("/api/storages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        const res = await fetch('/api/storages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         });
-        const data = (await res.json()) as { error?: string; storage?: { id?: number } };
+        const data = (await res.json()) as {
+          error?: string;
+          storage?: { id?: number };
+        };
         if (!res.ok || !data.storage?.id) {
-          setOauthError(data.error || "保存存储失败，无法发起授权");
+          setOauthError(data.error || '保存存储失败，无法发起授权');
           setOauthLoading(false);
           return;
         }
         storageId = data.storage.id;
         onSave();
       }
-      const res = await fetch("/api/r2-oauth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start", storageId }),
+      const res = await fetch('/api/r2-oauth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', storageId }),
       });
       const data = (await res.json()) as { error?: string; url?: string };
       if (!res.ok || !data.url) {
-        setOauthError(data.error || "发起授权失败");
+        setOauthError(data.error || '发起授权失败');
         setOauthLoading(false);
         return;
       }
-      const popup = window.open(data.url, "_blank", "popup,width=600,height=700");
+      const popup = window.open(
+        data.url,
+        '_blank',
+        'popup,width=600,height=700',
+      );
       if (!popup) {
-        setOauthError("弹出窗口被阻止，请允许弹出窗");
+        setOauthError('弹出窗口被阻止，请允许弹出窗');
         setOauthLoading(false);
         return;
       }
       const handleMessage = (e: MessageEvent) => {
-        if (e.data?.type === "oauth" && e.data.provider === "cloudflare") {
-          window.removeEventListener("message", handleMessage);
+        if (e.data?.type === 'oauth' && e.data.provider === 'cloudflare') {
+          window.removeEventListener('message', handleMessage);
           popup.close();
           setOauthLoading(false);
           setTimeout(() => {
@@ -1408,9 +2032,9 @@ const isS3 = formData.type === "s3";
           }, 500);
         }
       };
-      window.addEventListener("message", handleMessage);
+      window.addEventListener('message', handleMessage);
     } catch {
-      setOauthError("网络错误");
+      setOauthError('网络错误');
       setOauthLoading(false);
     }
   };
@@ -1437,13 +2061,16 @@ const isS3 = formData.type === "s3";
 
   const closeQuarkQr = () => {
     stopQuarkQr();
-    qrSessionRef.current = "";
+    qrSessionRef.current = '';
     setQrOpen(false);
   };
 
   const writeQuarkCookie = (cookie: string) => {
     // 函数式更新：轮询回调持有的是旧的 formData 快照，直接覆盖会丢掉用户其他输入
-    setFormData((prev) => ({ ...prev, config: { ...(prev.config || {}), cookie } }));
+    setFormData((prev) => ({
+      ...prev,
+      config: { ...(prev.config || {}), cookie },
+    }));
   };
 
   const pollQuarkQr = async () => {
@@ -1453,9 +2080,12 @@ const isS3 = formData.type === "s3";
     qrAbortRef.current = new AbortController();
     let result: { status?: string; cookie?: string; message?: string };
     try {
-      const res = await fetch(`/api/quark-qr?action=query&session=${encodeURIComponent(session)}`, {
-        signal: qrAbortRef.current.signal,
-      });
+      const res = await fetch(
+        `/api/quark-qr?action=query&session=${encodeURIComponent(session)}`,
+        {
+          signal: qrAbortRef.current.signal,
+        },
+      );
       result = (await res.json()) as typeof result;
     } catch {
       result = {};
@@ -1463,39 +2093,42 @@ const isS3 = formData.type === "s3";
     qrAbortRef.current = null;
     if (qrSessionRef.current !== session) return;
 
-    if (result.status === "success") {
+    if (result.status === 'success') {
       stopQuarkQr();
-      setQrStatus("success");
-      setQrHint("已获取登录 Cookie，请保存配置");
-      writeQuarkCookie(result.cookie || "");
+      setQrStatus('success');
+      setQrHint('已获取登录 Cookie，请保存配置');
+      writeQuarkCookie(result.cookie || '');
       qrCloseRef.current = setTimeout(closeQuarkQr, 1200);
       return;
     }
-    if (result.status === "expired" || result.status === "failed") {
+    if (result.status === 'expired' || result.status === 'failed') {
       stopQuarkQr();
       setQrStatus(result.status);
-      setQrHint(result.message || (result.status === "expired" ? "二维码已过期" : "扫码登录失败"));
+      setQrHint(
+        result.message ||
+          (result.status === 'expired' ? '二维码已过期' : '扫码登录失败'),
+      );
       return;
     }
     // 未扫码/网络抖动都继续等，避免一次失败就打断用户
-    setQrStatus("waiting");
+    setQrStatus('waiting');
     qrPollRef.current = setTimeout(pollQuarkQr, QUARK_QR_POLL_MS);
   };
 
   const startQuarkQr = async () => {
     stopQuarkQr();
-    qrSessionRef.current = "";
-    setQrImage("");
-    setQrStatus("loading");
-    setQrHint("正在获取二维码...");
+    qrSessionRef.current = '';
+    setQrImage('');
+    setQrStatus('loading');
+    setQrHint('正在获取二维码...');
     setQrCountdown(QUARK_QR_TTL_SEC);
     setQrOpen(true);
 
     try {
-      const res = await fetch("/api/quark-qr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start" }),
+      const res = await fetch('/api/quark-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
       });
       const data = (await res.json()) as {
         error?: string;
@@ -1505,33 +2138,36 @@ const isS3 = formData.type === "s3";
         pollIntervalMs?: number;
       };
       if (!res.ok || !data.session || !data.qrUrl) {
-        setQrStatus("failed");
-        setQrHint(data.error || "获取二维码失败，请稍后重试");
+        setQrStatus('failed');
+        setQrHint(data.error || '获取二维码失败，请稍后重试');
         return;
       }
 
-      const QRCode = await import("qrcode");
+      const QRCode = await import('qrcode');
       setQrImage(await QRCode.toDataURL(data.qrUrl, { margin: 1, width: 220 }));
 
       qrSessionRef.current = data.session;
       setQrCountdown(data.expiresIn || QUARK_QR_TTL_SEC);
-      setQrStatus("waiting");
-      setQrHint("打开夸克 App 扫码并确认登录");
-      qrPollRef.current = setTimeout(pollQuarkQr, data.pollIntervalMs || QUARK_QR_POLL_MS);
+      setQrStatus('waiting');
+      setQrHint('打开夸克 App 扫码并确认登录');
+      qrPollRef.current = setTimeout(
+        pollQuarkQr,
+        data.pollIntervalMs || QUARK_QR_POLL_MS,
+      );
       qrTickRef.current = setInterval(() => {
         setQrCountdown((prev) => {
           if (prev <= 1) {
             stopQuarkQr();
-            setQrStatus("expired");
-            setQrHint("二维码已过期，请重新获取");
+            setQrStatus('expired');
+            setQrHint('二维码已过期，请重新获取');
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
     } catch {
-      setQrStatus("failed");
-      setQrHint("网络错误，获取二维码失败");
+      setQrStatus('failed');
+      setQrHint('网络错误，获取二维码失败');
     }
   };
 
@@ -1539,21 +2175,27 @@ const isS3 = formData.type === "s3";
 
   // OneDrive OAuth 配置状态查询
   useEffect(() => {
-    if (formData.type !== "onedrive") {
+    if (formData.type !== 'onedrive') {
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/onedrive-oauth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "status", storageId: storage?.id || 0 }),
+        const res = await fetch('/api/onedrive-oauth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'status',
+            storageId: storage?.id || 0,
+          }),
         });
         if (!res.ok) {
           return;
         }
-        const data = (await res.json()) as { configured?: boolean; authorized?: boolean };
+        const data = (await res.json()) as {
+          configured?: boolean;
+          authorized?: boolean;
+        };
         if (!cancelled) {
           setOauthConfigured(Boolean(data.configured));
           setOauthAuthorized(Boolean(data.authorized));
@@ -1569,394 +2211,554 @@ const isS3 = formData.type === "s3";
 
   return (
     <>
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onCancel}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between sticky top-0 bg-white dark:bg-zinc-900 rounded-t-lg">
-          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">{storage ? "编辑存储" : "添加存储"}</span>
-          <button onClick={onCancel} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-xs text-zinc-500 mb-1.5">名称 *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full field"
-                placeholder="My Storage"
-                required
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-zinc-500 mb-1.5">描述</label>
-              <input
-                type="text"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full field"
-                placeholder="可选：存储的简短描述"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs text-zinc-500 mb-1.5">存储类型 *</label>
-              <select
-                value={formData.type}
-                onChange={(e) => handleTypeChange(e.target.value)}
-                className="w-full field"
-                required
-              >
-                <option value="s3">S3 兼容服务</option>
-                <option value="webdev">WebDAV</option>
-                <option value="onedrive">OneDrive</option>
-                <option value="gdrive">Google Drive</option>
-                <option value="tigris">Tigris 对象存储</option>
-                <option value="qiniu">七牛云 KODO</option>
-                <option value="alicloud">阿里云盘</option>
-                <option value="baiduyun">百度网盘</option>
-                <option value="quark">夸克网盘</option>
-                <option value="r2">Cloudflare R2</option>
-                <option value="r2-oauth">R2 存储桶（他人 OAuth）</option>
-                <option value="ftp">FTP 文件网关</option>
-                <option value="mysql">MySQL 数据库</option>
-                <option value="dropbox">Dropbox</option>
-                <option value="github">GitHub 仓库</option>
-                <option value="gitlab">GitLab 仓库</option>
-                <option value="gitea">Gitea / Forgejo 仓库</option>
-                <option value="gitee">Gitee 仓库</option>
-              </select>
-            </div>
-            {(isS3 || isWebdav) && (
+      <div
+        className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        onClick={onCancel}
+      >
+        <div
+          className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between sticky top-0 bg-white dark:bg-zinc-900 rounded-t-lg">
+            <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">
+              {storage ? '编辑存储' : '添加存储'}
+            </span>
+            <button
+              onClick={onCancel}
+              className="icon-btn h-7 w-7"
+              aria-label="关闭"
+            >
+              <X />
+            </button>
+          </div>
+          <form onSubmit={handleSubmit} className="p-4 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="block text-xs text-zinc-500 mb-1.5">
-                  {isWebdav ? "WebDAV 服务器地址" : "Endpoint"} *
+                  名称 *
                 </label>
                 <input
-                  type="url"
-                  value={formData.endpoint}
-                  onChange={(e) => setFormData({ ...formData, endpoint: e.target.value })}
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   className="w-full field"
-                  placeholder={isWebdav ? "https://example.com/webdav" : "https://s3.us-east-1.amazonaws.com"}
+                  placeholder="My Storage"
                   required
                 />
-                {isWebdav && (
-                  <p className="text-xs text-zinc-500 mt-1.5">
-                    WebDAV 用户名/密码由你的服务器（Nginx/Apache/Nextcloud/坚果云）生成，参见 <code className="text-zinc-700 dark:text-zinc-300">docs/WEBDAV_SETUP.md</code>。
-                  </p>
-                )}
-                {isS3 && (
-                  <p className="text-xs text-zinc-500 mt-1.5">
-                    Endpoint 从对象存储控制台复制；AWS 形如 <code className="text-zinc-700 dark:text-zinc-300">https://s3.地区.amazonaws.com</code>，
-                    R2 形如 <code className="text-zinc-700 dark:text-zinc-300">https://account_id.r2.cloudflarestorage.com</code>。
-                  </p>
-                )}
               </div>
-            )}
-            {isS3 && (
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Region</label>
-                <input
-                  type="text"
-                  value={formData.region}
-                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                  className="w-full field"
-                  placeholder="auto"
-                />
-              </div>
-            )}
-            {isS3 && (
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Bucket *</label>
-                <input
-                  type="text"
-                  value={formData.bucket}
-                  onChange={(e) => setFormData({ ...formData, bucket: e.target.value })}
-                  className="w-full field"
-                  placeholder="my-bucket"
-                  required={isS3}
-                />
-              </div>
-            )}
-            {isS3 && (
-              <div className="col-span-2 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.config?.path_style !== false}
-                    onChange={(e) => updateConfigValue("path_style", e.target.checked)}
-                    className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">路径风格访问 (Path Style)</span>
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-500 mb-1.5">
+                  描述
                 </label>
-                <p className="text-xs text-zinc-500">
-                  自建/MinIO/R2 兼容端点通常需要勾选路径风格；虚拟主机风格按
-                  <code className="text-zinc-700 dark:text-zinc-300">bucket.endpoint/key</code> 访问。
-                </p>
-                <div className="col-span-2">
-                  <label className="block text-xs text-zinc-500 mb-1.5">签名版本</label>
-                  <select
-                    value={formData.config?.signature_version ?? "v4"}
-                    onChange={(e) => updateConfigValue("signature_version", e.target.value)}
-                    className="w-full field"
-                  >
-                    <option value="v4">SigV4 (AWS4-HMAC-SHA256)</option>
-                    <option value="v2">SigV2 (AWS-HMAC-SHA1, 旧版兼容)</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs text-zinc-500 mb-1.5">会话令牌 (Session Token)</label>
-                  <input
-                    type="password"
-                    value={formData.config?.session_token ?? ""}
-                    onChange={(e) => updateConfigValue("session_token", e.target.value)}
-                    className="w-full field"
-                    placeholder="可选：STS 临时凭证 Security Token"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={formData.description}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
+                  className="w-full field"
+                  placeholder="可选：存储的简短描述"
+                />
               </div>
-            )}
-            {(isS3 || isWebdav) && (
-              <>
+              <div className="col-span-2">
+                <label className="block text-xs text-zinc-500 mb-1.5">
+                  存储类型 *
+                </label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => handleTypeChange(e.target.value)}
+                  className="w-full field"
+                  required
+                >
+                  <option value="s3">S3 兼容服务</option>
+                  <option value="webdev">WebDAV</option>
+                  <option value="onedrive">OneDrive</option>
+                  <option value="gdrive">Google Drive</option>
+                  <option value="tigris">Tigris 对象存储</option>
+                  <option value="qiniu">七牛云 KODO</option>
+                  <option value="alicloud">阿里云盘</option>
+                  <option value="baiduyun">百度网盘</option>
+                  <option value="quark">夸克网盘</option>
+                  <option value="r2">Cloudflare R2</option>
+                  <option value="r2-oauth">R2 存储桶（他人 OAuth）</option>
+                  <option value="ftp">FTP 文件网关</option>
+                  <option value="mysql">MySQL 数据库</option>
+                  <option value="dropbox">Dropbox</option>
+                  <option value="github">GitHub 仓库</option>
+                  <option value="gitlab">GitLab 仓库</option>
+                  <option value="gitea">Gitea / Forgejo 仓库</option>
+                  <option value="gitee">Gitee 仓库</option>
+                </select>
+              </div>
+              {(isS3 || isWebdav) && (
+                <div className="col-span-2">
+                  <label className="block text-xs text-zinc-500 mb-1.5">
+                    {isWebdav ? 'WebDAV 服务器地址' : 'Endpoint'} *
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.endpoint}
+                    onChange={(e) =>
+                      setFormData({ ...formData, endpoint: e.target.value })
+                    }
+                    className="w-full field"
+                    placeholder={
+                      isWebdav
+                        ? 'https://example.com/webdav'
+                        : 'https://s3.us-east-1.amazonaws.com'
+                    }
+                    required
+                  />
+                  {isWebdav && (
+                    <p className="text-xs text-zinc-500 mt-1.5">
+                      WebDAV
+                      用户名/密码由你的服务器（Nginx/Apache/Nextcloud/坚果云）生成，参见{' '}
+                      <code className="text-zinc-700 dark:text-zinc-300">
+                        docs/WEBDAV_SETUP.md
+                      </code>
+                      。
+                    </p>
+                  )}
+                  {isS3 && (
+                    <p className="text-xs text-zinc-500 mt-1.5">
+                      Endpoint 从对象存储控制台复制；AWS 形如{' '}
+                      <code className="text-zinc-700 dark:text-zinc-300">
+                        https://s3.地区.amazonaws.com
+                      </code>
+                      ， R2 形如{' '}
+                      <code className="text-zinc-700 dark:text-zinc-300">
+                        https://account_id.r2.cloudflarestorage.com
+                      </code>
+                      。
+                    </p>
+                  )}
+                </div>
+              )}
+              {isS3 && (
                 <div>
                   <label className="block text-xs text-zinc-500 mb-1.5">
-                    {isWebdav ? "用户名" : "Access Key"} *
+                    Region
                   </label>
                   <input
                     type="text"
-                    value={formData.accessKeyId}
-                    onChange={(e) => setFormData({ ...formData, accessKeyId: e.target.value })}
+                    value={formData.region}
+                    onChange={(e) =>
+                      setFormData({ ...formData, region: e.target.value })
+                    }
                     className="w-full field"
-                    required={!storage && (isS3 || isWebdav)}
+                    placeholder="auto"
                   />
                 </div>
+              )}
+              {isS3 && (
                 <div>
                   <label className="block text-xs text-zinc-500 mb-1.5">
-                    {isWebdav ? "密码" : "Secret Key"} {storage && "(留空保持)"}
+                    Bucket *
                   </label>
                   <input
-                    type="password"
-                    value={formData.secretAccessKey}
-                    onChange={(e) => setFormData({ ...formData, secretAccessKey: e.target.value })}
+                    type="text"
+                    value={formData.bucket}
+                    onChange={(e) =>
+                      setFormData({ ...formData, bucket: e.target.value })
+                    }
                     className="w-full field"
-                    required={!storage && (isS3 || isWebdav)}
+                    placeholder="my-bucket"
+                    required={isS3}
                   />
                 </div>
+              )}
+              {isS3 && (
+                <div className="col-span-2 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.config?.path_style !== false}
+                      onChange={(e) =>
+                        updateConfigValue('path_style', e.target.checked)
+                      }
+                      className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      路径风格访问 (Path Style)
+                    </span>
+                  </label>
+                  <p className="text-xs text-zinc-500">
+                    自建/MinIO/R2 兼容端点通常需要勾选路径风格；虚拟主机风格按
+                    <code className="text-zinc-700 dark:text-zinc-300">
+                      bucket.endpoint/key
+                    </code>{' '}
+                    访问。
+                  </p>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      签名版本
+                    </label>
+                    <select
+                      value={formData.config?.signature_version ?? 'v4'}
+                      onChange={(e) =>
+                        updateConfigValue('signature_version', e.target.value)
+                      }
+                      className="w-full field"
+                    >
+                      <option value="v4">SigV4 (AWS4-HMAC-SHA256)</option>
+                      <option value="v2">
+                        SigV2 (AWS-HMAC-SHA1, 旧版兼容)
+                      </option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      会话令牌 (Session Token)
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.config?.session_token ?? ''}
+                      onChange={(e) =>
+                        updateConfigValue('session_token', e.target.value)
+                      }
+                      className="w-full field"
+                      placeholder="可选：STS 临时凭证 Security Token"
+                    />
+                  </div>
+                </div>
+              )}
+              {(isS3 || isWebdav) && (
+                <>
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      {isWebdav ? '用户名' : 'Access Key'} *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.accessKeyId}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          accessKeyId: e.target.value,
+                        })
+                      }
+                      className="w-full field"
+                      required={!storage && (isS3 || isWebdav)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      {isWebdav ? '密码' : 'Secret Key'}{' '}
+                      {storage && '(留空保持)'}
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.secretAccessKey}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          secretAccessKey: e.target.value,
+                        })
+                      }
+                      className="w-full field"
+                      required={!storage && (isS3 || isWebdav)}
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      根路径
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.basePath}
+                      onChange={(e) =>
+                        setFormData({ ...formData, basePath: e.target.value })
+                      }
+                      className="w-full field"
+                      placeholder="/path/to/folder"
+                    />
+                  </div>
+                </>
+              )}
+              {isR2 && (
                 <div className="col-span-2">
-                  <label className="block text-xs text-zinc-500 mb-1.5">根路径</label>
+                  <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
+                    使用部署时 wrangler 配置的{' '}
+                    <code className="text-zinc-700 dark:text-zinc-300">
+                      r2_buckets
+                    </code>{' '}
+                    绑定， 无需填写密钥。部署了 R2
+                    绑定后系统会自动挂载，这里可手动添加或调整根路径。
+                  </div>
+                  <a
+                    href="https://developers.cloudflare.com/r2/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2 mt-2 inline-block"
+                  >
+                    Cloudflare R2 文档 →
+                  </a>
+                  <label className="block text-xs text-zinc-500 mb-1.5 mt-3">
+                    根路径（可选）
+                  </label>
                   <input
                     type="text"
                     value={formData.basePath}
-                    onChange={(e) => setFormData({ ...formData, basePath: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, basePath: e.target.value })
+                    }
                     className="w-full field"
-                    placeholder="/path/to/folder"
+                    placeholder="/photos"
                   />
                 </div>
-              </>
-            )}
-            {isR2 && (
-              <div className="col-span-2">
-                <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
-                  使用部署时 wrangler 配置的 <code className="text-zinc-700 dark:text-zinc-300">r2_buckets</code> 绑定，
-                  无需填写密钥。部署了 R2 绑定后系统会自动挂载，这里可手动添加或调整根路径。
+              )}
+              {isMysql && (
+                <div className="col-span-2">
+                  <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
+                    MySQL 数据库通过 Cloudflare Hyperdrive 接入：先在控制台创建
+                    Hyperdrive 并绑定到 Worker（
+                    <code className="text-zinc-700 dark:text-zinc-300">
+                      wrangler.jsonc
+                    </code>{' '}
+                    的
+                    <code className="text-zinc-700 dark:text-zinc-300">
+                      {' '}
+                      hyperdrive
+                    </code>{' '}
+                    配置），然后只需填写 数据库名即可浏览表和查询数据。未绑定
+                    Hyperdrive 时可填直连连接串（仅本地/开发场景）。
+                  </div>
                 </div>
-                <a href="https://developers.cloudflare.com/r2/" target="_blank" rel="noopener noreferrer" className="text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2 mt-2 inline-block">Cloudflare R2 文档 →</a>
-                <label className="block text-xs text-zinc-500 mb-1.5 mt-3">根路径（可选）</label>
-                <input
-                  type="text"
-                  value={formData.basePath}
-                  onChange={(e) => setFormData({ ...formData, basePath: e.target.value })}
-                  className="w-full field"
-                  placeholder="/photos"
-                />
-              </div>
-            )}
-            {isMysql && (
-              <div className="col-span-2">
-                <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
-                  MySQL 数据库通过 Cloudflare Hyperdrive 接入：先在控制台创建 Hyperdrive 并绑定到
-                  Worker（<code className="text-zinc-700 dark:text-zinc-300">wrangler.jsonc</code> 的
-                  <code className="text-zinc-700 dark:text-zinc-300"> hyperdrive</code> 配置），然后只需填写
-                  数据库名即可浏览表和查询数据。未绑定 Hyperdrive 时可填直连连接串（仅本地/开发场景）。
+              )}
+              {isR2OAuth && (
+                <div className="col-span-2">
+                  <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
+                    通过 Cloudflare OAuth 授权访问他人的 R2 存储桶。需要在
+                    wrangler 配置 CF_CLIENT_ID / CF_CLIENT_SECRET，详见
+                    docs/DEPLOY_SECRETS.md。
+                  </div>
+                  <a
+                    href="https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2 mt-2 inline-block"
+                  >
+                    创建 OAuth 客户端 →
+                  </a>
+                  <button
+                    type="button"
+                    onClick={startR2OAuth}
+                    disabled={oauthLoading}
+                    className="mt-2 w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
+                  >
+                    {oauthLoading ? '跳转中...' : '通过 Cloudflare 授权'}
+                  </button>
+                  {oauthError && (
+                    <div className="text-red-500 dark:text-red-400 text-xs font-medium mt-1">
+                      {oauthError}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-            {isR2OAuth && (
-              <div className="col-span-2">
-                <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
-                  通过 Cloudflare OAuth 授权访问他人的 R2 存储桶。需要在 wrangler 配置 CF_CLIENT_ID / CF_CLIENT_SECRET，详见 docs/DEPLOY_SECRETS.md。
+              )}
+              {driveConfig && (
+                <div className="col-span-2 border-t border-zinc-200 dark:border-zinc-700 pt-3 mt-1">
+                  <div className="text-xs text-zinc-500 mb-2 font-medium">
+                    驱动配置 - {driveConfig.name}
+                  </div>
+                  <div className="space-y-3">
+                    {driveConfig.fields.map(renderConfigField)}
+                  </div>
+                  {formData.type === 'gdrive' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="text-xs text-zinc-500 leading-relaxed">
+                        {oauthConfigured
+                          ? oauthAuthorized
+                            ? '已通过 Google 授权，刷新令牌已保存'
+                            : '尚未授权，点击下方按钮跳转 Google 完成授权'
+                          : '未配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET，可手动填写下方刷新令牌'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startGdriveAuth}
+                        disabled={oauthLoading}
+                        className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
+                      >
+                        {oauthLoading ? '跳转中...' : '通过 Google 授权'}
+                      </button>
+                      {oauthError && (
+                        <div className="text-red-500 dark:text-red-400 text-xs font-medium">
+                          {oauthError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {formData.type === 'onedrive' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="text-xs text-zinc-500 leading-relaxed">
+                        {oauthConfigured
+                          ? oauthAuthorized
+                            ? '已通过 Microsoft 授权，刷新令牌已保存'
+                            : '尚未授权，点击下方按钮跳转 Microsoft 完成授权'
+                          : '未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET，可手动填写下方刷新令牌'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startOneDriveAuth}
+                        disabled={oauthLoading}
+                        className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
+                      >
+                        {oauthLoading ? '跳转中...' : '通过 Microsoft 授权'}
+                      </button>
+                      {oauthError && (
+                        <div className="text-red-500 dark:text-red-400 text-xs font-medium">
+                          {oauthError}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {formData.type === 'quark' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="text-xs text-zinc-500 leading-relaxed">
+                        不必手动 F12 抓包：扫码确认后系统会自动取回登录 Cookie
+                        并填入下方输入框。
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startQuarkQr}
+                        className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition inline-flex items-center justify-center gap-1.5"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        扫码登录获取 Cookie
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <a href="https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/" target="_blank" rel="noopener noreferrer" className="text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2 mt-2 inline-block">创建 OAuth 客户端 →</a>
-                <button
-                  type="button"
-                  onClick={startR2OAuth}
-                  disabled={oauthLoading}
-                  className="mt-2 w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
-                >
-                  {oauthLoading ? "跳转中..." : "通过 Cloudflare 授权"}
-                </button>
-                {oauthError && (
-                  <div className="text-red-500 dark:text-red-400 text-xs font-medium mt-1">{oauthError}</div>
-                )}
+              )}
+              <div className="col-span-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isPublic}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFormData({
+                        ...formData,
+                        isPublic: checked,
+                        guestList: checked,
+                        guestDownload: checked,
+                      });
+                    }}
+                    className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+                  />
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                    公开访问
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    (快速开启浏览和下载)
+                  </span>
+                </label>
               </div>
-            )}
-            {driveConfig && (
               <div className="col-span-2 border-t border-zinc-200 dark:border-zinc-700 pt-3 mt-1">
-                <div className="text-xs text-zinc-500 mb-2 font-medium">驱动配置 - {driveConfig.name}</div>
-                <div className="space-y-3">
-                  {driveConfig.fields.map(renderConfigField)}
+                <div className="text-xs text-zinc-500 mb-2 font-medium">
+                  游客权限设置
                 </div>
-                {formData.type === "gdrive" && (
-                  <div className="pt-1 space-y-2">
-                    <div className="text-xs text-zinc-500 leading-relaxed">
-                      {oauthConfigured
-                        ? oauthAuthorized
-                          ? "已通过 Google 授权，刷新令牌已保存"
-                          : "尚未授权，点击下方按钮跳转 Google 完成授权"
-                        : "未配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET，可手动填写下方刷新令牌"}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={startGdriveAuth}
-                      disabled={oauthLoading}
-                      className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
-                    >
-                      {oauthLoading ? "跳转中..." : "通过 Google 授权"}
-                    </button>
-                    {oauthError && (
-                      <div className="text-red-500 dark:text-red-400 text-xs font-medium">{oauthError}</div>
-                    )}
-                  </div>
-                )}
-                {formData.type === "onedrive" && (
-                  <div className="pt-1 space-y-2">
-                    <div className="text-xs text-zinc-500 leading-relaxed">
-                      {oauthConfigured
-                        ? oauthAuthorized
-                          ? "已通过 Microsoft 授权，刷新令牌已保存"
-                          : "尚未授权，点击下方按钮跳转 Microsoft 完成授权"
-                        : "未配置 ONEDRIVE_CLIENT_ID / ONEDRIVE_CLIENT_SECRET，可手动填写下方刷新令牌"}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={startOneDriveAuth}
-                      disabled={oauthLoading}
-                      className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-50"
-                    >
-                      {oauthLoading ? "跳转中..." : "通过 Microsoft 授权"}
-                    </button>
-                    {oauthError && (
-                      <div className="text-red-500 dark:text-red-400 text-xs font-medium">{oauthError}</div>
-                    )}
-                  </div>
-                )}
-                {formData.type === "quark" && (
-                  <div className="pt-1 space-y-2">
-                    <div className="text-xs text-zinc-500 leading-relaxed">
-                      不必手动 F12 抓包：扫码确认后系统会自动取回登录 Cookie 并填入下方输入框。
-                    </div>
-                    <button
-                      type="button"
-                      onClick={startQuarkQr}
-                      className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition inline-flex items-center justify-center gap-1.5"
-                    >
-                      <QrCode className="w-4 h-4" />
-                      扫码登录获取 Cookie
-                    </button>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.guestList}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guestList: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      允许浏览
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      (查看文件列表)
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.guestDownload}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guestDownload: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      允许下载
+                    </span>
+                    <span className="text-xs text-zinc-500">
+                      (下载和预览文件)
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.guestUpload}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          guestUpload: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
+                    />
+                    <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                      允许上传
+                    </span>
+                    <span className="text-xs text-zinc-500">(上传新文件)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            {error && (
+              <div className="text-red-500 dark:text-red-400 text-xs font-medium">
+                {error}
               </div>
             )}
-            <div className="col-span-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.isPublic}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setFormData({
-                      ...formData,
-                      isPublic: checked,
-                      guestList: checked,
-                      guestDownload: checked,
-                    });
-                  }}
-                  className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
-                />
-                <span className="text-sm text-zinc-700 dark:text-zinc-300">公开访问</span>
-                <span className="text-xs text-zinc-500">(快速开启浏览和下载)</span>
-              </label>
-            </div>
-            <div className="col-span-2 border-t border-zinc-200 dark:border-zinc-700 pt-3 mt-1">
-              <div className="text-xs text-zinc-500 mb-2 font-medium">游客权限设置</div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.guestList}
-                    onChange={(e) => setFormData({ ...formData, guestList: e.target.checked })}
-                    className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">允许浏览</span>
-                  <span className="text-xs text-zinc-500">(查看文件列表)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.guestDownload}
-                    onChange={(e) => setFormData({ ...formData, guestDownload: e.target.checked })}
-                    className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">允许下载</span>
-                  <span className="text-xs text-zinc-500">(下载和预览文件)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.guestUpload}
-                    onChange={(e) => setFormData({ ...formData, guestUpload: e.target.checked })}
-                    className="w-4 h-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded"
-                  />
-                  <span className="text-sm text-zinc-700 dark:text-zinc-300">允许上传</span>
-                  <span className="text-xs text-zinc-500">(上传新文件)</span>
-                </label>
+            {testResult && (
+              <div
+                className={`text-xs rounded p-2.5 leading-relaxed ${testResult.ok ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400'}`}
+              >
+                {testResult.ok
+                  ? `连接成功，耗时 ${testResult.latencyMs}ms，根目录 ${testResult.items} 项`
+                  : `连接失败：${testResult.error || '未知错误'}`}
               </div>
+            )}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex-1 py-2 px-4 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 text-sm transition rounded"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testing || loading}
+                className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 text-sm transition rounded disabled:opacity-50"
+              >
+                {testing ? '测试中...' : '测试连接'}
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50 transition rounded"
+              >
+                {loading ? '保存中...' : '保存'}
+              </button>
             </div>
-          </div>
-          {error && <div className="text-red-500 dark:text-red-400 text-xs font-medium">{error}</div>}
-          {testResult && (
-            <div className={`text-xs rounded p-2.5 leading-relaxed ${testResult.ok ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400" : "bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400"}`}>
-              {testResult.ok
-                ? `连接成功，耗时 ${testResult.latencyMs}ms，根目录 ${testResult.items} 项`
-                : `连接失败：${testResult.error || "未知错误"}`}
-            </div>
-          )}
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="flex-1 py-2 px-4 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 text-sm transition rounded"
-            >
-              取消
-            </button>
-            <button
-              type="button"
-              onClick={handleTestConnection}
-              disabled={testing || loading}
-              className="py-2 px-3 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 text-sm transition rounded disabled:opacity-50"
-            >
-              {testing ? "测试中..." : "测试连接"}
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50 transition rounded"
-            >
-              {loading ? "保存中..." : "保存"}
-            </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
       {qrOpen && (
         <div
           className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
@@ -1974,20 +2776,33 @@ const isS3 = formData.type === "s3";
                 <Smartphone className="w-4 h-4" aria-hidden="true" />
                 夸克扫码登录
               </span>
-              <button onClick={closeQuarkQr} className="icon-btn h-7 w-7" aria-label="关闭扫码弹窗">
+              <button
+                onClick={closeQuarkQr}
+                className="icon-btn h-7 w-7"
+                aria-label="关闭扫码弹窗"
+              >
                 <X aria-hidden="true" />
               </button>
             </div>
 
             <div className="relative aspect-square rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white flex items-center justify-center overflow-hidden">
               {qrImage ? (
-                <img src={qrImage} alt="夸克登录二维码，请使用夸克 App 扫码" className="w-full h-full object-contain p-2" />
+                <img
+                  src={qrImage}
+                  alt="夸克登录二维码，请使用夸克 App 扫码"
+                  className="w-full h-full object-contain p-2"
+                />
               ) : (
-                <RefreshCw className={`w-6 h-6 text-zinc-400 ${qrStatus === "loading" ? "animate-spin" : ""}`} aria-hidden="true" />
+                <RefreshCw
+                  className={`w-6 h-6 text-zinc-400 ${qrStatus === 'loading' ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
               )}
-              {(qrStatus === "expired" || qrStatus === "failed") && (
+              {(qrStatus === 'expired' || qrStatus === 'failed') && (
                 <div className="absolute inset-0 bg-white/95 dark:bg-zinc-900/95 flex flex-col items-center justify-center gap-3 px-4">
-                  <span className="text-xs text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">{qrHint}</span>
+                  <span className="text-xs text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">
+                    {qrHint}
+                  </span>
                   <button
                     type="button"
                     onClick={startQuarkQr}
@@ -1999,13 +2814,23 @@ const isS3 = formData.type === "s3";
               )}
             </div>
 
-            <div className="mt-3 text-xs text-center leading-relaxed" role="status" aria-live="polite">
-              {qrStatus === "success" ? (
-                <span className="text-emerald-600 dark:text-emerald-400">{qrHint}</span>
-              ) : qrStatus === "waiting" || qrStatus === "loading" ? (
+            <div
+              className="mt-3 text-xs text-center leading-relaxed"
+              role="status"
+              aria-live="polite"
+            >
+              {qrStatus === 'success' ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {qrHint}
+                </span>
+              ) : qrStatus === 'waiting' || qrStatus === 'loading' ? (
                 <span className="text-zinc-500">
                   {qrHint}
-                  {qrStatus === "waiting" && <span className="ml-1 text-zinc-400">{qrCountdown}s 后过期</span>}
+                  {qrStatus === 'waiting' && (
+                    <span className="ml-1 text-zinc-400">
+                      {qrCountdown}s 后过期
+                    </span>
+                  )}
                 </span>
               ) : (
                 <span className="text-red-500 dark:text-red-400">{qrHint}</span>
@@ -2039,43 +2864,50 @@ function SettingsModal({
   webdavEnabled: boolean;
   storages: StorageInfo[];
 }) {
-  const [activeTab, setActiveTab] = useState<'general' | 'webdav' | 'backup' | 'audit' | 'about'>('general');
+  const [activeTab, setActiveTab] = useState<
+    'general' | 'webdav' | 'backup' | 'audit' | 'about'
+  >('general');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
-  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [auditError, setAuditError] = useState("");
+  const [auditError, setAuditError] = useState('');
   const toast = useToast();
 
   const handleExportBackup = async () => {
     setExporting(true);
     try {
-      const res = await fetch("/api/storages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "export-backup" }),
+      const res = await fetch('/api/storages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'export-backup' }),
       });
 
       if (res.ok) {
-        const data = await res.json() as { backup: unknown };
-        const blob = new Blob([JSON.stringify(data.backup, null, 2)], { type: "application/json" });
+        const data = (await res.json()) as { backup: unknown };
+        const blob = new Blob([JSON.stringify(data.backup, null, 2)], {
+          type: 'application/json',
+        });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
+        const a = document.createElement('a');
         a.href = url;
         a.download = `clist-backup-${new Date().toISOString().slice(0, 10)}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast("备份已导出", "success");
+        toast('备份已导出', 'success');
       } else {
-        const data = await res.json() as { error?: string };
-        toast(data.error || "导出失败", "error");
+        const data = (await res.json()) as { error?: string };
+        toast(data.error || '导出失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     } finally {
       setExporting(false);
     }
@@ -2093,17 +2925,27 @@ function SettingsModal({
       const backup = JSON.parse(text);
 
       if (!backup.storages || !Array.isArray(backup.storages)) {
-        setImportResult({ success: false, message: "无效的备份文件格式" });
+        setImportResult({ success: false, message: '无效的备份文件格式' });
         return;
       }
 
-      const res = await fetch("/api/storages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "import-backup", backup, mode: importMode }),
+      const res = await fetch('/api/storages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'import-backup',
+          backup,
+          mode: importMode,
+        }),
       });
 
-      const data = await res.json() as { success?: boolean; imported?: number; skipped?: number; errors?: string[]; error?: string };
+      const data = (await res.json()) as {
+        success?: boolean;
+        imported?: number;
+        skipped?: number;
+        errors?: string[];
+        error?: string;
+      };
 
       if (res.ok && data.success) {
         let message = `成功导入 ${data.imported} 个存储`;
@@ -2111,52 +2953,69 @@ function SettingsModal({
           message += `，跳过 ${data.skipped} 个已存在的存储`;
         }
         if (data.errors && data.errors.length > 0) {
-          message += `\n\n错误:\n${data.errors.join("\n")}`;
+          message += `\n\n错误:\n${data.errors.join('\n')}`;
         }
         setImportResult({ success: true, message });
         onRefreshStorages();
       } else {
-        setImportResult({ success: false, message: data.error || "导入失败" });
+        setImportResult({ success: false, message: data.error || '导入失败' });
       }
     } catch (err) {
-      setImportResult({ success: false, message: err instanceof Error ? err.message : "解析备份文件失败" });
+      setImportResult({
+        success: false,
+        message: err instanceof Error ? err.message : '解析备份文件失败',
+      });
     } finally {
       setImporting(false);
-      e.target.value = "";
+      e.target.value = '';
     }
   };
 
   const fetchAuditLogs = async () => {
     setAuditLoading(true);
-    setAuditError("");
+    setAuditError('');
     try {
-      const res = await fetch("/api/audit?limit=200");
+      const res = await fetch('/api/audit?limit=200');
       if (res.ok) {
-        const data = await res.json() as { logs?: AuditLog[] };
+        const data = (await res.json()) as { logs?: AuditLog[] };
         setAuditLogs(data.logs || []);
       } else {
-        const data = await res.json() as { error?: string };
-        setAuditError(data.error || "加载审计日志失败");
+        const data = (await res.json()) as { error?: string };
+        setAuditError(data.error || '加载审计日志失败');
       }
     } catch {
-      setAuditError("网络错误");
+      setAuditError('网络错误');
     } finally {
       setAuditLoading(false);
     }
   };
 
   useEffect(() => {
-    if (activeTab === "audit" && isAdmin) {
+    if (activeTab === 'audit' && isAdmin) {
       fetchAuditLogs();
     }
   }, [activeTab, isAdmin]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-md rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-md rounded-xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
-          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">设置</span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">
+            设置
+          </span>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
 
         {/* Tabs */}
@@ -2198,7 +3057,11 @@ function SettingsModal({
           {isAdmin && (
             <button
               onClick={() => setActiveTab('audit')}
-              className={activeTab === 'audit' ? 'flex-1 px-4 py-2 text-xs font-medium transition text-blue-500 border-b-2 border-blue-500' : 'flex-1 px-4 py-2 text-xs font-medium transition text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}
+              className={
+                activeTab === 'audit'
+                  ? 'flex-1 px-4 py-2 text-xs font-medium transition text-blue-500 border-b-2 border-blue-500'
+                  : 'flex-1 px-4 py-2 text-xs font-medium transition text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+              }
             >
               审计
             </button>
@@ -2221,8 +3084,12 @@ function SettingsModal({
               {/* Theme Setting */}
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold">主题模式</div>
-                  <div className="text-xs text-zinc-500">切换亮色或暗色主题</div>
+                  <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold">
+                    主题模式
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    切换亮色或暗色主题
+                  </div>
                 </div>
                 <button
                   onClick={onToggleTheme}
@@ -2251,14 +3118,20 @@ function SettingsModal({
               {/* WebDAV Status */}
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold">WebDAV 服务</div>
-                  <div className="text-xs text-zinc-500">通过 WebDAV 协议访问存储</div>
+                  <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold">
+                    WebDAV 服务
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    通过 WebDAV 协议访问存储
+                  </div>
                 </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded ${
-                  webdavEnabled 
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
-                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
-                }`}>
+                <span
+                  className={`px-2 py-1 text-xs font-medium rounded ${
+                    webdavEnabled
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                  }`}
+                >
                   {webdavEnabled ? '已启用' : '未启用'}
                 </span>
               </div>
@@ -2267,14 +3140,20 @@ function SettingsModal({
                 <>
                   {/* WebDAV URL */}
                   <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
-                    <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">访问地址</div>
+                    <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">
+                      访问地址
+                    </div>
                     <div className="text-xs text-zinc-500 mb-3">
                       使用 WebDAV 客户端连接以下地址访问存储
                     </div>
                     <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded border border-zinc-200 dark:border-zinc-700">
-                      <div className="text-xs text-zinc-500 mb-1.5">根目录 (所有存储):</div>
+                      <div className="text-xs text-zinc-500 mb-1.5">
+                        根目录 (所有存储):
+                      </div>
                       <code className="text-sm text-blue-600 dark:text-blue-400 font-mono break-all">
-                        {typeof window !== 'undefined' ? `${window.location.origin}/dav/0/` : '/dav/0/'}
+                        {typeof window !== 'undefined'
+                          ? `${window.location.origin}/dav/0/`
+                          : '/dav/0/'}
                       </code>
                     </div>
                   </div>
@@ -2282,16 +3161,27 @@ function SettingsModal({
                   {/* Storage List with WebDAV URLs */}
                   {storages.length > 0 && (
                     <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
-                      <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">存储访问地址</div>
+                      <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">
+                        存储访问地址
+                      </div>
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {storages.map((storage) => (
-                          <div key={storage.id} className="bg-zinc-50 dark:bg-zinc-800 p-2 rounded border border-zinc-200 dark:border-zinc-700">
+                          <div
+                            key={storage.id}
+                            className="bg-zinc-50 dark:bg-zinc-800 p-2 rounded border border-zinc-200 dark:border-zinc-700"
+                          >
                             {storage.description && (
-                              <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">{storage.description}</div>
+                              <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                                {storage.description}
+                              </div>
                             )}
-                            <div className="text-xs text-zinc-700 dark:text-zinc-300 font-mono mb-1">{storage.name}</div>
+                            <div className="text-xs text-zinc-700 dark:text-zinc-300 font-mono mb-1">
+                              {storage.name}
+                            </div>
                             <code className="text-xs text-blue-600 dark:text-blue-400 font-mono break-all">
-                              {typeof window !== 'undefined' ? `${window.location.origin}/dav/${storage.id}/` : `/dav/${storage.id}/`}
+                              {typeof window !== 'undefined'
+                                ? `${window.location.origin}/dav/${storage.id}/`
+                                : `/dav/${storage.id}/`}
                             </code>
                           </div>
                         ))}
@@ -2301,11 +3191,19 @@ function SettingsModal({
 
                   {/* Authentication Info */}
                   <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
-                    <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">认证方式</div>
+                    <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">
+                      认证方式
+                    </div>
                     <div className="text-xs text-zinc-600 dark:text-zinc-400 font-mono space-y-1">
                       <p>• 协议: HTTP Basic Authentication</p>
-                      <p>• 用户名/密码: 使用 WEBDAV_USERNAME/WEBDAV_PASSWORD 环境变量配置</p>
-                      <p>• 默认: 使用管理员账号密码 (ADMIN_USERNAME/ADMIN_PASSWORD)</p>
+                      <p>
+                        • 用户名/密码: 使用 WEBDAV_USERNAME/WEBDAV_PASSWORD
+                        环境变量配置
+                      </p>
+                      <p>
+                        • 默认: 使用管理员账号密码
+                        (ADMIN_USERNAME/ADMIN_PASSWORD)
+                      </p>
                     </div>
                   </div>
 
@@ -2325,14 +3223,23 @@ function SettingsModal({
               ) : (
                 <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
                   <div className="text-xs text-zinc-500 font-medium space-y-2">
-                    <p>WebDAV 服务未启用。要启用 WebDAV，请在 Cloudflare Workers 环境变量中设置:</p>
+                    <p>
+                      WebDAV 服务未启用。要启用 WebDAV，请在 Cloudflare Workers
+                      环境变量中设置:
+                    </p>
                     <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded border border-zinc-200 dark:border-zinc-700 mt-2">
-                      <code className="text-xs text-zinc-700 dark:text-zinc-300">WEBDAV_ENABLED = "true"</code>
+                      <code className="text-xs text-zinc-700 dark:text-zinc-300">
+                        WEBDAV_ENABLED = "true"
+                      </code>
                     </div>
                     <p className="mt-2">可选配置:</p>
                     <div className="bg-zinc-50 dark:bg-zinc-800 p-3 rounded border border-zinc-200 dark:border-zinc-700">
-                      <code className="text-xs text-zinc-700 dark:text-zinc-300 block">WEBDAV_USERNAME = "your_username"</code>
-                      <code className="text-xs text-zinc-700 dark:text-zinc-300 block">WEBDAV_PASSWORD = "your_password"</code>
+                      <code className="text-xs text-zinc-700 dark:text-zinc-300 block">
+                        WEBDAV_USERNAME = "your_username"
+                      </code>
+                      <code className="text-xs text-zinc-700 dark:text-zinc-300 block">
+                        WEBDAV_PASSWORD = "your_password"
+                      </code>
                     </div>
                   </div>
                 </div>
@@ -2344,7 +3251,9 @@ function SettingsModal({
             <div className="space-y-4">
               {/* Export Section */}
               <div>
-                <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">导出备份</div>
+                <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">
+                  导出备份
+                </div>
                 <div className="text-xs text-zinc-500 mb-3">
                   导出所有存储配置到 JSON 文件，包含连接凭证信息。
                 </div>
@@ -2353,20 +3262,24 @@ function SettingsModal({
                   disabled={exporting}
                   className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50 transition rounded"
                 >
-                  {exporting ? "导出中..." : "导出备份文件"}
+                  {exporting ? '导出中...' : '导出备份文件'}
                 </button>
               </div>
 
               {/* Import Section */}
               <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
-                <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">恢复备份</div>
+                <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-2">
+                  恢复备份
+                </div>
                 <div className="text-xs text-zinc-500 mb-3">
                   从备份文件恢复存储配置。
                 </div>
 
                 {/* Import Mode Selection */}
                 <div className="mb-3">
-                  <div className="text-xs text-zinc-500 mb-2 font-medium">导入模式:</div>
+                  <div className="text-xs text-zinc-500 mb-2 font-medium">
+                    导入模式:
+                  </div>
                   <div className="flex gap-4">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -2377,7 +3290,9 @@ function SettingsModal({
                         onChange={() => setImportMode('merge')}
                         className="w-4 h-4"
                       />
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">合并</span>
+                      <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                        合并
+                      </span>
                       <span className="text-xs text-zinc-500">(保留现有)</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -2389,14 +3304,18 @@ function SettingsModal({
                         onChange={() => setImportMode('replace')}
                         className="w-4 h-4"
                       />
-                      <span className="text-sm text-zinc-700 dark:text-zinc-300">替换</span>
+                      <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                        替换
+                      </span>
                       <span className="text-xs text-zinc-500">(清空现有)</span>
                     </label>
                   </div>
                 </div>
 
-                <label className={`block w-full py-2 px-4 text-center border-2 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-blue-500 dark:hover:border-blue-500 text-sm cursor-pointer transition rounded ${importing ? 'opacity-50 pointer-events-none' : ''}`}>
-                  {importing ? "导入中..." : "选择备份文件"}
+                <label
+                  className={`block w-full py-2 px-4 text-center border-2 border-dashed border-zinc-300 dark:border-zinc-600 hover:border-blue-500 dark:hover:border-blue-500 text-sm cursor-pointer transition rounded ${importing ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  {importing ? '导入中...' : '选择备份文件'}
                   <input
                     type="file"
                     accept=".json"
@@ -2408,11 +3327,13 @@ function SettingsModal({
 
                 {/* Import Result */}
                 {importResult && (
-                  <div className={`mt-3 p-3 rounded text-xs font-medium whitespace-pre-wrap ${
-                    importResult.success
-                      ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
-                      : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
-                  }`}>
+                  <div
+                    className={`mt-3 p-3 rounded text-xs font-medium whitespace-pre-wrap ${
+                      importResult.success
+                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
+                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                    }`}
+                  >
                     {importResult.message}
                   </div>
                 )}
@@ -2431,7 +3352,9 @@ function SettingsModal({
           {activeTab === 'audit' && isAdmin && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold">审计日志</div>
+                <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold">
+                  审计日志
+                </div>
                 <button
                   onClick={fetchAuditLogs}
                   disabled={auditLoading}
@@ -2441,26 +3364,43 @@ function SettingsModal({
                 </button>
               </div>
               {auditError && (
-                <div className="text-xs text-red-500 dark:text-red-400 font-mono">{auditError}</div>
+                <div className="text-xs text-red-500 dark:text-red-400 font-mono">
+                  {auditError}
+                </div>
               )}
               {!auditError && auditLogs.length === 0 && !auditLoading && (
-                <div className="text-xs text-zinc-500 font-medium">暂无日志</div>
+                <div className="text-xs text-zinc-500 font-medium">
+                  暂无日志
+                </div>
               )}
               {auditLogs.length > 0 && (
                 <div className="space-y-2 max-h-72 overflow-y-auto">
                   {auditLogs.map((log) => (
-                    <div key={log.id} className="border border-zinc-200 dark:border-zinc-700 rounded p-2 bg-zinc-50 dark:bg-zinc-800/50">
+                    <div
+                      key={log.id}
+                      className="border border-zinc-200 dark:border-zinc-700 rounded p-2 bg-zinc-50 dark:bg-zinc-800/50"
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-zinc-500 font-medium">{formatDate(log.createdAt)}</span>
-                        <span className="text-[11px] text-zinc-400 font-mono">{log.userType}</span>
+                        <span className="text-xs text-zinc-500 font-medium">
+                          {formatDate(log.createdAt)}
+                        </span>
+                        <span className="text-[11px] text-zinc-400 font-mono">
+                          {log.userType}
+                        </span>
                       </div>
-                      <div className="text-xs text-zinc-800 dark:text-zinc-200 font-mono">{log.action}</div>
+                      <div className="text-xs text-zinc-800 dark:text-zinc-200 font-mono">
+                        {log.action}
+                      </div>
                       <div className="text-[11px] text-zinc-500 font-mono">
-                        {log.storageId ? `storage #${log.storageId}` : 'storage -'}
+                        {log.storageId
+                          ? `storage #${log.storageId}`
+                          : 'storage -'}
                         {log.path ? ` / ${log.path}` : ''}
                       </div>
                       {log.detail && (
-                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono mt-1 break-all">{log.detail}</div>
+                        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono mt-1 break-all">
+                          {log.detail}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -2472,12 +3412,17 @@ function SettingsModal({
           {activeTab === 'about' && (
             <div className="space-y-4">
               <div className="text-center py-4">
-                <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 font-semibold mb-1">{siteTitle}</div>
+                <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 font-semibold mb-1">
+                  {siteTitle}
+                </div>
                 <div className="text-xs text-zinc-500 font-medium">v1.2.0</div>
               </div>
               <div className="text-xs text-zinc-600 dark:text-zinc-400 font-mono space-y-2">
                 <p>S3 兼容存储聚合服务</p>
-                <p className="text-zinc-500">支持: AWS S3 / Cloudflare R2 / 阿里云 OSS / 腾讯云 COS / MinIO / WebDAV / OneDrive / Google Drive / 阿里云盘 / 百度网盘</p>
+                <p className="text-zinc-500">
+                  支持: AWS S3 / Cloudflare R2 / 阿里云 OSS / 腾讯云 COS / MinIO
+                  / WebDAV / OneDrive / Google Drive / 阿里云盘 / 百度网盘
+                </p>
               </div>
               <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4 text-xs text-zinc-500 font-medium">
                 <p>Powered by Cloudflare Workers</p>
@@ -2490,15 +3435,33 @@ function SettingsModal({
   );
 }
 
-function AnnouncementModal({ announcement, onClose }: { announcement: string; onClose: () => void }) {
+function AnnouncementModal({
+  announcement,
+  onClose,
+}: {
+  announcement: string;
+  onClose: () => void;
+}) {
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-lg rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-lg rounded-xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
           <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm flex items-center gap-2">
             <span className="text-yellow-500">📢</span> 公告
           </span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
         <div className="p-4">
           <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
@@ -2525,11 +3488,24 @@ interface StorageStats {
   typeDistribution: Record<string, { count: number; size: number }>;
 }
 
-const chartColors = ["#2563eb", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#84cc16", "#ec4899", "#64748b", "#14b8a6"];
+const chartColors = [
+  '#2563eb',
+  '#10b981',
+  '#f59e0b',
+  '#8b5cf6',
+  '#ef4444',
+  '#06b6d4',
+  '#84cc16',
+  '#ec4899',
+  '#64748b',
+  '#14b8a6',
+];
 
-function buildConicGradient(items: Array<{ percentage: number; color: string }>): string {
+function buildConicGradient(
+  items: Array<{ percentage: number; color: string }>,
+): string {
   if (items.length === 0) {
-    return "conic-gradient(#d4d4d8 0deg 360deg)";
+    return 'conic-gradient(#d4d4d8 0deg 360deg)';
   }
   let start = 0;
   const stops = items.map((item) => {
@@ -2538,18 +3514,24 @@ function buildConicGradient(items: Array<{ percentage: number; color: string }>)
     start = end;
     return stop;
   });
-  return `conic-gradient(${stops.join(", ")})`;
+  return `conic-gradient(${stops.join(', ')})`;
 }
 
-function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose: () => void }) {
+function StorageStatsModal({
+  storage,
+  onClose,
+}: {
+  storage: StorageInfo;
+  onClose: () => void;
+}) {
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
-      setError("");
+      setError('');
       try {
         const res = await fetch(`/api/storage-stats/${storage.id}`);
         if (res.ok) {
@@ -2557,10 +3539,10 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
           setStats(data.stats);
         } else {
           const data = (await res.json()) as { error?: string };
-          setError(data.error || "获取统计信息失败");
+          setError(data.error || '获取统计信息失败');
         }
       } catch {
-        setError("网络错误");
+        setError('网络错误');
       } finally {
         setLoading(false);
       }
@@ -2569,8 +3551,9 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
   }, [storage.id]);
 
   const sortedTypes = stats
-    ? Object.entries(stats.typeDistribution)
-        .sort((a, b) => b[1].size - a[1].size)
+    ? Object.entries(stats.typeDistribution).sort(
+        (a, b) => b[1].size - a[1].size,
+      )
     : [];
   const chartItems = stats
     ? (() => {
@@ -2579,31 +3562,49 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
           ext,
           count: data.count,
           size: data.size,
-          percentage: stats.totalSize > 0 ? (data.size / stats.totalSize) * 100 : 0,
+          percentage:
+            stats.totalSize > 0 ? (data.size / stats.totalSize) * 100 : 0,
           color: chartColors[index % chartColors.length],
         }));
-        const shownSize = topTypes.reduce((sum, [, data]) => sum + data.size, 0);
-        const shownCount = topTypes.reduce((sum, [, data]) => sum + data.count, 0);
+        const shownSize = topTypes.reduce(
+          (sum, [, data]) => sum + data.size,
+          0,
+        );
+        const shownCount = topTypes.reduce(
+          (sum, [, data]) => sum + data.count,
+          0,
+        );
         const restSize = stats.totalSize - shownSize;
         const restCount = stats.fileCount - shownCount;
         if (restSize > 0 || restCount > 0) {
           items.push({
-            ext: "other",
+            ext: 'other',
             count: Math.max(0, restCount),
             size: Math.max(0, restSize),
-            percentage: stats.totalSize > 0 ? (Math.max(0, restSize) / stats.totalSize) * 100 : 0,
+            percentage:
+              stats.totalSize > 0
+                ? (Math.max(0, restSize) / stats.totalSize) * 100
+                : 0,
             color: chartColors[items.length % chartColors.length],
           });
         }
         return items;
       })()
     : [];
-  const donutGradient = buildConicGradient(chartItems.map(({ percentage, color }) => ({ percentage, color })));
+  const donutGradient = buildConicGradient(
+    chartItems.map(({ percentage, color }) => ({ percentage, color })),
+  );
   const dominantType = chartItems[0];
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-3xl max-h-[84vh] rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-3xl max-h-[84vh] rounded-xl shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
           <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm flex items-center gap-2">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 shadow-sm dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-300">
@@ -2611,12 +3612,20 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
             </span>
             存储统计 - {storage.name}
           </span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <span className="text-zinc-400 dark:text-zinc-500 text-sm">正在统计中，请稍候...</span>
+              <span className="text-zinc-400 dark:text-zinc-500 text-sm">
+                正在统计中，请稍候...
+              </span>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-8">
@@ -2626,16 +3635,28 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-xs text-zinc-500 font-medium mb-1">总大小</div>
-                  <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{formatBytes(stats.totalSize)}</div>
+                  <div className="text-xs text-zinc-500 font-medium mb-1">
+                    总大小
+                  </div>
+                  <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                    {formatBytes(stats.totalSize)}
+                  </div>
                 </div>
                 <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-xs text-zinc-500 font-medium mb-1">文件数量</div>
-                  <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{stats.fileCount.toLocaleString()}</div>
+                  <div className="text-xs text-zinc-500 font-medium mb-1">
+                    文件数量
+                  </div>
+                  <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                    {stats.fileCount.toLocaleString()}
+                  </div>
                 </div>
                 <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-xs text-zinc-500 font-medium mb-1">文件夹数量</div>
-                  <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{stats.folderCount.toLocaleString()}</div>
+                  <div className="text-xs text-zinc-500 font-medium mb-1">
+                    文件夹数量
+                  </div>
+                  <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                    {stats.folderCount.toLocaleString()}
+                  </div>
                 </div>
               </div>
 
@@ -2644,8 +3665,12 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
                   <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3">
                     <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="text-xs text-zinc-500 font-medium">容量构成</div>
-                        <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">Top {chartItems.length}</div>
+                        <div className="text-xs text-zinc-500 font-medium">
+                          容量构成
+                        </div>
+                        <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">
+                          Top {chartItems.length}
+                        </div>
                       </div>
                       <div className="flex items-center justify-center">
                         <div
@@ -2654,33 +3679,57 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
                           aria-label="文件类型容量环形图"
                         >
                           <div className="absolute inset-5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center">
-                            <div className="text-[11px] text-zinc-500 font-mono">主类型</div>
-                            <div className="text-xl text-zinc-900 dark:text-zinc-100 font-semibold">{dominantType ? `.${dominantType.ext}` : "-"}</div>
-                            <div className="text-xs text-zinc-500 font-medium">{dominantType ? `${dominantType.percentage.toFixed(1)}%` : "0%"}</div>
+                            <div className="text-[11px] text-zinc-500 font-mono">
+                              主类型
+                            </div>
+                            <div className="text-xl text-zinc-900 dark:text-zinc-100 font-semibold">
+                              {dominantType ? `.${dominantType.ext}` : '-'}
+                            </div>
+                            <div className="text-xs text-zinc-500 font-medium">
+                              {dominantType
+                                ? `${dominantType.percentage.toFixed(1)}%`
+                                : '0%'}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                      <div className="text-xs text-zinc-500 font-medium mb-3">类型占比</div>
+                      <div className="text-xs text-zinc-500 font-medium mb-3">
+                        类型占比
+                      </div>
                       <div className="h-4 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700 flex">
                         {chartItems.map((item) => (
                           <div
                             key={item.ext}
                             title={`.${item.ext} ${item.percentage.toFixed(1)}%`}
-                            style={{ width: `${Math.max(item.percentage, 1)}%`, backgroundColor: item.color }}
+                            style={{
+                              width: `${Math.max(item.percentage, 1)}%`,
+                              backgroundColor: item.color,
+                            }}
                           />
                         ))}
                       </div>
                       <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {chartItems.slice(0, 6).map((item) => (
-                          <div key={item.ext} className="min-w-0 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-2">
+                          <div
+                            key={item.ext}
+                            className="min-w-0 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-2"
+                          >
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                              <span className="truncate text-xs text-zinc-700 dark:text-zinc-300 font-mono">.{item.ext}</span>
+                              <span
+                                className="h-2.5 w-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="truncate text-xs text-zinc-700 dark:text-zinc-300 font-mono">
+                                .{item.ext}
+                              </span>
                             </div>
-                            <div className="mt-1 text-[11px] text-zinc-500 font-mono">{formatBytes(item.size)} · {item.percentage.toFixed(1)}%</div>
+                            <div className="mt-1 text-[11px] text-zinc-500 font-mono">
+                              {formatBytes(item.size)} ·{' '}
+                              {item.percentage.toFixed(1)}%
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2688,19 +3737,30 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
                   </div>
 
                   <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                    <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-3">文件类型排行</div>
+                    <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-3">
+                      文件类型排行
+                    </div>
                     <div className="space-y-2.5">
                       {chartItems.map((item) => (
-                        <div key={item.ext} className="grid grid-cols-[minmax(48px,72px)_minmax(0,1fr)_minmax(84px,112px)] items-center gap-2 sm:gap-3 text-xs font-medium">
-                          <div className="truncate text-zinc-700 dark:text-zinc-300">.{item.ext}</div>
+                        <div
+                          key={item.ext}
+                          className="grid grid-cols-[minmax(48px,72px)_minmax(0,1fr)_minmax(84px,112px)] items-center gap-2 sm:gap-3 text-xs font-medium"
+                        >
+                          <div className="truncate text-zinc-700 dark:text-zinc-300">
+                            .{item.ext}
+                          </div>
                           <div className="h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
                             <div
                               className="h-full rounded-full"
-                              style={{ width: `${Math.max(item.percentage, 1)}%`, backgroundColor: item.color }}
+                              style={{
+                                width: `${Math.max(item.percentage, 1)}%`,
+                                backgroundColor: item.color,
+                              }}
                             />
                           </div>
                           <div className="text-right text-zinc-500">
-                            {formatBytes(item.size)} · {item.count.toLocaleString()}
+                            {formatBytes(item.size)} ·{' '}
+                            {item.count.toLocaleString()}
                           </div>
                         </div>
                       ))}
@@ -2711,7 +3771,9 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
 
               {stats.fileCount === 0 && (
                 <div className="text-center py-8">
-                  <span className="text-zinc-400 dark:text-zinc-500 text-sm">此存储为空</span>
+                  <span className="text-zinc-400 dark:text-zinc-500 text-sm">
+                    此存储为空
+                  </span>
                 </div>
               )}
             </div>
@@ -2730,12 +3792,24 @@ function StorageStatsModal({ storage, onClose }: { storage: StorageInfo; onClose
   );
 }
 
-function FolderStatsModal({ name, stats, onClose }: { name: string; stats: StorageStats; onClose: () => void }) {
-  const sortedTypes = Object.entries(stats.typeDistribution).sort((a, b) => b[1].size - a[1].size);
+function FolderStatsModal({
+  name,
+  stats,
+  onClose,
+}: {
+  name: string;
+  stats: StorageStats;
+  onClose: () => void;
+}) {
+  const sortedTypes = Object.entries(stats.typeDistribution).sort(
+    (a, b) => b[1].size - a[1].size,
+  );
   const chartItems = (() => {
     const topTypes = sortedTypes.slice(0, 10);
     const items = topTypes.map(([ext, data], index) => ({
-      ext, count: data.count, size: data.size,
+      ext,
+      count: data.count,
+      size: data.size,
       percentage: stats.totalSize > 0 ? (data.size / stats.totalSize) * 100 : 0,
       color: chartColors[index % chartColors.length],
     }));
@@ -2744,16 +3818,33 @@ function FolderStatsModal({ name, stats, onClose }: { name: string; stats: Stora
     const restSize = stats.totalSize - shownSize;
     const restCount = stats.fileCount - shownCount;
     if (restSize > 0 || restCount > 0) {
-      items.push({ ext: "other", count: Math.max(0, restCount), size: Math.max(0, restSize), percentage: stats.totalSize > 0 ? (Math.max(0, restSize) / stats.totalSize) * 100 : 0, color: chartColors[items.length % chartColors.length] });
+      items.push({
+        ext: 'other',
+        count: Math.max(0, restCount),
+        size: Math.max(0, restSize),
+        percentage:
+          stats.totalSize > 0
+            ? (Math.max(0, restSize) / stats.totalSize) * 100
+            : 0,
+        color: chartColors[items.length % chartColors.length],
+      });
     }
     return items;
   })();
-  const donutGradient = buildConicGradient(chartItems.map(({ percentage, color }) => ({ percentage, color })));
+  const donutGradient = buildConicGradient(
+    chartItems.map(({ percentage, color }) => ({ percentage, color })),
+  );
   const dominantType = chartItems[0];
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-3xl max-h-[84vh] rounded-xl shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-3xl max-h-[84vh] rounded-xl shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
           <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm flex items-center gap-2">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-blue-200 bg-blue-50 text-blue-600 shadow-sm dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-300">
@@ -2761,22 +3852,40 @@ function FolderStatsModal({ name, stats, onClose }: { name: string; stats: Stora
             </span>
             目录统计 - {name}
           </span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                <div className="text-xs text-zinc-500 font-medium mb-1">总大小</div>
-                <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{formatBytes(stats.totalSize)}</div>
+                <div className="text-xs text-zinc-500 font-medium mb-1">
+                  总大小
+                </div>
+                <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                  {formatBytes(stats.totalSize)}
+                </div>
               </div>
               <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                <div className="text-xs text-zinc-500 font-medium mb-1">文件数量</div>
-                <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{stats.fileCount.toLocaleString()}</div>
+                <div className="text-xs text-zinc-500 font-medium mb-1">
+                  文件数量
+                </div>
+                <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                  {stats.fileCount.toLocaleString()}
+                </div>
               </div>
               <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                <div className="text-xs text-zinc-500 font-medium mb-1">文件夹数量</div>
-                <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">{stats.folderCount.toLocaleString()}</div>
+                <div className="text-xs text-zinc-500 font-medium mb-1">
+                  文件夹数量
+                </div>
+                <div className="text-2xl tabular-nums font-semibold text-zinc-900 dark:text-zinc-100">
+                  {stats.folderCount.toLocaleString()}
+                </div>
               </div>
             </div>
             {sortedTypes.length > 0 ? (
@@ -2784,106 +3893,230 @@ function FolderStatsModal({ name, stats, onClose }: { name: string; stats: Stora
                 <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-3">
                   <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="text-xs text-zinc-500 font-medium">容量构成</div>
-                      <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">Top {chartItems.length}</div>
+                      <div className="text-xs text-zinc-500 font-medium">
+                        容量构成
+                      </div>
+                      <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-mono">
+                        Top {chartItems.length}
+                      </div>
                     </div>
                     <div className="flex items-center justify-center">
-                      <div className="relative h-40 w-40 rounded-full shadow-inner" style={{ background: donutGradient }} aria-label="文件类型容量环形图">
+                      <div
+                        className="relative h-40 w-40 rounded-full shadow-inner"
+                        style={{ background: donutGradient }}
+                        aria-label="文件类型容量环形图"
+                      >
                         <div className="absolute inset-5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center">
-                          <div className="text-[11px] text-zinc-500 font-mono">主类型</div>
-                          <div className="text-xl text-zinc-900 dark:text-zinc-100 font-semibold">{dominantType ? `.${dominantType.ext}` : "-"}</div>
-                          <div className="text-xs text-zinc-500 font-medium">{dominantType ? `${dominantType.percentage.toFixed(1)}%` : "0%"}</div>
+                          <div className="text-[11px] text-zinc-500 font-mono">
+                            主类型
+                          </div>
+                          <div className="text-xl text-zinc-900 dark:text-zinc-100 font-semibold">
+                            {dominantType ? `.${dominantType.ext}` : '-'}
+                          </div>
+                          <div className="text-xs text-zinc-500 font-medium">
+                            {dominantType
+                              ? `${dominantType.percentage.toFixed(1)}%`
+                              : '0%'}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                    <div className="text-xs text-zinc-500 font-medium mb-3">类型占比</div>
+                    <div className="text-xs text-zinc-500 font-medium mb-3">
+                      类型占比
+                    </div>
                     <div className="h-4 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700 flex">
                       {chartItems.map((item) => (
-                        <div key={item.ext} title={`.${item.ext} ${item.percentage.toFixed(1)}%`} style={{ width: `${Math.max(item.percentage, 1)}%`, backgroundColor: item.color }} />
+                        <div
+                          key={item.ext}
+                          title={`.${item.ext} ${item.percentage.toFixed(1)}%`}
+                          style={{
+                            width: `${Math.max(item.percentage, 1)}%`,
+                            backgroundColor: item.color,
+                          }}
+                        />
                       ))}
                     </div>
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {chartItems.slice(0, 6).map((item) => (
-                        <div key={item.ext} className="min-w-0 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-2">
+                        <div
+                          key={item.ext}
+                          className="min-w-0 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-2"
+                        >
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                            <span className="truncate text-xs text-zinc-700 dark:text-zinc-300 font-mono">.{item.ext}</span>
+                            <span
+                              className="h-2.5 w-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="truncate text-xs text-zinc-700 dark:text-zinc-300 font-mono">
+                              .{item.ext}
+                            </span>
                           </div>
-                          <div className="mt-1 text-[11px] text-zinc-500 font-mono">{formatBytes(item.size)} · {item.percentage.toFixed(1)}%</div>
+                          <div className="mt-1 text-[11px] text-zinc-500 font-mono">
+                            {formatBytes(item.size)} ·{' '}
+                            {item.percentage.toFixed(1)}%
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
                 <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded border border-zinc-200 dark:border-zinc-700">
-                  <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-3">文件类型排行</div>
+                  <div className="text-sm text-zinc-900 dark:text-zinc-100 font-semibold mb-3">
+                    文件类型排行
+                  </div>
                   <div className="space-y-2.5">
                     {chartItems.map((item) => (
-                      <div key={item.ext} className="grid grid-cols-[minmax(48px,72px)_minmax(0,1fr)_minmax(84px,112px)] items-center gap-2 sm:gap-3 text-xs font-medium">
-                        <div className="truncate text-zinc-700 dark:text-zinc-300">.{item.ext}</div>
-                        <div className="h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${Math.max(item.percentage, 1)}%`, backgroundColor: item.color }} />
+                      <div
+                        key={item.ext}
+                        className="grid grid-cols-[minmax(48px,72px)_minmax(0,1fr)_minmax(84px,112px)] items-center gap-2 sm:gap-3 text-xs font-medium"
+                      >
+                        <div className="truncate text-zinc-700 dark:text-zinc-300">
+                          .{item.ext}
                         </div>
-                        <div className="text-right text-zinc-500">{formatBytes(item.size)} · {item.count.toLocaleString()}</div>
+                        <div className="h-3 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(item.percentage, 1)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
+                        <div className="text-right text-zinc-500">
+                          {formatBytes(item.size)} ·{' '}
+                          {item.count.toLocaleString()}
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
               </>
             ) : (
-              <div className="text-center py-8"><span className="text-zinc-400 dark:text-zinc-500 text-sm">此目录为空</span></div>
+              <div className="text-center py-8">
+                <span className="text-zinc-400 dark:text-zinc-500 text-sm">
+                  此目录为空
+                </span>
+              </div>
             )}
           </div>
         </div>
         <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 shrink-0">
-          <button onClick={onClose} className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm transition rounded">关闭</button>
+          <button
+            onClick={onClose}
+            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm transition rounded"
+          >
+            关闭
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function ScanModal({ results, scanning, onNavigate, onClose }: { results: { bigFiles: S3Object[]; duplicates: Array<{ size: number; files: S3Object[] }> } | null; scanning: boolean; onNavigate: (key: string) => void; onClose: () => void }) {
+function ScanModal({
+  results,
+  scanning,
+  onNavigate,
+  onClose,
+}: {
+  results: {
+    bigFiles: S3Object[];
+    duplicates: Array<{ size: number; files: S3Object[] }>;
+  } | null;
+  scanning: boolean;
+  onNavigate: (key: string) => void;
+  onClose: () => void;
+}) {
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-3xl max-h-[84vh] rounded-xl shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-3xl max-h-[84vh] rounded-xl shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
-          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">存储扫描 · 大文件 / 潜在重复</span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm">
+            存储扫描 · 大文件 / 潜在重复
+          </span>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {scanning ? (
             <div className="flex items-center justify-center gap-2 py-12 text-zinc-400 text-sm">
-              <RefreshCw className="h-4 w-4 animate-spin" /> 扫描中…大存储请耐心等候
+              <RefreshCw className="h-4 w-4 animate-spin" />{' '}
+              扫描中…大存储请耐心等候
             </div>
           ) : results ? (
             <>
               <div>
-                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">大文件 Top {results.bigFiles.length}</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+                  大文件 Top {results.bigFiles.length}
+                </div>
                 <div className="space-y-1">
                   {results.bigFiles.map((f) => (
-                    <button key={f.key} onClick={() => { onNavigate(f.key); onClose(); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                      <span className="text-zinc-400 shrink-0">{(() => { const Ic = fileTypeIcon(getFileType(f.name)); return <Ic className="h-4 w-4" />; })()}</span>
-                      <span className="truncate flex-1 text-sm text-zinc-700 dark:text-zinc-200">{f.name}</span>
-                      <span className="text-xs text-zinc-400 tabular-nums shrink-0">{formatBytes(f.size)}</span>
+                    <button
+                      key={f.key}
+                      onClick={() => {
+                        onNavigate(f.key);
+                        onClose();
+                      }}
+                      className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      <span className="text-zinc-400 shrink-0">
+                        {(() => {
+                          const Ic = fileTypeIcon(getFileType(f.name));
+                          return <Ic className="h-4 w-4" />;
+                        })()}
+                      </span>
+                      <span className="truncate flex-1 text-sm text-zinc-700 dark:text-zinc-200">
+                        {f.name}
+                      </span>
+                      <span className="text-xs text-zinc-400 tabular-nums shrink-0">
+                        {formatBytes(f.size)}
+                      </span>
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">潜在重复 · {results.duplicates.length} 组（按完全相同大小聚类，&gt;1MB）</div>
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+                  潜在重复 · {results.duplicates.length}{' '}
+                  组（按完全相同大小聚类，&gt;1MB）
+                </div>
                 {results.duplicates.length === 0 ? (
                   <div className="text-xs text-zinc-400">未发现潜在重复</div>
                 ) : (
                   <div className="space-y-2">
                     {results.duplicates.map((g, i) => (
-                      <div key={i} className="rounded border border-zinc-200 dark:border-zinc-700 p-2">
-                        <div className="text-xs text-zinc-500 mb-1 font-mono">{formatBytes(g.size)} × {g.files.length} 个</div>
+                      <div
+                        key={i}
+                        className="rounded border border-zinc-200 dark:border-zinc-700 p-2"
+                      >
+                        <div className="text-xs text-zinc-500 mb-1 font-mono">
+                          {formatBytes(g.size)} × {g.files.length} 个
+                        </div>
                         {g.files.map((f) => (
-                          <button key={f.key} onClick={() => { onNavigate(f.key); onClose(); }} className="flex items-center gap-2 w-full text-left px-1 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                            <span className="truncate flex-1 text-xs text-zinc-700 dark:text-zinc-300">{f.key}</span>
+                          <button
+                            key={f.key}
+                            onClick={() => {
+                              onNavigate(f.key);
+                              onClose();
+                            }}
+                            className="flex items-center gap-2 w-full text-left px-1 py-0.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          >
+                            <span className="truncate flex-1 text-xs text-zinc-700 dark:text-zinc-300">
+                              {f.key}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -2895,7 +4128,12 @@ function ScanModal({ results, scanning, onNavigate, onClose }: { results: { bigF
           ) : null}
         </div>
         <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 shrink-0">
-          <button onClick={onClose} className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm transition rounded">关闭</button>
+          <button
+            onClick={onClose}
+            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm transition rounded"
+          >
+            关闭
+          </button>
         </div>
       </div>
     </div>
@@ -2915,20 +4153,20 @@ interface ReleaseItem {
 function ChangelogModal({ onClose }: { onClose: () => void }) {
   const [releases, setReleases] = useState<ReleaseItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchReleases = async () => {
       try {
-        const res = await fetch("/api/changelog");
+        const res = await fetch('/api/changelog');
         if (res.ok) {
-          const data = await res.json() as { releases: ReleaseItem[] };
+          const data = (await res.json()) as { releases: ReleaseItem[] };
           setReleases(data.releases);
         } else {
-          setError("获取更新日志失败");
+          setError('获取更新日志失败');
         }
       } catch {
-        setError("网络错误");
+        setError('网络错误');
       } finally {
         setLoading(false);
       }
@@ -2938,24 +4176,40 @@ function ChangelogModal({ onClose }: { onClose: () => void }) {
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
   };
 
   const parseBody = (body: string) => {
     // Parse the changelog body and highlight different types
-    return body.split("\n").map((line, i) => {
+    return body.split('\n').map((line, i) => {
       const trimmed = line.trim();
       if (!trimmed) return null;
 
-      let colorClass = "text-zinc-600 dark:text-zinc-400";
-      if (trimmed.toLowerCase().startsWith("#update") || trimmed.toLowerCase().startsWith("update")) {
-        colorClass = "text-blue-600 dark:text-blue-400";
-      } else if (trimmed.toLowerCase().startsWith("#fix") || trimmed.toLowerCase().startsWith("fix")) {
-        colorClass = "text-green-600 dark:text-green-400";
-      } else if (trimmed.toLowerCase().startsWith("#breaking") || trimmed.toLowerCase().startsWith("breaking")) {
-        colorClass = "text-red-600 dark:text-red-400";
-      } else if (trimmed.toLowerCase().startsWith("#new") || trimmed.toLowerCase().startsWith("new")) {
-        colorClass = "text-purple-600 dark:text-purple-400";
+      let colorClass = 'text-zinc-600 dark:text-zinc-400';
+      if (
+        trimmed.toLowerCase().startsWith('#update') ||
+        trimmed.toLowerCase().startsWith('update')
+      ) {
+        colorClass = 'text-blue-600 dark:text-blue-400';
+      } else if (
+        trimmed.toLowerCase().startsWith('#fix') ||
+        trimmed.toLowerCase().startsWith('fix')
+      ) {
+        colorClass = 'text-green-600 dark:text-green-400';
+      } else if (
+        trimmed.toLowerCase().startsWith('#breaking') ||
+        trimmed.toLowerCase().startsWith('breaking')
+      ) {
+        colorClass = 'text-red-600 dark:text-red-400';
+      } else if (
+        trimmed.toLowerCase().startsWith('#new') ||
+        trimmed.toLowerCase().startsWith('new')
+      ) {
+        colorClass = 'text-purple-600 dark:text-purple-400';
       }
 
       return (
@@ -2967,18 +4221,32 @@ function ChangelogModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-2xl max-h-[80vh] rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-2xl max-h-[80vh] rounded-xl shadow-2xl flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
           <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm flex items-center gap-2">
             <span className="text-blue-500">📋</span> 更新日志
           </span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
+          <button
+            onClick={onClose}
+            className="icon-btn h-7 w-7"
+            aria-label="关闭"
+          >
+            <X />
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <span className="text-zinc-400 dark:text-zinc-500 text-sm">加载中...</span>
+              <span className="text-zinc-400 dark:text-zinc-500 text-sm">
+                加载中...
+              </span>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-8">
@@ -2986,19 +4254,25 @@ function ChangelogModal({ onClose }: { onClose: () => void }) {
             </div>
           ) : releases.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <span className="text-zinc-400 dark:text-zinc-500 text-sm">暂无更新日志</span>
+              <span className="text-zinc-400 dark:text-zinc-500 text-sm">
+                暂无更新日志
+              </span>
             </div>
           ) : (
             <div className="space-y-6">
               {releases.map((release, idx) => (
                 <div key={release.version} className="relative">
-                  {idx > 0 && <div className="absolute -top-3 left-0 right-0 border-t border-zinc-200 dark:border-zinc-700" />}
+                  {idx > 0 && (
+                    <div className="absolute -top-3 left-0 right-0 border-t border-zinc-200 dark:border-zinc-700" />
+                  )}
                   <div className="flex items-center gap-3 mb-2">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      idx === 0
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                    }`}>
+                    <span
+                      className={`px-2 py-0.5 text-xs font-medium rounded ${
+                        idx === 0
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                      }`}
+                    >
                       {release.version}
                     </span>
                     {idx === 0 && (
@@ -3016,7 +4290,9 @@ function ChangelogModal({ onClose }: { onClose: () => void }) {
                     </span>
                   </div>
                   {release.name && release.name !== release.version && (
-                    <h3 className="text-sm text-zinc-800 dark:text-zinc-200 mb-2">{release.name}</h3>
+                    <h3 className="text-sm text-zinc-800 dark:text-zinc-200 mb-2">
+                      {release.name}
+                    </h3>
                   )}
                   <div className="space-y-1 pl-2 border-l-2 border-zinc-200 dark:border-zinc-700">
                     {parseBody(release.body)}
@@ -3047,7 +4323,17 @@ function ChangelogModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: StorageInfo; isAdmin: boolean; isDark: boolean; chunkSizeMB: number }) {
+function FileBrowser({
+  storage,
+  isAdmin,
+  isDark,
+  chunkSizeMB,
+}: {
+  storage: StorageInfo;
+  isAdmin: boolean;
+  isDark: boolean;
+  chunkSizeMB: number;
+}) {
   // Permission checks
   const canList = isAdmin || storage.guestList;
   const canDownload = isAdmin || storage.guestDownload;
@@ -3055,10 +4341,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const toast = useToast();
   const confirm = useConfirm();
 
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState('');
   const [objects, setObjects] = useState<S3Object[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [uploadProgress, setUploadProgress] = useState<{
     name: string;
     progress: number;
@@ -3070,11 +4356,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   } | null>(null);
   const [previewFile, setPreviewFile] = useState<S3Object | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
-  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [showOfflineDownload, setShowOfflineDownload] = useState(false);
-  const [offlineUrl, setOfflineUrl] = useState("");
-  const [offlineFilename, setOfflineFilename] = useState("");
+  const [offlineUrl, setOfflineUrl] = useState('');
+  const [offlineFilename, setOfflineFilename] = useState('');
   const [offlineDownloading, setOfflineDownloading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [readme, setReadme] = useState<string | null>(null);
@@ -3083,68 +4369,93 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const [globalSearch, setGlobalSearch] = useState(false);
   const [globalResults, setGlobalResults] = useState<S3Object[]>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "gallery">("list");
-  const [favorites, setFavorites] = useState<Array<{ storageId: number; key: string; name: string; isDirectory: boolean }>>(() => {
-    try { return JSON.parse(localStorage.getItem("clist-favorites") || "[]"); } catch { return []; }
+  const [viewMode, setViewMode] = useState<'list' | 'gallery'>('list');
+  const [favorites, setFavorites] = useState<
+    Array<{
+      storageId: number;
+      key: string;
+      name: string;
+      isDirectory: boolean;
+    }>
+  >(() => {
+    try {
+      return JSON.parse(localStorage.getItem('clist-favorites') || '[]');
+    } catch {
+      return [];
+    }
   });
   const [favOpen, setFavOpen] = useState(false);
   const [calcSizeKey, setCalcSizeKey] = useState<string | null>(null);
-  const [folderStats, setFolderStats] = useState<{ name: string; stats: StorageStats } | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; obj: S3Object } | null>(null);
+  const [folderStats, setFolderStats] = useState<{
+    name: string;
+    stats: StorageStats;
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    obj: S3Object;
+  } | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
-  const [cmdQuery, setCmdQuery] = useState("");
+  const [cmdQuery, setCmdQuery] = useState('');
   const [cmdIndex, setCmdIndex] = useState(0);
   const [cursor, setCursor] = useState<number>(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [scanResults, setScanResults] = useState<{ bigFiles: S3Object[]; duplicates: Array<{ size: number; files: S3Object[] }> } | null>(null);
+  const [scanResults, setScanResults] = useState<{
+    bigFiles: S3Object[];
+    duplicates: Array<{ size: number; files: S3Object[] }>;
+  } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [renameTarget, setRenameTarget] = useState<S3Object | null>(null);
-  const [renameValue, setRenameValue] = useState("");
+  const [renameValue, setRenameValue] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [moveTarget, setMoveTarget] = useState<S3Object | null>(null);
-  const [moveDestPath, setMoveDestPath] = useState("");
+  const [moveDestPath, setMoveDestPath] = useState('');
   const [moving, setMoving] = useState(false);
   const [allFolders, setAllFolders] = useState<string[]>([]);
   const [batchMoveOpen, setBatchMoveOpen] = useState(false);
-  const [batchMoveDest, setBatchMoveDest] = useState("");
+  const [batchMoveDest, setBatchMoveDest] = useState('');
   const [batchMoving, setBatchMoving] = useState(false);
   const [batchCopyOpen, setBatchCopyOpen] = useState(false);
-  const [batchCopyDest, setBatchCopyDest] = useState("");
+  const [batchCopyDest, setBatchCopyDest] = useState('');
   const [batchCopying, setBatchCopying] = useState(false);
   const [shareTarget, setShareTarget] = useState<S3Object | null>(null);
-  const [shareToken, setShareToken] = useState("");
-  const [shareUrl, setShareUrl] = useState("");
-  const [shareQrCode, setShareQrCode] = useState("");
-  const [customShareToken, setCustomShareToken] = useState("");
+  const [shareToken, setShareToken] = useState('');
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareQrCode, setShareQrCode] = useState('');
+  const [customShareToken, setCustomShareToken] = useState('');
   const [shareExpireHours, setShareExpireHours] = useState(0);
-  const [sharePassword, setSharePassword] = useState("");
+  const [sharePassword, setSharePassword] = useState('');
   const [creatingShare, setCreatingShare] = useState(false);
   const [shareId, setShareId] = useState<number | null>(null);
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    setPath("");
-    setSearchQuery("");
+    setPath('');
+    setSearchQuery('');
   }, [storage.id]);
 
   useEffect(() => {
     loadFiles();
     setSelectedKeys(new Set()); // Clear selection on path change
     setCursor(-1);
-  }, [storage.id, path]);
+  }, [storage.id, path, loadFiles]);
 
   // 目录 README.md 自动展示
   useEffect(() => {
     setReadme(null);
     if (!objects.length) return;
-    const f = objects.find((o) => !o.isDirectory && /^readme\.md$/i.test(o.name));
+    const f = objects.find(
+      (o) => !o.isDirectory && /^readme\.md$/i.test(o.name),
+    );
     if (!f) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${apiFileUrl(storage.id, f.key)}?action=download`);
+        const res = await fetch(
+          `${apiFileUrl(storage.id, f.key)}?action=download`,
+        );
         if (!res.ok) return;
         const text = await res.text();
         marked.setOptions({ gfm: true, breaks: true });
@@ -3155,12 +4466,14 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         /* ignore */
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [objects, storage.id]);
 
-  const loadFiles = async () => {
+  const loadFiles = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
       const res = await fetch(`${apiFileUrl(storage.id, path)}?action=list`);
@@ -3169,23 +4482,23 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         setObjects(data.objects || []);
       } else {
         const data = (await res.json()) as { error?: string };
-        setError(data.error || "加载失败");
+        setError(data.error || '加载失败');
       }
     } catch {
-      setError("网络错误");
+      setError('网络错误');
     } finally {
       setLoading(false);
     }
-  };
+  }, [storage.id, path]);
 
   const navigateTo = (newPath: string) => {
-    setPath(newPath.replace(/^\//, "").replace(/\/$/, ""));
+    setPath(newPath.replace(/^\//, '').replace(/\/$/, ''));
   };
 
   const goUp = () => {
-    const parts = path.split("/").filter(Boolean);
+    const parts = path.split('/').filter(Boolean);
     parts.pop();
-    setPath(parts.join("/"));
+    setPath(parts.join('/'));
   };
 
   // 统一下载：先探测 429 限流并给出友好提示，成功则转 blob 保存
@@ -3193,26 +4506,30 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     try {
       const res = await fetch(`${apiFileUrl(storage.id, key)}?action=download`);
       if (res.status === 429) {
-        const data = await res.json().catch(() => null) as { error?: string } | null;
-        toast(data?.error || "下载过于频繁，请稍后再试", "error");
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        toast(data?.error || '下载过于频繁，请稍后再试', 'error');
         return;
       }
       if (!res.ok) {
-        const data = await res.json().catch(() => null) as { error?: string } | null;
-        toast(data?.error || "下载失败", "error");
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        toast(data?.error || '下载失败', 'error');
         return;
       }
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = key.split("/").pop() || "download";
+      a.download = key.split('/').pop() || 'download';
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     }
   };
 
@@ -3222,45 +4539,49 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
   const deleteFile = async (key: string) => {
     const ok = await confirm({
-      title: "删除文件",
+      title: '删除文件',
       message: `确定删除 ${key}?`,
-      confirmText: "删除",
+      confirmText: '删除',
       danger: true,
     });
     if (!ok) return;
     try {
-      const res = await fetch(apiFileUrl(storage.id, key), { method: "DELETE" });
+      const res = await fetch(apiFileUrl(storage.id, key), {
+        method: 'DELETE',
+      });
       if (res.ok) {
         loadFiles();
-        toast("已删除", "success");
+        toast('已删除', 'success');
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "删除失败", "error");
+        toast(data.error || '删除失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     }
   };
 
   const deleteFolder = async (key: string, name: string) => {
     const ok = await confirm({
-      title: "删除文件夹",
+      title: '删除文件夹',
       message: `确定删除文件夹 "${name}" 及其所有内容?`,
-      confirmText: "删除",
+      confirmText: '删除',
       danger: true,
     });
     if (!ok) return;
     try {
-      const res = await fetch(`${apiFileUrl(storage.id, key)}?action=rmdir`, { method: "DELETE" });
+      const res = await fetch(`${apiFileUrl(storage.id, key)}?action=rmdir`, {
+        method: 'DELETE',
+      });
       if (res.ok) {
         loadFiles();
-        toast(`已删除文件夹 "${name}"`, "success");
+        toast(`已删除文件夹 "${name}"`, 'success');
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "删除失败", "error");
+        toast(data.error || '删除失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     }
   };
 
@@ -3271,8 +4592,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
   const handleRename = async () => {
     if (!renameTarget || !renameValue.trim()) return;
-    if (renameValue.includes("/")) {
-      toast("名称不能包含 /", "error");
+    if (renameValue.includes('/')) {
+      toast('名称不能包含 /', 'error');
       return;
     }
     if (renameValue === renameTarget.name) {
@@ -3282,32 +4603,36 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
     setRenaming(true);
     try {
-      const key = renameTarget.isDirectory ? renameTarget.key : renameTarget.key;
+      const key = renameTarget.isDirectory
+        ? renameTarget.key
+        : renameTarget.key;
       const res = await fetch(`${apiFileUrl(storage.id, key)}?action=rename`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newName: renameValue.trim() }),
       });
       if (res.ok) {
         setRenameTarget(null);
         loadFiles();
-        toast(`已重命名为 "${renameValue.trim()}"`, "success");
+        toast(`已重命名为 "${renameValue.trim()}"`, 'success');
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "重命名失败", "error");
+        toast(data.error || '重命名失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     } finally {
       setRenaming(false);
     }
   };
 
   const loadAllFolders = async () => {
-    const folders: string[] = [""];
+    const folders: string[] = [''];
     const listRecursive = async (prefix: string) => {
       try {
-        const res = await fetch(`${apiFileUrl(storage.id, prefix)}?action=list`);
+        const res = await fetch(
+          `${apiFileUrl(storage.id, prefix)}?action=list`,
+        );
         if (res.ok) {
           const data = (await res.json()) as { objects?: S3Object[] };
           for (const obj of data.objects || []) {
@@ -3321,13 +4646,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         // Ignore errors
       }
     };
-    await listRecursive("");
+    await listRecursive('');
     setAllFolders(folders);
   };
 
   const startMove = async (obj: S3Object) => {
     setMoveTarget(obj);
-    setMoveDestPath("");
+    setMoveDestPath('');
     await loadAllFolders();
   };
 
@@ -3338,20 +4663,20 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     try {
       const key = moveTarget.isDirectory ? moveTarget.key : moveTarget.key;
       const res = await fetch(`${apiFileUrl(storage.id, key)}?action=move`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ destPath: moveDestPath }),
       });
       if (res.ok) {
         setMoveTarget(null);
         loadFiles();
-        toast("移动完成", "success");
+        toast('移动完成', 'success');
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "移动失败", "error");
+        toast(data.error || '移动失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     } finally {
       setMoving(false);
     }
@@ -3359,12 +4684,12 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
   const startShare = (obj: S3Object) => {
     setShareTarget(obj);
-    setShareToken("");
-    setShareUrl("");
-    setShareQrCode("");
-    setCustomShareToken("");
+    setShareToken('');
+    setShareUrl('');
+    setShareQrCode('');
+    setCustomShareToken('');
     setShareExpireHours(0);
-    setSharePassword("");
+    setSharePassword('');
     setShareId(null);
     setShareExpiresAt(null);
   };
@@ -3381,9 +4706,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         expiresAt = expireDate.toISOString();
       }
 
-      const res = await fetch("/api/shares", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           storageId: storage.id,
           filePath: shareTarget.key,
@@ -3395,58 +4720,69 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       });
 
       if (res.ok) {
-        const data = (await res.json()) as { share: { shareToken: string; id?: number; expiresAt?: string | null }; shareUrl: string };
+        const data = (await res.json()) as {
+          share: { shareToken: string; id?: number; expiresAt?: string | null };
+          shareUrl: string;
+        };
         setShareToken(data.share.shareToken);
         setShareUrl(data.shareUrl);
         setShareId(data.share.id ?? null);
         setShareExpiresAt(data.share.expiresAt || null);
         try {
-          const QRCode = await import("qrcode");
-          const dataUrl = await QRCode.toDataURL(data.shareUrl, { margin: 1, width: 240 });
+          const QRCode = await import('qrcode');
+          const dataUrl = await QRCode.toDataURL(data.shareUrl, {
+            margin: 1,
+            width: 240,
+          });
           setShareQrCode(dataUrl);
         } catch {
-          setShareQrCode("");
+          setShareQrCode('');
         }
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "创建分享链接失败", "error");
+        toast(data.error || '创建分享链接失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     } finally {
       setCreatingShare(false);
     }
   };
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      toast("已复制到剪贴板", "success");
-    }).catch(() => {
-      toast("复制失败，请手动复制", "error");
-    });
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        toast('已复制到剪贴板', 'success');
+      })
+      .catch(() => {
+        toast('复制失败，请手动复制', 'error');
+      });
   };
 
   // 撤销分享：删除服务端记录，访客立即无法访问
   const handleRevokeShare = async () => {
     if (!shareId) return;
     const ok = await confirm({
-      title: "撤销分享",
-      message: "确定撤销此分享链接?撤销后访客将无法再访问。",
-      confirmText: "撤销",
+      title: '撤销分享',
+      message: '确定撤销此分享链接?撤销后访客将无法再访问。',
+      confirmText: '撤销',
       danger: true,
     });
     if (!ok) return;
     try {
-      const res = await fetch(`/api/shares?id=${shareId}`, { method: "DELETE" });
+      const res = await fetch(`/api/shares?id=${shareId}`, {
+        method: 'DELETE',
+      });
       if (res.ok) {
-        toast("分享已撤销", "success");
+        toast('分享已撤销', 'success');
         setShareTarget(null);
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "撤销失败", "error");
+        toast(data.error || '撤销失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     }
   };
 
@@ -3481,17 +4817,22 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const handleBatchDelete = async () => {
     if (selectedKeys.size === 0) return;
 
-    const folders = objects.filter((obj) => obj.isDirectory && selectedKeys.has(obj.key));
-    const files = objects.filter((obj) => !obj.isDirectory && selectedKeys.has(obj.key));
+    const folders = objects.filter(
+      (obj) => obj.isDirectory && selectedKeys.has(obj.key),
+    );
+    const files = objects.filter(
+      (obj) => !obj.isDirectory && selectedKeys.has(obj.key),
+    );
 
-    const msg = folders.length > 0
-      ? `确定删除 ${files.length} 个文件和 ${folders.length} 个文件夹（含其中所有内容）?`
-      : `确定删除 ${files.length} 个文件?`;
+    const msg =
+      folders.length > 0
+        ? `确定删除 ${files.length} 个文件和 ${folders.length} 个文件夹（含其中所有内容）?`
+        : `确定删除 ${files.length} 个文件?`;
 
     const ok = await confirm({
-      title: "批量删除",
+      title: '批量删除',
       message: msg,
-      confirmText: "删除",
+      confirmText: '删除',
       danger: true,
     });
     if (!ok) return;
@@ -3503,7 +4844,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       // Delete folders first (recursive)
       for (const folder of folders) {
         try {
-          const res = await fetch(`${apiFileUrl(storage.id, folder.key)}?action=rmdir`, { method: "DELETE" });
+          const res = await fetch(
+            `${apiFileUrl(storage.id, folder.key)}?action=rmdir`,
+            { method: 'DELETE' },
+          );
           if (!res.ok) failed++;
         } catch {
           failed++;
@@ -3513,7 +4857,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       // Delete files
       for (const file of files) {
         try {
-          const res = await fetch(apiFileUrl(storage.id, file.key), { method: "DELETE" });
+          const res = await fetch(apiFileUrl(storage.id, file.key), {
+            method: 'DELETE',
+          });
           if (!res.ok) failed++;
         } catch {
           failed++;
@@ -3521,9 +4867,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       }
 
       if (failed > 0) {
-        toast(`删除完成，${failed} 个项目删除失败`, "error");
+        toast(`删除完成，${failed} 个项目删除失败`, 'error');
       } else {
-        toast("已删除所选项目", "success");
+        toast('已删除所选项目', 'success');
       }
 
       setSelectedKeys(new Set());
@@ -3535,14 +4881,14 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
   const startBatchMove = async () => {
     if (selectedKeys.size === 0) return;
-    setBatchMoveDest("");
+    setBatchMoveDest('');
     await loadAllFolders();
     setBatchMoveOpen(true);
   };
 
   const startBatchCopy = async () => {
     if (selectedKeys.size === 0) return;
-    setBatchCopyDest("");
+    setBatchCopyDest('');
     await loadAllFolders();
     setBatchCopyOpen(true);
   };
@@ -3554,18 +4900,21 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     try {
       for (const key of selectedKeys) {
         try {
-          const res = await fetch(`${apiFileUrl(storage.id, key)}?action=copy`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ destPath: batchCopyDest }),
-          });
+          const res = await fetch(
+            `${apiFileUrl(storage.id, key)}?action=copy`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ destPath: batchCopyDest }),
+            },
+          );
           if (!res.ok) failed++;
         } catch {
           failed++;
         }
       }
-      if (failed > 0) toast(`复制完成，${failed} 个项目失败`, "error");
-      else toast("已复制所选项目", "success");
+      if (failed > 0) toast(`复制完成，${failed} 个项目失败`, 'error');
+      else toast('已复制所选项目', 'success');
       setBatchCopyOpen(false);
       setSelectedKeys(new Set());
       loadFiles();
@@ -3581,18 +4930,21 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     try {
       for (const key of selectedKeys) {
         try {
-          const res = await fetch(`${apiFileUrl(storage.id, key)}?action=move`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ destPath: batchMoveDest }),
-          });
+          const res = await fetch(
+            `${apiFileUrl(storage.id, key)}?action=move`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ destPath: batchMoveDest }),
+            },
+          );
           if (!res.ok) failed++;
         } catch {
           failed++;
         }
       }
-      if (failed > 0) toast(`移动完成，${failed} 个项目失败`, "error");
-      else toast("已移动所选项目", "success");
+      if (failed > 0) toast(`移动完成，${failed} 个项目失败`, 'error');
+      else toast('已移动所选项目', 'success');
       setBatchMoveOpen(false);
       setSelectedKeys(new Set());
       loadFiles();
@@ -3602,7 +4954,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   };
 
   // 递归收集文件夹内所有文件
-  const collectFolderFiles = async (folderKey: string, prefix: string, out: { key: string; name: string }[]) => {
+  const collectFolderFiles = async (
+    folderKey: string,
+    prefix: string,
+    out: { key: string; name: string }[],
+  ) => {
     const res = await fetch(`${apiFileUrl(storage.id, folderKey)}?action=list`);
     if (!res.ok) return;
     const data = (await res.json()) as { objects?: S3Object[] };
@@ -3616,10 +4972,14 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   };
 
   const handleBatchDownload = async () => {
-    const files = objects.filter((obj) => !obj.isDirectory && selectedKeys.has(obj.key));
-    const folders = objects.filter((obj) => obj.isDirectory && selectedKeys.has(obj.key));
+    const files = objects.filter(
+      (obj) => !obj.isDirectory && selectedKeys.has(obj.key),
+    );
+    const folders = objects.filter(
+      (obj) => obj.isDirectory && selectedKeys.has(obj.key),
+    );
     if (files.length === 0 && folders.length === 0) {
-      toast("未选中可下载的文件", "info");
+      toast('未选中可下载的文件', 'info');
       return;
     }
 
@@ -3628,21 +4988,23 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       const collected: { key: string; name: string }[] = [];
       for (const f of files) collected.push({ key: f.key, name: f.name });
       for (const folder of folders) {
-        await collectFolderFiles(folder.key, folder.name + "/", collected);
+        await collectFolderFiles(folder.key, folder.name + '/', collected);
       }
       if (collected.length === 0) {
-        toast("所选文件夹均为空", "info");
+        toast('所选文件夹均为空', 'info');
         return;
       }
-      toast(`正在打包 ${collected.length} 个文件为 zip…`, "info");
+      toast(`正在打包 ${collected.length} 个文件为 zip…`, 'info');
       try {
-        const JSZip = (await import("jszip")).default;
+        const JSZip = (await import('jszip')).default;
         const zip = new JSZip();
         for (const item of collected) {
           try {
-            const res = await fetch(`${apiFileUrl(storage.id, item.key)}?action=download`);
+            const res = await fetch(
+              `${apiFileUrl(storage.id, item.key)}?action=download`,
+            );
             if (res.status === 429) {
-              toast("下载过于频繁，部分文件被跳过", "error");
+              toast('下载过于频繁，部分文件被跳过', 'error');
               break;
             }
             if (!res.ok) continue;
@@ -3651,18 +5013,18 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             /* 跳过下载失败的文件 */
           }
         }
-        const blob = await zip.generateAsync({ type: "blob" });
+        const blob = await zip.generateAsync({ type: 'blob' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
+        const a = document.createElement('a');
         a.href = url;
-        a.download = `${folders.length === 1 ? folders[0].name : "batch"}.zip`;
+        a.download = `${folders.length === 1 ? folders[0].name : 'batch'}.zip`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
-        toast("打包完成，已开始下载", "success");
+        toast('打包完成，已开始下载', 'success');
       } catch {
-        toast("打包失败", "error");
+        toast('打包失败', 'error');
       }
       return;
     }
@@ -3676,15 +5038,30 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     }
   };
 
-  const isFavorite = (key: string) => favorites.some((f) => f.storageId === storage.id && f.key === key);
+  const isFavorite = (key: string) =>
+    favorites.some((f) => f.storageId === storage.id && f.key === key);
 
   const toggleFavorite = (obj: S3Object) => {
     setFavorites((prev) => {
-      const exists = prev.some((f) => f.storageId === storage.id && f.key === obj.key);
+      const exists = prev.some(
+        (f) => f.storageId === storage.id && f.key === obj.key,
+      );
       const next = exists
         ? prev.filter((f) => !(f.storageId === storage.id && f.key === obj.key))
-        : [...prev, { storageId: storage.id, key: obj.key, name: obj.name, isDirectory: obj.isDirectory }];
-      try { localStorage.setItem("clist-favorites", JSON.stringify(next)); } catch { /* ignore */ }
+        : [
+            ...prev,
+            {
+              storageId: storage.id,
+              key: obj.key,
+              name: obj.name,
+              isDirectory: obj.isDirectory,
+            },
+          ];
+      try {
+        localStorage.setItem('clist-favorites', JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
       return next;
     });
   };
@@ -3692,7 +5069,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   // 递归统计文件夹大小
   const calcFolderSize = async (key: string, name: string) => {
     setCalcSizeKey(key);
-    let total = 0, count = 0, dirs = 0;
+    let total = 0,
+      count = 0,
+      dirs = 0;
     const typeDist: Record<string, { count: number; size: number }> = {};
     const queue = [key];
     const visited = new Set<string>();
@@ -3702,7 +5081,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         if (visited.has(prefix)) continue;
         visited.add(prefix);
         dirs++;
-        const res = await fetch(`${apiFileUrl(storage.id, prefix)}?action=list`);
+        const res = await fetch(
+          `${apiFileUrl(storage.id, prefix)}?action=list`,
+        );
         if (!res.ok) continue;
         const data = (await res.json()) as { objects?: S3Object[] };
         for (const obj of data.objects || []) {
@@ -3710,17 +5091,31 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           else {
             total += obj.size;
             count++;
-            const dot = obj.name.lastIndexOf(".");
-            const ext = dot > 0 ? obj.name.slice(dot + 1).toLowerCase().slice(0, 12) : "none";
+            const dot = obj.name.lastIndexOf('.');
+            const ext =
+              dot > 0
+                ? obj.name
+                    .slice(dot + 1)
+                    .toLowerCase()
+                    .slice(0, 12)
+                : 'none';
             if (!typeDist[ext]) typeDist[ext] = { count: 0, size: 0 };
             typeDist[ext].count++;
             typeDist[ext].size += obj.size;
           }
         }
       }
-      setFolderStats({ name, stats: { totalSize: total, fileCount: count, folderCount: dirs, typeDistribution: typeDist } });
+      setFolderStats({
+        name,
+        stats: {
+          totalSize: total,
+          fileCount: count,
+          folderCount: dirs,
+          typeDistribution: typeDist,
+        },
+      });
     } catch {
-      toast("统计失败", "error");
+      toast('统计失败', 'error');
     } finally {
       setCalcSizeKey(null);
     }
@@ -3731,7 +5126,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     setScanning(true);
     setScanResults(null);
     const all: S3Object[] = [];
-    const queue = [""];
+    const queue = [''];
     const visited = new Set<string>();
     let dirs = 0;
     try {
@@ -3740,7 +5135,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         if (visited.has(prefix)) continue;
         visited.add(prefix);
         dirs++;
-        const res = await fetch(`${apiFileUrl(storage.id, prefix)}?action=list`);
+        const res = await fetch(
+          `${apiFileUrl(storage.id, prefix)}?action=list`,
+        );
         if (!res.ok) continue;
         const data = (await res.json()) as { objects?: S3Object[] };
         for (const obj of data.objects || []) {
@@ -3756,38 +5153,51 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         if (arr) arr.push(f);
         else bySize.set(f.size, [f]);
       }
-      const duplicates = Array.from(bySize.values()).filter((g) => g.length > 1).map((g) => ({ size: g[0].size, files: g })).sort((a, b) => b.size - a.size).slice(0, 20);
+      const duplicates = Array.from(bySize.values())
+        .filter((g) => g.length > 1)
+        .map((g) => ({ size: g[0].size, files: g }))
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 20);
       setScanResults({ bigFiles, duplicates });
     } catch {
-      toast("扫描失败", "error");
+      toast('扫描失败', 'error');
     } finally {
       setScanning(false);
     }
   };
 
   const navigateToParent = (key: string) => {
-    navigateTo(key.includes("/") ? key.slice(0, key.lastIndexOf("/")) : "");
+    navigateTo(key.includes('/') ? key.slice(0, key.lastIndexOf('/')) : '');
   };
 
   // 全局搜索：从根 BFS 递归列目录，匹配文件名（限流防大存储卡死）
   const searchGlobal = async (query: string) => {
     const q = query.trim().toLowerCase();
-    if (!q) { setGlobalResults([]); return; }
+    if (!q) {
+      setGlobalResults([]);
+      return;
+    }
     setGlobalLoading(true);
     const results: S3Object[] = [];
     const visited = new Set<string>();
-    const queue: string[] = [""];
+    const queue: string[] = [''];
     const MAX_RESULTS = 200;
     const MAX_DIRS = 400;
     let dirs = 0;
     try {
-      while (queue.length > 0 && results.length < MAX_RESULTS && dirs < MAX_DIRS) {
+      while (
+        queue.length > 0 &&
+        results.length < MAX_RESULTS &&
+        dirs < MAX_DIRS
+      ) {
         const prefix = queue.shift()!;
         if (visited.has(prefix)) continue;
         visited.add(prefix);
         dirs++;
         try {
-          const res = await fetch(`${apiFileUrl(storage.id, prefix)}?action=list`);
+          const res = await fetch(
+            `${apiFileUrl(storage.id, prefix)}?action=list`,
+          );
           if (!res.ok) continue;
           const data = (await res.json()) as { objects?: S3Object[] };
           for (const obj of data.objects || []) {
@@ -3806,9 +5216,16 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   };
 
   useEffect(() => {
-    if (!globalSearch) { setGlobalResults([]); setGlobalLoading(false); return; }
+    if (!globalSearch) {
+      setGlobalResults([]);
+      setGlobalLoading(false);
+      return;
+    }
     const q = searchQuery.trim();
-    if (q.length < 1) { setGlobalResults([]); return; }
+    if (q.length < 1) {
+      setGlobalResults([]);
+      return;
+    }
     const t = setTimeout(() => searchGlobal(q), 450);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3817,13 +5234,15 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   const uploadFiles = async (fileList: File[]) => {
     if (fileList.length === 0) return;
     const CHUNK_SIZE = chunkSizeMB * 1024 * 1024;
-    const sType = storage.type ?? "";
-    const maxBytes = GIT_TYPES.has(sType) ? getGitMaxFileBytes(sType) : 50 * 1024 * 1024 * 1024;
-    const maxLabel = GIT_TYPES.has(sType) ? getGitMaxFileLabel(sType) : "50GB";
+    const sType = storage.type ?? '';
+    const maxBytes = GIT_TYPES.has(sType)
+      ? getGitMaxFileBytes(sType)
+      : 50 * 1024 * 1024 * 1024;
+    const maxLabel = GIT_TYPES.has(sType) ? getGitMaxFileLabel(sType) : '50GB';
     for (const file of fileList) {
       try {
         if (file.size > maxBytes) {
-          toast(`文件 "${file.name}" 太大（> ${maxLabel}）`, "error");
+          toast(`文件 "${file.name}" 太大（> ${maxLabel}）`, 'error');
           continue;
         }
         const uploadPath = path ? `${path}/${file.name}` : file.name;
@@ -3834,7 +5253,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           await uploadSingle(file, uploadPath);
         }
       } catch (err) {
-        toast(`上传 ${file.name} 失败: ${err instanceof Error ? err.message : "未知错误"}`, "error");
+        toast(
+          `上传 ${file.name} 失败: ${err instanceof Error ? err.message : '未知错误'}`,
+          'error',
+        );
       }
     }
     setUploadProgress(null);
@@ -3845,7 +5267,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     const files = e.target.files;
     if (!files || files.length === 0) return;
     await uploadFiles(Array.from(files));
-    e.target.value = "";
+    e.target.value = '';
   };
 
   // Ctrl+V 粘贴图片/文件直接上传到当前目录
@@ -3858,27 +5280,33 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         uploadFiles(Array.from(files));
       }
     };
-    document.addEventListener("paste", onPaste);
-    return () => document.removeEventListener("paste", onPaste);
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUpload, path, storage.id, storage.type, chunkSizeMB]);
 
   // ⌘K / Ctrl+K 命令面板
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setCmdOpen((o) => !o);
-        setCmdQuery("");
+        setCmdQuery('');
         setCmdIndex(0);
       }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const uploadSingle = async (file: File, uploadPath: string) => {
-    setUploadProgress({ name: file.name, progress: 0, speed: 0, loaded: 0, total: file.size });
+    setUploadProgress({
+      name: file.name,
+      progress: 0,
+      speed: 0,
+      loaded: 0,
+      total: file.size,
+    });
     let lastLoaded = 0;
     let lastTs = Date.now();
     await new Promise<void>((resolve, reject) => {
@@ -3889,10 +5317,19 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           const percent = Math.round((event.loaded / event.total) * 100);
           const now = Date.now();
           const elapsed = (now - lastTs) / 1000;
-          const speed = elapsed > 0 ? Math.max(0, (event.loaded - lastLoaded) / elapsed) : 0;
+          const speed =
+            elapsed > 0
+              ? Math.max(0, (event.loaded - lastLoaded) / elapsed)
+              : 0;
           lastLoaded = event.loaded;
           lastTs = now;
-          setUploadProgress({ name: file.name, progress: percent, speed, loaded: event.loaded, total: event.total });
+          setUploadProgress({
+            name: file.name,
+            progress: percent,
+            speed,
+            loaded: event.loaded,
+            total: event.total,
+          });
         }
       };
 
@@ -3902,24 +5339,31 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         } else {
           try {
             const data = JSON.parse(xhr.responseText);
-            reject(new Error(data.error || "上传失败"));
+            reject(new Error(data.error || '上传失败'));
           } catch {
-            reject(new Error("上传失败"));
+            reject(new Error('上传失败'));
           }
         }
       };
 
-      xhr.onerror = () => reject(new Error("网络错误"));
+      xhr.onerror = () => reject(new Error('网络错误'));
 
-      xhr.open("PUT", apiFileUrl(storage.id, uploadPath));
-      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+      xhr.open('PUT', apiFileUrl(storage.id, uploadPath));
+      xhr.setRequestHeader(
+        'Content-Type',
+        file.type || 'application/octet-stream',
+      );
       xhr.send(file);
     });
   };
 
-  const uploadMultipart = async (file: File, uploadPath: string, chunkSize: number) => {
+  const uploadMultipart = async (
+    file: File,
+    uploadPath: string,
+    chunkSize: number,
+  ) => {
     const totalParts = Math.ceil(file.size / chunkSize);
-    const contentType = file.type || "application/octet-stream";
+    const contentType = file.type || 'application/octet-stream';
     const CONCURRENT_UPLOADS = 5;
 
     // Check for existing upload in localStorage (resume support)
@@ -3935,10 +5379,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         const parsed = JSON.parse(savedState);
         if (parsed.uploadId && parsed.parts && parsed.fileName === file.name) {
           const shouldResume = await confirm({
-            title: "继续上传",
+            title: '继续上传',
             message: `检测到未完成的上传 "${file.name}"，是否继续？\n已完成 ${parsed.parts.length}/${totalParts} 分片`,
-            confirmText: "继续",
-            cancelText: "放弃",
+            confirmText: '继续',
+            cancelText: '放弃',
           });
           if (shouldResume) {
             uploadId = parsed.uploadId;
@@ -3947,42 +5391,63 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             useDirectUpload = parsed.useDirectUpload ?? true;
           } else {
             try {
-              await fetch(`${apiFileUrl(storage.id, uploadPath)}?action=multipart-abort`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ uploadId: parsed.uploadId }),
-              });
-            } catch { /* ignore */ }
+              await fetch(
+                `${apiFileUrl(storage.id, uploadPath)}?action=multipart-abort`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ uploadId: parsed.uploadId }),
+                },
+              );
+            } catch {
+              /* ignore */
+            }
             localStorage.removeItem(storageKey);
           }
         }
-      } catch { /* ignore invalid state */ }
+      } catch {
+        /* ignore invalid state */
+      }
     }
 
     // Initialize new upload if needed
     if (!uploadId!) {
-      setUploadProgress({ name: file.name, progress: 0, currentPart: 0, totalParts, speed: 0, loaded: 0, total: file.size });
-
-      const initRes = await fetch(`${apiFileUrl(storage.id, uploadPath)}?action=multipart-init`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentType, size: file.size, chunkSize }),
+      setUploadProgress({
+        name: file.name,
+        progress: 0,
+        currentPart: 0,
+        totalParts,
+        speed: 0,
+        loaded: 0,
+        total: file.size,
       });
 
+      const initRes = await fetch(
+        `${apiFileUrl(storage.id, uploadPath)}?action=multipart-init`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contentType, size: file.size, chunkSize }),
+        },
+      );
+
       if (!initRes.ok) {
-        const data = await initRes.json() as { error?: string };
-        throw new Error(data.error || "初始化分片上传失败");
+        const data = (await initRes.json()) as { error?: string };
+        throw new Error(data.error || '初始化分片上传失败');
       }
 
-      const initData = await initRes.json() as { uploadId: string };
+      const initData = (await initRes.json()) as { uploadId: string };
       uploadId = initData.uploadId;
 
-      localStorage.setItem(storageKey, JSON.stringify({
-        uploadId,
-        fileName: file.name,
-        parts: [],
-        useDirectUpload: true,
-      }));
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          uploadId,
+          fileName: file.name,
+          parts: [],
+          useDirectUpload: true,
+        }),
+      );
     }
 
     // Speed calculation
@@ -3991,7 +5456,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     const partProgress: Record<number, number> = {};
 
     const updateProgress = () => {
-      const currentBytes = totalBytesUploaded + Object.values(partProgress).reduce((a, b) => a + b, 0);
+      const currentBytes =
+        totalBytesUploaded +
+        Object.values(partProgress).reduce((a, b) => a + b, 0);
       const elapsed = (Date.now() - startTime) / 1000;
       const speed = elapsed > 0 ? currentBytes / elapsed : 0;
       const progress = Math.round((currentBytes / file.size) * 100);
@@ -4010,22 +5477,32 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     updateProgress();
 
     try {
-      const remainingParts = Array.from({ length: totalParts - startPart }, (_, i) => startPart + i + 1);
+      const remainingParts = Array.from(
+        { length: totalParts - startPart },
+        (_, i) => startPart + i + 1,
+      );
 
       // Get signed URLs for direct upload
       let signedUrls: Record<number, string> = {};
       if (useDirectUpload) {
         try {
-          const urlsRes = await fetch(`${apiFileUrl(storage.id, uploadPath)}?action=multipart-urls`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uploadId, partNumbers: remainingParts }),
-          });
+          const urlsRes = await fetch(
+            `${apiFileUrl(storage.id, uploadPath)}?action=multipart-urls`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ uploadId, partNumbers: remainingParts }),
+            },
+          );
           if (urlsRes.ok) {
-            const data = await urlsRes.json() as { urls: Record<number, string> };
+            const data = (await urlsRes.json()) as {
+              urls: Record<number, string>;
+            };
             signedUrls = data.urls;
           }
-        } catch { /* will fallback to proxy */ }
+        } catch {
+          /* will fallback to proxy */
+        }
       }
 
       const uploadQueue = remainingParts.map((partNumber) => ({
@@ -4035,25 +5512,36 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       }));
 
       // Upload part - tries direct S3 first, falls back to Workers proxy
-      const uploadPart = async (item: { partNumber: number; start: number; end: number }): Promise<{ partNumber: number; etag: string }> => {
+      const uploadPart = async (item: {
+        partNumber: number;
+        start: number;
+        end: number;
+      }): Promise<{ partNumber: number; etag: string }> => {
         const chunk = file.slice(item.start, item.end);
 
         // Try direct S3 upload first
         if (useDirectUpload && signedUrls[item.partNumber]) {
           try {
-            const result = await uploadPartDirect(chunk, signedUrls[item.partNumber], item.partNumber);
+            const result = await uploadPartDirect(
+              chunk,
+              signedUrls[item.partNumber],
+              item.partNumber,
+            );
             return result;
           } catch (e) {
             // CORS or network error - switch to proxy mode
-            console.log("Direct upload failed, switching to proxy mode");
+            console.log('Direct upload failed, switching to proxy mode');
             useDirectUpload = false;
             // Update saved state
-            localStorage.setItem(storageKey, JSON.stringify({
-              uploadId,
-              fileName: file.name,
-              parts: completedParts,
-              useDirectUpload: false,
-            }));
+            localStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                uploadId,
+                fileName: file.name,
+                parts: completedParts,
+                useDirectUpload: false,
+              }),
+            );
           }
         }
 
@@ -4061,7 +5549,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         return uploadPartProxy(chunk, uploadPath, uploadId, item.partNumber);
       };
 
-      const uploadPartDirect = (chunk: Blob, url: string, partNumber: number): Promise<{ partNumber: number; etag: string }> => {
+      const uploadPartDirect = (
+        chunk: Blob,
+        url: string,
+        partNumber: number,
+      ): Promise<{ partNumber: number; etag: string }> => {
         return new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
 
@@ -4075,7 +5567,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           xhr.onload = () => {
             delete partProgress[partNumber];
             if (xhr.status >= 200 && xhr.status < 300) {
-              const etag = xhr.getResponseHeader("ETag")?.replace(/"/g, "") || "";
+              const etag =
+                xhr.getResponseHeader('ETag')?.replace(/"/g, '') || '';
               totalBytesUploaded += chunk.size;
               resolve({ partNumber, etag });
             } else {
@@ -4085,15 +5578,20 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
           xhr.onerror = () => {
             delete partProgress[partNumber];
-            reject(new Error("Direct upload network error"));
+            reject(new Error('Direct upload network error'));
           };
 
-          xhr.open("PUT", url);
+          xhr.open('PUT', url);
           xhr.send(chunk);
         });
       };
 
-      const uploadPartProxy = (chunk: Blob, path: string, upId: string, partNumber: number): Promise<{ partNumber: number; etag: string }> => {
+      const uploadPartProxy = (
+        chunk: Blob,
+        path: string,
+        upId: string,
+        partNumber: number,
+      ): Promise<{ partNumber: number; etag: string }> => {
         return new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
 
@@ -4130,7 +5628,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           };
 
           const url = `${apiFileUrl(storage.id, path)}?action=multipart-upload&uploadId=${encodeURIComponent(upId)}&partNumber=${partNumber}`;
-          xhr.open("PUT", url);
+          xhr.open('PUT', url);
           xhr.send(chunk);
         });
       };
@@ -4145,12 +5643,15 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           const result = await uploadPart(item);
           completedParts.push(result);
 
-          localStorage.setItem(storageKey, JSON.stringify({
-            uploadId,
-            fileName: file.name,
-            parts: completedParts,
-            useDirectUpload,
-          }));
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({
+              uploadId,
+              fileName: file.name,
+              parts: completedParts,
+              useDirectUpload,
+            }),
+          );
 
           updateProgress();
         }
@@ -4165,15 +5666,18 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       await Promise.all(workers);
 
       // Complete multipart upload
-      const completeRes = await fetch(`${apiFileUrl(storage.id, uploadPath)}?action=multipart-complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uploadId, parts: completedParts }),
-      });
+      const completeRes = await fetch(
+        `${apiFileUrl(storage.id, uploadPath)}?action=multipart-complete`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uploadId, parts: completedParts }),
+        },
+      );
 
       if (!completeRes.ok) {
-        const data = await completeRes.json() as { error?: string };
-        throw new Error(data.error || "完成分片上传失败");
+        const data = (await completeRes.json()) as { error?: string };
+        throw new Error(data.error || '完成分片上传失败');
       }
 
       localStorage.removeItem(storageKey);
@@ -4187,22 +5691,27 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
     setCreatingFolder(true);
     try {
-      const folderPath = path ? `${path}/${newFolderName.trim()}` : newFolderName.trim();
-      const res = await fetch(`${apiFileUrl(storage.id, folderPath)}?action=mkdir`, {
-        method: "POST",
-      });
+      const folderPath = path
+        ? `${path}/${newFolderName.trim()}`
+        : newFolderName.trim();
+      const res = await fetch(
+        `${apiFileUrl(storage.id, folderPath)}?action=mkdir`,
+        {
+          method: 'POST',
+        },
+      );
 
       if (res.ok) {
-        setNewFolderName("");
+        setNewFolderName('');
         setShowNewFolderInput(false);
         loadFiles();
-        toast(`已创建文件夹 "${newFolderName.trim()}"`, "success");
+        toast(`已创建文件夹 "${newFolderName.trim()}"`, 'success');
       } else {
         const data = (await res.json()) as { error?: string };
-        toast(data.error || "创建文件夹失败", "error");
+        toast(data.error || '创建文件夹失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     } finally {
       setCreatingFolder(false);
     }
@@ -4214,125 +5723,231 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     setOfflineDownloading(true);
     try {
       const res = await fetch(`${apiFileUrl(storage.id, path)}?action=fetch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: offlineUrl.trim(),
           filename: offlineFilename.trim() || undefined,
         }),
       });
 
-      const data = await res.json() as { success?: boolean; filename?: string; size?: number; error?: string };
+      const data = (await res.json()) as {
+        success?: boolean;
+        filename?: string;
+        size?: number;
+        error?: string;
+      };
 
       if (res.ok && data.success) {
-        const sizeStr = data.size ? ` (${formatBytes(data.size)})` : "";
-        toast(`下载成功: ${data.filename}${sizeStr}`, "success");
-        setOfflineUrl("");
-        setOfflineFilename("");
+        const sizeStr = data.size ? ` (${formatBytes(data.size)})` : '';
+        toast(`下载成功: ${data.filename}${sizeStr}`, 'success');
+        setOfflineUrl('');
+        setOfflineFilename('');
         setShowOfflineDownload(false);
         loadFiles();
       } else {
-        toast(data.error || "下载失败", "error");
+        toast(data.error || '下载失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     } finally {
       setOfflineDownloading(false);
     }
   };
 
-  const breadcrumbs = path ? path.split("/").filter(Boolean) : [];
+  const breadcrumbs = path ? path.split('/').filter(Boolean) : [];
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const globalMode = globalSearch && searchQuery.trim().length > 0;
 
   // 命令面板：命令 + 当前目录文件 + 收藏，模糊匹配
-  const allCommands: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }>; action: () => void; admin?: boolean; disabled?: boolean }> = [
-    { id: "refresh", label: "刷新文件列表", icon: RefreshCw, action: loadFiles },
-    { id: "newfolder", label: "新建文件夹", icon: FolderPlus, action: () => setShowNewFolderInput(true), admin: true },
-    { id: "gallery", label: viewMode === "list" ? "切换到网格视图" : "切换到列表视图", icon: LayoutGrid, action: () => setViewMode((v) => (v === "list" ? "gallery" : "list")) },
-    { id: "root", label: "回到根目录", icon: Folder, action: () => navigateTo("") },
-    { id: "up", label: "返回上级目录", icon: ArrowLeft, action: goUp, disabled: !path },
-    { id: "globalsearch", label: "全局搜索文件", icon: Globe, action: () => setGlobalSearch(true) },
-    { id: "favorites", label: "打开收藏夹", icon: Star, action: () => setFavOpen(true) },
-    { id: "scan", label: "扫描大文件 / 查找重复", icon: Calculator, action: scanStorage },
+  const allCommands: Array<{
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    action: () => void;
+    admin?: boolean;
+    disabled?: boolean;
+  }> = [
+    {
+      id: 'refresh',
+      label: '刷新文件列表',
+      icon: RefreshCw,
+      action: loadFiles,
+    },
+    {
+      id: 'newfolder',
+      label: '新建文件夹',
+      icon: FolderPlus,
+      action: () => setShowNewFolderInput(true),
+      admin: true,
+    },
+    {
+      id: 'gallery',
+      label: viewMode === 'list' ? '切换到网格视图' : '切换到列表视图',
+      icon: LayoutGrid,
+      action: () => setViewMode((v) => (v === 'list' ? 'gallery' : 'list')),
+    },
+    {
+      id: 'root',
+      label: '回到根目录',
+      icon: Folder,
+      action: () => navigateTo(''),
+    },
+    {
+      id: 'up',
+      label: '返回上级目录',
+      icon: ArrowLeft,
+      action: goUp,
+      disabled: !path,
+    },
+    {
+      id: 'globalsearch',
+      label: '全局搜索文件',
+      icon: Globe,
+      action: () => setGlobalSearch(true),
+    },
+    {
+      id: 'favorites',
+      label: '打开收藏夹',
+      icon: Star,
+      action: () => setFavOpen(true),
+    },
+    {
+      id: 'scan',
+      label: '扫描大文件 / 查找重复',
+      icon: Calculator,
+      action: scanStorage,
+    },
   ];
   const cmdQ = cmdQuery.trim().toLowerCase();
-  const cmdCommands = allCommands.filter((c) => (!c.admin || isAdmin) && (!cmdQ || c.label.toLowerCase().includes(cmdQ)));
-  const cmdFiles = cmdQ ? objects.filter((o) => o.name.toLowerCase().includes(cmdQ)).slice(0, 6) : [];
-  const cmdFavs = cmdQ ? favorites.filter((f) => f.storageId === storage.id && f.name.toLowerCase().includes(cmdQ)).slice(0, 4) : [];
+  const cmdCommands = allCommands.filter(
+    (c) =>
+      (!c.admin || isAdmin) && (!cmdQ || c.label.toLowerCase().includes(cmdQ)),
+  );
+  const cmdFiles = cmdQ
+    ? objects.filter((o) => o.name.toLowerCase().includes(cmdQ)).slice(0, 6)
+    : [];
+  const cmdFavs = cmdQ
+    ? favorites
+        .filter(
+          (f) =>
+            f.storageId === storage.id && f.name.toLowerCase().includes(cmdQ),
+        )
+        .slice(0, 4)
+    : [];
   type CmdItem =
-    | { kind: "cmd"; id: string; label: string; icon: React.ComponentType<{ className?: string }>; action: () => void; disabled?: boolean }
-    | { kind: "file"; obj: S3Object }
-    | { kind: "fav"; fav: { key: string; name: string; isDirectory: boolean } };
+    | {
+        kind: 'cmd';
+        id: string;
+        label: string;
+        icon: React.ComponentType<{ className?: string }>;
+        action: () => void;
+        disabled?: boolean;
+      }
+    | { kind: 'file'; obj: S3Object }
+    | { kind: 'fav'; fav: { key: string; name: string; isDirectory: boolean } };
   const flatCmdItems: CmdItem[] = [
-    ...cmdCommands.map((c) => ({ kind: "cmd" as const, id: c.id, label: c.label, icon: c.icon, action: c.action, disabled: c.disabled })),
-    ...cmdFiles.map((o) => ({ kind: "file" as const, obj: o })),
-    ...cmdFavs.map((f) => ({ kind: "fav" as const, fav: { key: f.key, name: f.name, isDirectory: f.isDirectory } })),
+    ...cmdCommands.map((c) => ({
+      kind: 'cmd' as const,
+      id: c.id,
+      label: c.label,
+      icon: c.icon,
+      action: c.action,
+      disabled: c.disabled,
+    })),
+    ...cmdFiles.map((o) => ({ kind: 'file' as const, obj: o })),
+    ...cmdFavs.map((f) => ({
+      kind: 'fav' as const,
+      fav: { key: f.key, name: f.name, isDirectory: f.isDirectory },
+    })),
   ];
   const execCmdItem = (item: CmdItem) => {
     setCmdOpen(false);
-    setCmdQuery("");
-    if (item.kind === "cmd") {
+    setCmdQuery('');
+    if (item.kind === 'cmd') {
       if (!item.disabled) item.action();
-    } else if (item.kind === "file") {
+    } else if (item.kind === 'file') {
       const o = item.obj;
       if (o.isDirectory) navigateTo(o.key);
       else if (isPreviewable(o.name)) handlePreview(o);
       else downloadFile(o.key);
     } else {
       const f = item.fav;
-      navigateTo(f.isDirectory ? f.key : (f.key.includes("/") ? f.key.slice(0, f.key.lastIndexOf("/")) : ""));
+      navigateTo(
+        f.isDirectory
+          ? f.key
+          : f.key.includes('/')
+            ? f.key.slice(0, f.key.lastIndexOf('/'))
+            : '',
+      );
     }
   };
   // 列表排序：名称/大小/修改时间，点击表头切换键与升降序
-  const [sortKey, setSortKey] = useState<"name" | "size" | "modified">("name");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<'name' | 'size' | 'modified'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  const handleSort = (key: "name" | "size" | "modified") => {
+  const handleSort = (key: 'name' | 'size' | 'modified') => {
     if (sortKey === key) {
-      setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      setSortOrder(key === "name" ? "asc" : "desc");
+      setSortOrder(key === 'name' ? 'asc' : 'desc');
     }
   };
 
   // 目录始终排在文件前，同类别内按所选键排序
   const visibleObjects = useMemo(() => {
     const list = normalizedQuery
-      ? objects.filter((obj) => obj.name.toLowerCase().includes(normalizedQuery))
+      ? objects.filter((obj) =>
+          obj.name.toLowerCase().includes(normalizedQuery),
+        )
       : objects;
     const dirs = list.filter((o) => o.isDirectory);
     const files = list.filter((o) => !o.isDirectory);
     const compare = (a: S3Object, b: S3Object): number => {
-      if (sortKey === "size") return (a.size || 0) - (b.size || 0);
-      if (sortKey === "modified") return new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime();
-      return a.name.localeCompare(b.name, "zh-CN", { numeric: true, sensitivity: "base" });
+      if (sortKey === 'size') return (a.size || 0) - (b.size || 0);
+      if (sortKey === 'modified')
+        return (
+          new Date(a.lastModified).getTime() -
+          new Date(b.lastModified).getTime()
+        );
+      return a.name.localeCompare(b.name, 'zh-CN', {
+        numeric: true,
+        sensitivity: 'base',
+      });
     };
     const applyOrder = (arr: S3Object[]) => {
       arr.sort(compare);
-      return sortOrder === "desc" ? arr.reverse() : arr;
+      return sortOrder === 'desc' ? arr.reverse() : arr;
     };
     return [...applyOrder(dirs), ...applyOrder(files)];
   }, [normalizedQuery, objects, sortKey, sortOrder]);
-  const allVisibleSelected = visibleObjects.length > 0 && visibleObjects.every((obj) => selectedKeys.has(obj.key));
+  const allVisibleSelected =
+    visibleObjects.length > 0 &&
+    visibleObjects.every((obj) => selectedKeys.has(obj.key));
 
   // 键盘流：j/k 选行 h 上级 g 根目录 r 刷新 / 搜索 Esc 取消选中（输入框聚焦时不拦截）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable) return;
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        (e.target as HTMLElement)?.isContentEditable
+      )
+        return;
       const k = e.key.toLowerCase();
-      if (k === "j" || k === "k") {
+      if (k === 'j' || k === 'k') {
         e.preventDefault();
         setCursor((c) => {
           const n = visibleObjects.length;
           if (n === 0) return -1;
-          if (k === "j") return c >= n - 1 ? 0 : c + 1;
+          if (k === 'j') return c >= n - 1 ? 0 : c + 1;
           return c <= 0 ? n - 1 : c - 1;
         });
-      } else if (k === "enter") {
+      } else if (k === 'enter') {
         const obj = visibleObjects[cursor];
         if (obj) {
           e.preventDefault();
@@ -4340,20 +5955,35 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           else if (isPreviewable(obj.name)) handlePreview(obj);
           else downloadFile(obj.key);
         }
-      } else if (k === "h") { e.preventDefault(); goUp(); }
-      else if (k === "g") { e.preventDefault(); navigateTo(""); }
-      else if (k === "r") { e.preventDefault(); loadFiles(); }
-      else if (k === "/") { e.preventDefault(); searchInputRef.current?.focus(); }
-      else if (k === "escape") { setCursor(-1); setSelectedKeys(new Set()); }
+      } else if (k === 'h') {
+        e.preventDefault();
+        goUp();
+      } else if (k === 'g') {
+        e.preventDefault();
+        navigateTo('');
+      } else if (k === 'r') {
+        e.preventDefault();
+        loadFiles();
+      } else if (k === '/') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (k === 'escape') {
+        setCursor(-1);
+        setSelectedKeys(new Set());
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleObjects, cursor]);
 
   // Get previewable files for navigation
-  const previewableFiles = visibleObjects.filter((obj) => !obj.isDirectory && isPreviewable(obj.name));
-  const currentPreviewIndex = previewFile ? previewableFiles.findIndex((f) => f.key === previewFile.key) : -1;
+  const previewableFiles = visibleObjects.filter(
+    (obj) => !obj.isDirectory && isPreviewable(obj.name),
+  );
+  const currentPreviewIndex = previewFile
+    ? previewableFiles.findIndex((f) => f.key === previewFile.key)
+    : -1;
 
   const handlePreview = (obj: S3Object) => {
     if (isPreviewable(obj.name)) {
@@ -4374,7 +6004,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   };
 
   // Get file icon based on type
-  const getFileIcon = (fileName: string, className = "h-4 w-4 shrink-0") => {
+  const getFileIcon = (fileName: string, className = 'h-4 w-4 shrink-0') => {
     const Icon = fileTypeIcon(getFileType(fileName));
     return <Icon className={className} />;
   };
@@ -4384,7 +6014,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 py-2 px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40">
         <div className="flex items-center gap-0.5 text-sm overflow-x-auto min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <button onClick={() => setPath("")} className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 font-medium text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-400 shrink-0">
+          <button
+            onClick={() => setPath('')}
+            className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 font-medium text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-400 shrink-0"
+          >
             <Folder className="h-4 w-4 text-blue-500" />
             {storage.name}
           </button>
@@ -4392,7 +6025,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             <span key={i} className="flex items-center shrink-0">
               <ChevronRight className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />
               <button
-                onClick={() => navigateTo(breadcrumbs.slice(0, i + 1).join("/"))}
+                onClick={() =>
+                  navigateTo(breadcrumbs.slice(0, i + 1).join('/'))
+                }
                 className="rounded px-1.5 py-1 text-zinc-500 hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-400"
               >
                 {part}
@@ -4419,7 +6054,7 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery("")}
+                onClick={() => setSearchQuery('')}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                 title="清空搜索"
                 aria-label="清空搜索"
@@ -4429,25 +6064,30 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             )}
           </div>
           <button
-            onClick={() => { setGlobalSearch((g) => !g); setGlobalResults([]); }}
-            className={`icon-btn h-8 w-8 ${globalSearch ? "text-blue-600 dark:text-blue-400 bg-blue-500/10" : ""}`}
-            title={globalSearch ? "全局搜索中（点击切回当前目录）" : "全局搜索"}
+            onClick={() => {
+              setGlobalSearch((g) => !g);
+              setGlobalResults([]);
+            }}
+            className={`icon-btn h-8 w-8 ${globalSearch ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10' : ''}`}
+            title={globalSearch ? '全局搜索中（点击切回当前目录）' : '全局搜索'}
             aria-label="全局搜索"
           >
             <Globe />
           </button>
           <button
-            onClick={() => setViewMode((v) => (v === "list" ? "gallery" : "list"))}
-            className={`icon-btn h-8 w-8 ${viewMode === "gallery" ? "text-blue-600 dark:text-blue-400 bg-blue-500/10" : ""}`}
-            title={viewMode === "list" ? "网格视图" : "列表视图"}
+            onClick={() =>
+              setViewMode((v) => (v === 'list' ? 'gallery' : 'list'))
+            }
+            className={`icon-btn h-8 w-8 ${viewMode === 'gallery' ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10' : ''}`}
+            title={viewMode === 'list' ? '网格视图' : '列表视图'}
             aria-label="切换视图"
           >
-            {viewMode === "list" ? <LayoutGrid /> : <List />}
+            {viewMode === 'list' ? <LayoutGrid /> : <List />}
           </button>
           <div className="relative">
             <button
               onClick={() => setFavOpen((o) => !o)}
-              className={`icon-btn h-8 w-8 ${favOpen ? "text-yellow-500 bg-yellow-500/10" : ""}`}
+              className={`icon-btn h-8 w-8 ${favOpen ? 'text-yellow-500 bg-yellow-500/10' : ''}`}
               title="收藏夹"
               aria-label="收藏夹"
             >
@@ -4455,24 +6095,69 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             </button>
             {favOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setFavOpen(false)} />
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setFavOpen(false)}
+                />
                 <div className="absolute right-0 top-9 z-50 min-w-[220px] max-h-80 overflow-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg py-1">
-                  {favorites.filter((f) => f.storageId === storage.id).length === 0 ? (
-                    <div className="px-3 py-4 text-center text-xs text-zinc-400">暂无收藏（右键或操作列 ☆ 收藏常用目录/文件）</div>
-                  ) : favorites.filter((f) => f.storageId === storage.id).map((f) => {
-                    const parent = f.key.includes("/") ? f.key.slice(0, f.key.lastIndexOf("/")) : "";
-                    return (
-                      <div key={f.key} className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700">
-                        <button onClick={() => { setFavOpen(false); navigateTo(f.isDirectory ? f.key : parent); }} className="flex items-center gap-2 flex-1 min-w-0 text-left">
-                          {f.isDirectory ? <Folder className="h-4 w-4 text-blue-500 shrink-0" /> : <span className="text-zinc-400 shrink-0">{(() => { const Ic = fileTypeIcon(getFileType(f.name)); return <Ic className="h-4 w-4" />; })()}</span>}
-                          <span className="truncate text-sm text-zinc-700 dark:text-zinc-200">{f.name}</span>
-                        </button>
-                        <button onClick={() => toggleFavorite({ key: f.key, name: f.name, isDirectory: f.isDirectory } as S3Object)} className="text-zinc-400 hover:text-red-500 shrink-0" title="移除收藏" aria-label="移除收藏">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
+                  {favorites.filter((f) => f.storageId === storage.id)
+                    .length === 0 ? (
+                    <div className="px-3 py-4 text-center text-xs text-zinc-400">
+                      暂无收藏（右键或操作列 ☆ 收藏常用目录/文件）
+                    </div>
+                  ) : (
+                    favorites
+                      .filter((f) => f.storageId === storage.id)
+                      .map((f) => {
+                        const parent = f.key.includes('/')
+                          ? f.key.slice(0, f.key.lastIndexOf('/'))
+                          : '';
+                        return (
+                          <div
+                            key={f.key}
+                            className="flex items-center gap-2 px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                          >
+                            <button
+                              onClick={() => {
+                                setFavOpen(false);
+                                navigateTo(f.isDirectory ? f.key : parent);
+                              }}
+                              className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                            >
+                              {f.isDirectory ? (
+                                <Folder className="h-4 w-4 text-blue-500 shrink-0" />
+                              ) : (
+                                <span className="text-zinc-400 shrink-0">
+                                  {(() => {
+                                    const Ic = fileTypeIcon(
+                                      getFileType(f.name),
+                                    );
+                                    return <Ic className="h-4 w-4" />;
+                                  })()}
+                                </span>
+                              )}
+                              <span className="truncate text-sm text-zinc-700 dark:text-zinc-200">
+                                {f.name}
+                              </span>
+                            </button>
+                            <button
+                              onClick={() =>
+                                toggleFavorite({
+                                  key: f.key,
+                                  name: f.name,
+                                  isDirectory: f.isDirectory,
+                                } as S3Object)
+                              }
+                              className="text-zinc-400 hover:text-red-500 shrink-0"
+                              title="移除收藏"
+                              aria-label="移除收藏"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })
+                  )}
                 </div>
               </>
             )}
@@ -4480,15 +6165,24 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
           {/* Batch actions */}
           {isAdmin && selectedKeys.size > 0 && (
             <>
-              <button onClick={startBatchMove} className="btn btn-sm btn-outline">
+              <button
+                onClick={startBatchMove}
+                className="btn btn-sm btn-outline"
+              >
                 <ArrowRightLeft />
                 {`移动 (${selectedKeys.size})`}
               </button>
-              <button onClick={startBatchCopy} className="btn btn-sm btn-outline">
+              <button
+                onClick={startBatchCopy}
+                className="btn btn-sm btn-outline"
+              >
                 <Copy />
                 {`复制到 (${selectedKeys.size})`}
               </button>
-              <button onClick={handleBatchDownload} className="btn btn-sm btn-outline">
+              <button
+                onClick={handleBatchDownload}
+                className="btn btn-sm btn-outline"
+              >
                 <Download />
                 {`下载 (${objects.filter((o) => !o.isDirectory && selectedKeys.has(o.key)).length})`}
               </button>
@@ -4498,17 +6192,26 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                 className="btn btn-sm btn-danger"
               >
                 <Trash2 />
-                {deleting ? "删除中..." : `删除 (${selectedKeys.size})`}
+                {deleting ? '删除中...' : `删除 (${selectedKeys.size})`}
               </button>
             </>
           )}
           {path && (
-            <button onClick={goUp} className="btn btn-sm btn-ghost" title="返回上级目录">
+            <button
+              onClick={goUp}
+              className="btn btn-sm btn-ghost"
+              title="返回上级目录"
+            >
               <ArrowLeft />
               上级
             </button>
           )}
-          <button onClick={loadFiles} className="icon-btn h-8 w-8" title="刷新" aria-label="刷新">
+          <button
+            onClick={loadFiles}
+            className="icon-btn h-8 w-8"
+            title="刷新"
+            aria-label="刷新"
+          >
             <RefreshCw />
           </button>
           {isAdmin && (
@@ -4532,9 +6235,24 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             </>
           )}
           {canUpload && (
-            <label className={`btn btn-sm btn-primary cursor-pointer ${uploadProgress ? 'pointer-events-none opacity-50' : ''}`}>
-              {uploadProgress ? "上传中…" : (<><Upload />上传</>)}
-              <input type="file" multiple onChange={handleUpload} className="hidden" disabled={!!uploadProgress} />
+            <label
+              className={`btn btn-sm btn-primary cursor-pointer ${uploadProgress ? 'pointer-events-none opacity-50' : ''}`}
+            >
+              {uploadProgress ? (
+                '上传中…'
+              ) : (
+                <>
+                  <Upload />
+                  上传
+                </>
+              )}
+              <input
+                type="file"
+                multiple
+                onChange={handleUpload}
+                className="hidden"
+                disabled={!!uploadProgress}
+              />
             </label>
           )}
         </div>
@@ -4550,10 +6268,10 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreateFolder();
-                if (e.key === "Escape") {
+                if (e.key === 'Enter') handleCreateFolder();
+                if (e.key === 'Escape') {
                   setShowNewFolderInput(false);
-                  setNewFolderName("");
+                  setNewFolderName('');
                 }
               }}
               placeholder="输入文件夹名称"
@@ -4566,12 +6284,12 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               disabled={creatingFolder || !newFolderName.trim()}
               className="btn btn-sm btn-primary"
             >
-              {creatingFolder ? "创建中…" : "创建"}
+              {creatingFolder ? '创建中…' : '创建'}
             </button>
             <button
               onClick={() => {
                 setShowNewFolderInput(false);
-                setNewFolderName("");
+                setNewFolderName('');
               }}
               className="btn btn-sm btn-ghost"
             >
@@ -4607,11 +6325,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                 className="field flex-1 py-1.5"
                 disabled={offlineDownloading}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") handleOfflineDownload();
-                  if (e.key === "Escape") {
+                  if (e.key === 'Enter') handleOfflineDownload();
+                  if (e.key === 'Escape') {
                     setShowOfflineDownload(false);
-                    setOfflineUrl("");
-                    setOfflineFilename("");
+                    setOfflineUrl('');
+                    setOfflineFilename('');
                   }
                 }}
               />
@@ -4621,13 +6339,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                 className="btn btn-sm btn-primary whitespace-nowrap"
               >
                 <Download />
-                {offlineDownloading ? "下载中…" : "开始下载"}
+                {offlineDownloading ? '下载中…' : '开始下载'}
               </button>
               <button
                 onClick={() => {
                   setShowOfflineDownload(false);
-                  setOfflineUrl("");
-                  setOfflineFilename("");
+                  setOfflineUrl('');
+                  setOfflineFilename('');
                 }}
                 disabled={offlineDownloading}
                 className="btn btn-sm btn-ghost"
@@ -4650,7 +6368,8 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               正在上传: {uploadProgress.name}
               {uploadProgress.totalParts && (
                 <span className="text-zinc-400 dark:text-zinc-500 ml-1 tabular-nums">
-                  ({uploadProgress.currentPart}/{uploadProgress.totalParts} 分片)
+                  ({uploadProgress.currentPart}/{uploadProgress.totalParts}{' '}
+                  分片)
                 </span>
               )}
             </span>
@@ -4669,11 +6388,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               style={{ width: `${uploadProgress.progress}%` }}
             />
           </div>
-          {uploadProgress.loaded !== undefined && uploadProgress.total !== undefined && (
-            <div className="mt-1 text-xs text-zinc-400 dark:text-zinc-500 tabular-nums">
-              {formatBytes(uploadProgress.loaded)} / {formatBytes(uploadProgress.total)}
-            </div>
-          )}
+          {uploadProgress.loaded !== undefined &&
+            uploadProgress.total !== undefined && (
+              <div className="mt-1 text-xs text-zinc-400 dark:text-zinc-500 tabular-nums">
+                {formatBytes(uploadProgress.loaded)} /{' '}
+                {formatBytes(uploadProgress.total)}
+              </div>
+            )}
         </div>
       )}
 
@@ -4685,12 +6406,19 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/40"
           >
             <FileText className="h-4 w-4 text-blue-500 shrink-0" />
-            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">README</span>
-            <span className="text-xs text-zinc-400 ml-auto">{readmeOpen ? "收起" : "展开"}</span>
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+              README
+            </span>
+            <span className="text-xs text-zinc-400 ml-auto">
+              {readmeOpen ? '收起' : '展开'}
+            </span>
           </button>
           {readmeOpen && (
             <div className="px-4 pb-4 pt-1 max-w-4xl">
-              <div className="docx-content text-sm" dangerouslySetInnerHTML={{ __html: readme }} />
+              <div
+                className="docx-content text-sm"
+                dangerouslySetInnerHTML={{ __html: readme }}
+              />
             </div>
           )}
         </div>
@@ -4699,7 +6427,11 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       {/* Content */}
       <div
         className="flex-1 overflow-auto relative"
-        onDragOver={(e) => { if (!canUpload) return; e.preventDefault(); setDragOver(true); }}
+        onDragOver={(e) => {
+          if (!canUpload) return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => {
           e.preventDefault();
@@ -4711,7 +6443,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       >
         {dragOver && (
           <div className="absolute inset-2 z-20 bg-blue-500/10 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center pointer-events-none">
-            <span className="text-blue-600 dark:text-blue-300 font-medium text-lg">松开以上传到当前目录</span>
+            <span className="text-blue-600 dark:text-blue-300 font-medium text-lg">
+              松开以上传到当前目录
+            </span>
           </div>
         )}
         {globalMode ? (
@@ -4723,20 +6457,40 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               </div>
             )}
             {!globalLoading && globalResults.length === 0 && (
-              <div className="flex items-center justify-center h-20 text-zinc-400 text-sm">无匹配结果</div>
+              <div className="flex items-center justify-center h-20 text-zinc-400 text-sm">
+                无匹配结果
+              </div>
             )}
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {globalResults.map((obj) => {
-                const parent = obj.key.includes("/") ? obj.key.slice(0, obj.key.lastIndexOf("/")) : "";
+                const parent = obj.key.includes('/')
+                  ? obj.key.slice(0, obj.key.lastIndexOf('/'))
+                  : '';
                 return (
                   <button
                     key={obj.key}
-                    onClick={() => { setGlobalSearch(false); setSearchQuery(""); navigateTo(parent); }}
+                    onClick={() => {
+                      setGlobalSearch(false);
+                      setSearchQuery('');
+                      navigateTo(parent);
+                    }}
                     className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/40"
                   >
-                    {obj.isDirectory ? <Folder className="h-4 w-4 shrink-0 text-blue-500" /> : <span className="text-zinc-400">{getFileIcon(obj.name)}</span>}
-                    <span className="truncate font-medium text-zinc-700 dark:text-zinc-200">{obj.name}</span>
-                    {parent && <span className="truncate text-xs text-zinc-400 ml-auto">/{parent}</span>}
+                    {obj.isDirectory ? (
+                      <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+                    ) : (
+                      <span className="text-zinc-400">
+                        {getFileIcon(obj.name)}
+                      </span>
+                    )}
+                    <span className="truncate font-medium text-zinc-700 dark:text-zinc-200">
+                      {obj.name}
+                    </span>
+                    {parent && (
+                      <span className="truncate text-xs text-zinc-400 ml-auto">
+                        /{parent}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -4757,20 +6511,34 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
             <Folder className="h-8 w-8" />
             <span className="text-sm">空目录</span>
           </div>
-        ) : viewMode === "gallery" ? (
+        ) : viewMode === 'gallery' ? (
           <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {visibleObjects.map((obj, i) => {
-              const isImg = !obj.isDirectory && getFileType(obj.name) === "image";
-              const Ic = obj.isDirectory ? null : fileTypeIcon(getFileType(obj.name));
+              const isImg =
+                !obj.isDirectory && getFileType(obj.name) === 'image';
+              const Ic = obj.isDirectory
+                ? null
+                : fileTypeIcon(getFileType(obj.name));
               return (
                 <div
                   key={obj.key}
-                  onClick={() => (obj.isDirectory ? navigateTo(obj.key) : isPreviewable(obj.name) ? handlePreview(obj) : downloadFile(obj.key))}
-                  className={`group relative cursor-pointer rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition ${selectedKeys.has(obj.key) ? "ring-2 ring-blue-500" : ""} ${cursor === i ? "ring-2 ring-blue-500" : ""}`}
+                  onClick={() =>
+                    obj.isDirectory
+                      ? navigateTo(obj.key)
+                      : isPreviewable(obj.name)
+                        ? handlePreview(obj)
+                        : downloadFile(obj.key)
+                  }
+                  className={`group relative cursor-pointer rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition ${selectedKeys.has(obj.key) ? 'ring-2 ring-blue-500' : ''} ${cursor === i ? 'ring-2 ring-blue-500' : ''}`}
                 >
                   <div className="aspect-square flex items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
                     {isImg ? (
-                      <img src={apiFileUrl(storage.id, obj.key)} alt={obj.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                      <img
+                        src={apiFileUrl(storage.id, obj.key)}
+                        alt={obj.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition"
+                      />
                     ) : obj.isDirectory ? (
                       <Folder className="h-10 w-10 text-blue-500" />
                     ) : Ic ? (
@@ -4778,8 +6546,12 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                     ) : null}
                   </div>
                   <div className="px-2 py-1.5">
-                    <div className="truncate text-xs text-zinc-700 dark:text-zinc-200">{obj.name}</div>
-                    <div className="truncate text-[10px] text-zinc-400">{obj.isDirectory ? "文件夹" : formatBytes(obj.size)}</div>
+                    <div className="truncate text-xs text-zinc-700 dark:text-zinc-200">
+                      {obj.name}
+                    </div>
+                    <div className="truncate text-[10px] text-zinc-400">
+                      {obj.isDirectory ? '文件夹' : formatBytes(obj.size)}
+                    </div>
                   </div>
                 </div>
               );
@@ -4801,23 +6573,29 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                 )}
                 <th
                   className="text-left py-2.5 px-4 font-medium uppercase tracking-wider cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
-                  onClick={() => handleSort("name")}
+                  onClick={() => handleSort('name')}
                 >
-                  名称{sortKey === "name" && (sortOrder === "asc" ? " ▲" : " ▼")}
+                  名称
+                  {sortKey === 'name' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
                 </th>
                 <th
                   className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-28 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
-                  onClick={() => handleSort("size")}
+                  onClick={() => handleSort('size')}
                 >
-                  大小{sortKey === "size" && (sortOrder === "asc" ? " ▲" : " ▼")}
+                  大小
+                  {sortKey === 'size' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
                 </th>
                 <th
                   className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-44 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
-                  onClick={() => handleSort("modified")}
+                  onClick={() => handleSort('modified')}
                 >
-                  修改时间{sortKey === "modified" && (sortOrder === "asc" ? " ▲" : " ▼")}
+                  修改时间
+                  {sortKey === 'modified' &&
+                    (sortOrder === 'asc' ? ' ▲' : ' ▼')}
                 </th>
-                <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-36">操作</th>
+                <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-36">
+                  操作
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -4830,92 +6608,193 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                     没有匹配的文件
                   </td>
                 </tr>
-              ) : visibleObjects.map((obj, i) => (
-                <tr
-                  key={obj.key}
-                  className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 ${
-                    selectedKeys.has(obj.key) ? "bg-blue-50 dark:bg-blue-900/20" : ""
-                  } ${cursor === i ? "outline outline-2 -outline-offset-2 outline-blue-500" : ""}`}
-                  onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, obj }); }}
-                >
-                  {isAdmin && (
-                    <td className="py-2 px-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedKeys.has(obj.key)}
-                        onChange={() => toggleSelect(obj.key)}
-                        className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
-                      />
+              ) : (
+                visibleObjects.map((obj, i) => (
+                  <tr
+                    key={obj.key}
+                    className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 ${
+                      selectedKeys.has(obj.key)
+                        ? 'bg-blue-50 dark:bg-blue-900/20'
+                        : ''
+                    } ${cursor === i ? 'outline outline-2 -outline-offset-2 outline-blue-500' : ''}`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, obj });
+                    }}
+                  >
+                    {isAdmin && (
+                      <td className="py-2 px-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedKeys.has(obj.key)}
+                          onChange={() => toggleSelect(obj.key)}
+                          className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
+                        />
+                      </td>
+                    )}
+                    <td className="py-2 px-4">
+                      {obj.isDirectory ? (
+                        <button
+                          onClick={() => navigateTo(obj.key)}
+                          className="flex items-center gap-2 font-medium text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400"
+                        >
+                          <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+                          <span className="truncate">{obj.name}</span>
+                        </button>
+                      ) : isPreviewable(obj.name) ? (
+                        <button
+                          onClick={() => handlePreview(obj)}
+                          className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
+                        >
+                          {getFileIcon(obj.name)}
+                          <span className="truncate">{obj.name}</span>
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {getFileIcon(obj.name)}
+                          </span>
+                          <span className="truncate">{obj.name}</span>
+                        </span>
+                      )}
                     </td>
-                  )}
-                  <td className="py-2 px-4">
-                    {obj.isDirectory ? (
-                      <button
-                        onClick={() => navigateTo(obj.key)}
-                        className="flex items-center gap-2 font-medium text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400"
-                      >
-                        <Folder className="h-4 w-4 shrink-0 text-blue-500" />
-                        <span className="truncate">{obj.name}</span>
-                      </button>
-                    ) : isPreviewable(obj.name) ? (
-                      <button
-                        onClick={() => handlePreview(obj)}
-                        className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
-                      >
-                        {getFileIcon(obj.name)}
-                        <span className="truncate">{obj.name}</span>
-                      </button>
-                    ) : (
-                      <span className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                        <span className="text-zinc-400 dark:text-zinc-500">{getFileIcon(obj.name)}</span>
-                        <span className="truncate">{obj.name}</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
-                    {obj.isDirectory ? "-" : formatBytes(obj.size)}
-                  </td>
-                  <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
-                    {formatDate(obj.lastModified)}
-                  </td>
-                  <td className="py-1.5 px-3 text-right">
-                    {obj.isDirectory ? (
-                      <div className="flex items-center justify-end gap-0.5">
-                        <button onClick={() => toggleFavorite(obj)} className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? "text-yellow-500" : ""}`} title={isFavorite(obj.key) ? "取消收藏" : "收藏"} aria-label="收藏"><Star /></button>
-                        {canDownload && (
-                          <button onClick={() => calcFolderSize(obj.key, obj.name)} disabled={calcSizeKey === obj.key} className="icon-btn h-7 w-7" title="统计大小" aria-label="统计大小"><Calculator /></button>
-                        )}
-                        {isAdmin && (
-                          <>
-                            <button onClick={() => startShare(obj)} className="icon-btn h-7 w-7" title="分享" aria-label="分享"><Share2 /></button>
-                            <button onClick={() => startRename(obj)} className="icon-btn h-7 w-7" title="重命名" aria-label="重命名"><Pencil /></button>
-                            <button onClick={() => startMove(obj)} className="icon-btn h-7 w-7" title="移动" aria-label="移动"><ArrowRightLeft /></button>
-                            <button onClick={() => deleteFolder(obj.key, obj.name)} className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10" title="删除文件夹" aria-label="删除文件夹"><Trash2 /></button>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-0.5">
-                        {canDownload && isPreviewable(obj.name) && (
-                          <button onClick={() => handlePreview(obj)} className="icon-btn h-7 w-7" title="预览" aria-label="预览"><Play /></button>
-                        )}
-                        {canDownload && (
-                          <button onClick={() => downloadFile(obj.key)} className="icon-btn h-7 w-7" title="下载" aria-label="下载"><Download /></button>
-                        )}
-                        <button onClick={() => toggleFavorite(obj)} className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? "text-yellow-500" : ""}`} title={isFavorite(obj.key) ? "取消收藏" : "收藏"} aria-label="收藏"><Star /></button>
-                        {isAdmin && (
-                          <>
-                            <button onClick={() => startShare(obj)} className="icon-btn h-7 w-7" title="分享" aria-label="分享"><Share2 /></button>
-                            <button onClick={() => startRename(obj)} className="icon-btn h-7 w-7" title="重命名" aria-label="重命名"><Pencil /></button>
-                            <button onClick={() => startMove(obj)} className="icon-btn h-7 w-7" title="移动" aria-label="移动"><ArrowRightLeft /></button>
-                            <button onClick={() => deleteFile(obj.key)} className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10" title="删除" aria-label="删除"><Trash2 /></button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
+                      {obj.isDirectory ? '-' : formatBytes(obj.size)}
+                    </td>
+                    <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
+                      {formatDate(obj.lastModified)}
+                    </td>
+                    <td className="py-1.5 px-3 text-right">
+                      {obj.isDirectory ? (
+                        <div className="flex items-center justify-end gap-0.5">
+                          <button
+                            onClick={() => toggleFavorite(obj)}
+                            className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
+                            title={isFavorite(obj.key) ? '取消收藏' : '收藏'}
+                            aria-label="收藏"
+                          >
+                            <Star />
+                          </button>
+                          {canDownload && (
+                            <button
+                              onClick={() => calcFolderSize(obj.key, obj.name)}
+                              disabled={calcSizeKey === obj.key}
+                              className="icon-btn h-7 w-7"
+                              title="统计大小"
+                              aria-label="统计大小"
+                            >
+                              <Calculator />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => startShare(obj)}
+                                className="icon-btn h-7 w-7"
+                                title="分享"
+                                aria-label="分享"
+                              >
+                                <Share2 />
+                              </button>
+                              <button
+                                onClick={() => startRename(obj)}
+                                className="icon-btn h-7 w-7"
+                                title="重命名"
+                                aria-label="重命名"
+                              >
+                                <Pencil />
+                              </button>
+                              <button
+                                onClick={() => startMove(obj)}
+                                className="icon-btn h-7 w-7"
+                                title="移动"
+                                aria-label="移动"
+                              >
+                                <ArrowRightLeft />
+                              </button>
+                              <button
+                                onClick={() => deleteFolder(obj.key, obj.name)}
+                                className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                                title="删除文件夹"
+                                aria-label="删除文件夹"
+                              >
+                                <Trash2 />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-end gap-0.5">
+                          {canDownload && isPreviewable(obj.name) && (
+                            <button
+                              onClick={() => handlePreview(obj)}
+                              className="icon-btn h-7 w-7"
+                              title="预览"
+                              aria-label="预览"
+                            >
+                              <Play />
+                            </button>
+                          )}
+                          {canDownload && (
+                            <button
+                              onClick={() => downloadFile(obj.key)}
+                              className="icon-btn h-7 w-7"
+                              title="下载"
+                              aria-label="下载"
+                            >
+                              <Download />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => toggleFavorite(obj)}
+                            className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
+                            title={isFavorite(obj.key) ? '取消收藏' : '收藏'}
+                            aria-label="收藏"
+                          >
+                            <Star />
+                          </button>
+                          {isAdmin && (
+                            <>
+                              <button
+                                onClick={() => startShare(obj)}
+                                className="icon-btn h-7 w-7"
+                                title="分享"
+                                aria-label="分享"
+                              >
+                                <Share2 />
+                              </button>
+                              <button
+                                onClick={() => startRename(obj)}
+                                className="icon-btn h-7 w-7"
+                                title="重命名"
+                                aria-label="重命名"
+                              >
+                                <Pencil />
+                              </button>
+                              <button
+                                onClick={() => startMove(obj)}
+                                className="icon-btn h-7 w-7"
+                                title="移动"
+                                aria-label="移动"
+                              >
+                                <ArrowRightLeft />
+                              </button>
+                              <button
+                                onClick={() => deleteFile(obj.key)}
+                                className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                                title="删除"
+                                aria-label="删除"
+                              >
+                                <Trash2 />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         )}
@@ -4942,19 +6821,32 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
         <Modal title="重命名" onClose={() => setRenameTarget(null)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">新名称</label>
+              <label className="block text-xs text-zinc-500 mb-1.5">
+                新名称
+              </label>
               <input
                 type="text"
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
                 className="field"
                 autoFocus
               />
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setRenameTarget(null)} className="btn btn-outline flex-1 py-2">取消</button>
-              <button onClick={handleRename} disabled={renaming || !renameValue.trim()} className="btn btn-primary flex-1 py-2">{renaming ? "处理中…" : "确定"}</button>
+              <button
+                onClick={() => setRenameTarget(null)}
+                className="btn btn-outline flex-1 py-2"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRename}
+                disabled={renaming || !renameValue.trim()}
+                className="btn btn-primary flex-1 py-2"
+              >
+                {renaming ? '处理中…' : '确定'}
+              </button>
             </div>
           </div>
         </Modal>
@@ -4964,12 +6856,19 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       {shareTarget && (
         <Modal title="生成分享链接" onClose={() => setShareTarget(null)}>
           <div className="space-y-4">
-            <div className="text-xs text-zinc-500">分享: <span className="text-zinc-700 dark:text-zinc-300">{shareTarget.name}</span></div>
+            <div className="text-xs text-zinc-500">
+              分享:{' '}
+              <span className="text-zinc-700 dark:text-zinc-300">
+                {shareTarget.name}
+              </span>
+            </div>
 
             {!shareUrl ? (
               <>
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1.5">自定义分享令牌（可选）</label>
+                  <label className="block text-xs text-zinc-500 mb-1.5">
+                    自定义分享令牌（可选）
+                  </label>
                   <input
                     type="text"
                     value={customShareToken}
@@ -4982,10 +6881,14 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1.5">过期时间</label>
+                  <label className="block text-xs text-zinc-500 mb-1.5">
+                    过期时间
+                  </label>
                   <select
                     value={shareExpireHours}
-                    onChange={(e) => setShareExpireHours(parseInt(e.target.value, 10))}
+                    onChange={(e) =>
+                      setShareExpireHours(parseInt(e.target.value, 10))
+                    }
                     className="field"
                   >
                     <option value={0}>永不过期</option>
@@ -4996,7 +6899,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-zinc-500 mb-1.5">访问密码（可选）</label>
+                  <label className="block text-xs text-zinc-500 mb-1.5">
+                    访问密码（可选）
+                  </label>
                   <input
                     type="text"
                     value={sharePassword}
@@ -5009,40 +6914,95 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setShareTarget(null)} className="btn btn-outline flex-1 py-2">取消</button>
-                  <button onClick={handleCreateShare} disabled={creatingShare} className="btn btn-primary flex-1 py-2">{creatingShare ? "生成中…" : "生成链接"}</button>
+                  <button
+                    onClick={() => setShareTarget(null)}
+                    className="btn btn-outline flex-1 py-2"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleCreateShare}
+                    disabled={creatingShare}
+                    className="btn btn-primary flex-1 py-2"
+                  >
+                    {creatingShare ? '生成中…' : '生成链接'}
+                  </button>
                 </div>
               </>
             ) : (
               <>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-zinc-500 mb-1.5">分享令牌</label>
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      分享令牌
+                    </label>
                     <div className="flex gap-2">
-                      <input type="text" value={shareToken} readOnly className="field flex-1 text-xs" />
-                      <button onClick={() => copyToClipboard(shareToken)} className="btn btn-outline py-2"><Copy />复制</button>
+                      <input
+                        type="text"
+                        value={shareToken}
+                        readOnly
+                        className="field flex-1 text-xs"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(shareToken)}
+                        className="btn btn-outline py-2"
+                      >
+                        <Copy />
+                        复制
+                      </button>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs text-zinc-500 mb-1.5">分享链接</label>
+                    <label className="block text-xs text-zinc-500 mb-1.5">
+                      分享链接
+                    </label>
                     <div className="flex gap-2">
-                      <input type="text" value={shareUrl} readOnly className="field flex-1 text-xs" />
-                      <button onClick={() => copyToClipboard(shareUrl)} className="btn btn-outline py-2"><Copy />复制</button>
+                      <input
+                        type="text"
+                        value={shareUrl}
+                        readOnly
+                        className="field flex-1 text-xs"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(shareUrl)}
+                        className="btn btn-outline py-2"
+                      >
+                        <Copy />
+                        复制
+                      </button>
                     </div>
                   </div>
                   {shareQrCode && (
                     <div>
-                      <label className="block text-xs text-zinc-500 mb-1.5">扫码访问</label>
+                      <label className="block text-xs text-zinc-500 mb-1.5">
+                        扫码访问
+                      </label>
                       <div className="flex justify-center">
-                        <img src={shareQrCode} alt="分享二维码" className="w-44 h-44 rounded-lg bg-white p-2" />
+                        <img
+                          src={shareQrCode}
+                          alt="分享二维码"
+                          className="w-44 h-44 rounded-lg bg-white p-2"
+                        />
                       </div>
                     </div>
                   )}
-                  {shareExpiresAt && <ShareExpiryCountdown expiresAt={shareExpiresAt} />}
+                  {shareExpiresAt && (
+                    <ShareExpiryCountdown expiresAt={shareExpiresAt} />
+                  )}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleRevokeShare} className="btn btn-danger flex-1 py-2">撤销分享</button>
-                  <button onClick={() => setShareTarget(null)} className="btn btn-primary flex-1 py-2">完成</button>
+                  <button
+                    onClick={handleRevokeShare}
+                    className="btn btn-danger flex-1 py-2"
+                  >
+                    撤销分享
+                  </button>
+                  <button
+                    onClick={() => setShareTarget(null)}
+                    className="btn btn-primary flex-1 py-2"
+                  >
+                    完成
+                  </button>
                 </div>
               </>
             )}
@@ -5054,9 +7014,16 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       {moveTarget && (
         <Modal title="移动到" onClose={() => setMoveTarget(null)}>
           <div className="space-y-4">
-            <div className="text-xs text-zinc-500">移动: <span className="text-zinc-700 dark:text-zinc-300">{moveTarget.name}</span></div>
+            <div className="text-xs text-zinc-500">
+              移动:{' '}
+              <span className="text-zinc-700 dark:text-zinc-300">
+                {moveTarget.name}
+              </span>
+            </div>
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">目标文件夹</label>
+              <label className="block text-xs text-zinc-500 mb-1.5">
+                目标文件夹
+              </label>
               <select
                 value={moveDestPath}
                 onChange={(e) => setMoveDestPath(e.target.value)}
@@ -5064,14 +7031,25 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               >
                 {allFolders.map((folder) => (
                   <option key={folder} value={folder}>
-                    {folder === "" ? "/ (根目录)" : "/" + folder}
+                    {folder === '' ? '/ (根目录)' : '/' + folder}
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setMoveTarget(null)} className="btn btn-outline flex-1 py-2">取消</button>
-              <button onClick={handleMove} disabled={moving} className="btn btn-primary flex-1 py-2">{moving ? "处理中…" : "确定"}</button>
+              <button
+                onClick={() => setMoveTarget(null)}
+                className="btn btn-outline flex-1 py-2"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleMove}
+                disabled={moving}
+                className="btn btn-primary flex-1 py-2"
+              >
+                {moving ? '处理中…' : '确定'}
+              </button>
             </div>
           </div>
         </Modal>
@@ -5081,9 +7059,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       {batchMoveOpen && (
         <Modal title="批量移动到" onClose={() => setBatchMoveOpen(false)}>
           <div className="space-y-4">
-            <div className="text-xs text-zinc-500">将 {selectedKeys.size} 个选中项目移动到：</div>
+            <div className="text-xs text-zinc-500">
+              将 {selectedKeys.size} 个选中项目移动到：
+            </div>
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">目标文件夹</label>
+              <label className="block text-xs text-zinc-500 mb-1.5">
+                目标文件夹
+              </label>
               <select
                 value={batchMoveDest}
                 onChange={(e) => setBatchMoveDest(e.target.value)}
@@ -5091,14 +7073,25 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               >
                 {allFolders.map((folder) => (
                   <option key={folder} value={folder}>
-                    {folder === "" ? "/ (根目录)" : "/" + folder}
+                    {folder === '' ? '/ (根目录)' : '/' + folder}
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setBatchMoveOpen(false)} className="btn btn-outline flex-1 py-2">取消</button>
-              <button onClick={handleBatchMove} disabled={batchMoving} className="btn btn-primary flex-1 py-2">{batchMoving ? "处理中…" : "确定"}</button>
+              <button
+                onClick={() => setBatchMoveOpen(false)}
+                className="btn btn-outline flex-1 py-2"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchMove}
+                disabled={batchMoving}
+                className="btn btn-primary flex-1 py-2"
+              >
+                {batchMoving ? '处理中…' : '确定'}
+              </button>
             </div>
           </div>
         </Modal>
@@ -5108,9 +7101,13 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       {batchCopyOpen && (
         <Modal title="批量复制到" onClose={() => setBatchCopyOpen(false)}>
           <div className="space-y-4">
-            <div className="text-xs text-zinc-500">将 {selectedKeys.size} 个选中项目复制到（保留原文件）：</div>
+            <div className="text-xs text-zinc-500">
+              将 {selectedKeys.size} 个选中项目复制到（保留原文件）：
+            </div>
             <div>
-              <label className="block text-xs text-zinc-500 mb-1.5">目标文件夹</label>
+              <label className="block text-xs text-zinc-500 mb-1.5">
+                目标文件夹
+              </label>
               <select
                 value={batchCopyDest}
                 onChange={(e) => setBatchCopyDest(e.target.value)}
@@ -5118,114 +7115,275 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
               >
                 {allFolders.map((folder) => (
                   <option key={folder} value={folder}>
-                    {folder === "" ? "/ (根目录)" : "/" + folder}
+                    {folder === '' ? '/ (根目录)' : '/' + folder}
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setBatchCopyOpen(false)} className="btn btn-outline flex-1 py-2">取消</button>
-              <button onClick={handleBatchCopy} disabled={batchCopying} className="btn btn-primary flex-1 py-2">{batchCopying ? "处理中…" : "确定"}</button>
+              <button
+                onClick={() => setBatchCopyOpen(false)}
+                className="btn btn-outline flex-1 py-2"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchCopy}
+                disabled={batchCopying}
+                className="btn btn-primary flex-1 py-2"
+              >
+                {batchCopying ? '处理中…' : '确定'}
+              </button>
             </div>
           </div>
         </Modal>
       )}
 
       {/* Context Menu（右键） */}
-      {contextMenu && (() => {
-        const obj = contextMenu.obj;
-        const x = contextMenu.x;
-        const y = contextMenu.y;
-        const close = () => setContextMenu(null);
-        const Item = ({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) => (
-          <button onClick={onClick} className={`flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700 ${danger ? "text-red-600 dark:text-red-400" : "text-zinc-700 dark:text-zinc-200"}`}>
-            {icon}<span>{label}</span>
-          </button>
-        );
-        return (
-          <>
-            <div className="fixed inset-0 z-40" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }} />
-            <div
-              className="fixed z-50 min-w-[160px] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg py-1"
-              style={{ left: Math.min(x, window.innerWidth - 180), top: Math.min(y, window.innerHeight - 320) }}
+      {contextMenu &&
+        (() => {
+          const obj = contextMenu.obj;
+          const x = contextMenu.x;
+          const y = contextMenu.y;
+          const close = () => setContextMenu(null);
+          const Item = ({
+            icon,
+            label,
+            onClick,
+            danger,
+          }: {
+            icon: React.ReactNode;
+            label: string;
+            onClick: () => void;
+            danger?: boolean;
+          }) => (
+            <button
+              onClick={onClick}
+              className={`flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700 ${danger ? 'text-red-600 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-200'}`}
             >
-              {obj.isDirectory ? (
-                <Item icon={<Folder className="h-4 w-4 text-blue-500" />} label="打开" onClick={() => { navigateTo(obj.key); close(); }} />
-              ) : isPreviewable(obj.name) ? (
-                <Item icon={<Play className="h-4 w-4" />} label="预览" onClick={() => { handlePreview(obj); close(); }} />
-              ) : null}
-              {!obj.isDirectory && (
-                <Item icon={<Download className="h-4 w-4" />} label="下载" onClick={() => { downloadFile(obj.key); close(); }} />
-              )}
-              {obj.isDirectory && canDownload && (
-                <Item icon={<Calculator className="h-4 w-4" />} label={calcSizeKey === obj.key ? "统计中…" : "统计大小"} onClick={() => { calcFolderSize(obj.key, obj.name); close(); }} />
-              )}
-              <Item icon={<Star className={`h-4 w-4 ${isFavorite(obj.key) ? "text-yellow-500" : ""}`} />} label={isFavorite(obj.key) ? "取消收藏" : "收藏"} onClick={() => { toggleFavorite(obj); close(); }} />
-              {isAdmin && (
-                <>
-                  <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
-                  <Item icon={<Share2 className="h-4 w-4" />} label="分享" onClick={() => { startShare(obj); close(); }} />
-                  <Item icon={<Pencil className="h-4 w-4" />} label="重命名" onClick={() => { startRename(obj); close(); }} />
-                  <Item icon={<ArrowRightLeft className="h-4 w-4" />} label="移动" onClick={() => { startMove(obj); close(); }} />
-                  <Item icon={<Trash2 className="h-4 w-4" />} label="删除" danger onClick={() => { obj.isDirectory ? deleteFolder(obj.key, obj.name) : deleteFile(obj.key); close(); }} />
-                </>
-              )}
-            </div>
-          </>
-        );
-      })()}
+              {icon}
+              <span>{label}</span>
+            </button>
+          );
+          return (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={close}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  close();
+                }}
+              />
+              <div
+                className="fixed z-50 min-w-[160px] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg py-1"
+                style={{
+                  left: Math.min(x, window.innerWidth - 180),
+                  top: Math.min(y, window.innerHeight - 320),
+                }}
+              >
+                {obj.isDirectory ? (
+                  <Item
+                    icon={<Folder className="h-4 w-4 text-blue-500" />}
+                    label="打开"
+                    onClick={() => {
+                      navigateTo(obj.key);
+                      close();
+                    }}
+                  />
+                ) : isPreviewable(obj.name) ? (
+                  <Item
+                    icon={<Play className="h-4 w-4" />}
+                    label="预览"
+                    onClick={() => {
+                      handlePreview(obj);
+                      close();
+                    }}
+                  />
+                ) : null}
+                {!obj.isDirectory && (
+                  <Item
+                    icon={<Download className="h-4 w-4" />}
+                    label="下载"
+                    onClick={() => {
+                      downloadFile(obj.key);
+                      close();
+                    }}
+                  />
+                )}
+                {obj.isDirectory && canDownload && (
+                  <Item
+                    icon={<Calculator className="h-4 w-4" />}
+                    label={calcSizeKey === obj.key ? '统计中…' : '统计大小'}
+                    onClick={() => {
+                      calcFolderSize(obj.key, obj.name);
+                      close();
+                    }}
+                  />
+                )}
+                <Item
+                  icon={
+                    <Star
+                      className={`h-4 w-4 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
+                    />
+                  }
+                  label={isFavorite(obj.key) ? '取消收藏' : '收藏'}
+                  onClick={() => {
+                    toggleFavorite(obj);
+                    close();
+                  }}
+                />
+                {isAdmin && (
+                  <>
+                    <div className="my-1 border-t border-zinc-200 dark:border-zinc-700" />
+                    <Item
+                      icon={<Share2 className="h-4 w-4" />}
+                      label="分享"
+                      onClick={() => {
+                        startShare(obj);
+                        close();
+                      }}
+                    />
+                    <Item
+                      icon={<Pencil className="h-4 w-4" />}
+                      label="重命名"
+                      onClick={() => {
+                        startRename(obj);
+                        close();
+                      }}
+                    />
+                    <Item
+                      icon={<ArrowRightLeft className="h-4 w-4" />}
+                      label="移动"
+                      onClick={() => {
+                        startMove(obj);
+                        close();
+                      }}
+                    />
+                    <Item
+                      icon={<Trash2 className="h-4 w-4" />}
+                      label="删除"
+                      danger
+                      onClick={() => {
+                        if (obj.isDirectory) {
+                          deleteFolder(obj.key, obj.name);
+                        } else {
+                          deleteFile(obj.key);
+                        }
+                        close();
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          );
+        })()}
 
       {/* Folder Stats Modal */}
       {folderStats && (
-        <FolderStatsModal name={folderStats.name} stats={folderStats.stats} onClose={() => setFolderStats(null)} />
+        <FolderStatsModal
+          name={folderStats.name}
+          stats={folderStats.stats}
+          onClose={() => setFolderStats(null)}
+        />
       )}
 
       {/* ⌘K Command Palette */}
       {cmdOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm flex items-start justify-center pt-[12vh] p-4" onClick={() => setCmdOpen(false)}>
-          <div className="w-full max-w-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm flex items-start justify-center pt-[12vh] p-4"
+          onClick={() => setCmdOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-2 px-4 border-b border-zinc-200 dark:border-zinc-700">
               <Search className="h-4 w-4 text-zinc-400 shrink-0" />
               <input
                 autoFocus
                 value={cmdQuery}
-                onChange={(e) => { setCmdQuery(e.target.value); setCmdIndex(0); }}
+                onChange={(e) => {
+                  setCmdQuery(e.target.value);
+                  setCmdIndex(0);
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") { e.preventDefault(); setCmdIndex((i) => Math.min(i + 1, flatCmdItems.length - 1)); }
-                  else if (e.key === "ArrowUp") { e.preventDefault(); setCmdIndex((i) => Math.max(i - 1, 0)); }
-                  else if (e.key === "Enter") { e.preventDefault(); if (flatCmdItems[cmdIndex]) execCmdItem(flatCmdItems[cmdIndex]); }
-                  else if (e.key === "Escape") { setCmdOpen(false); }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setCmdIndex((i) =>
+                      Math.min(i + 1, flatCmdItems.length - 1),
+                    );
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setCmdIndex((i) => Math.max(i - 1, 0));
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (flatCmdItems[cmdIndex])
+                      execCmdItem(flatCmdItems[cmdIndex]);
+                  } else if (e.key === 'Escape') {
+                    setCmdOpen(false);
+                  }
                 }}
                 placeholder="搜索文件或命令…"
                 className="w-full py-3 bg-transparent text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none"
               />
-              <kbd className="text-[10px] text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5">ESC</kbd>
+              <kbd className="text-[10px] text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5">
+                ESC
+              </kbd>
             </div>
             <div className="max-h-[50vh] overflow-y-auto py-1">
               {flatCmdItems.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-zinc-400">无匹配结果</div>
-              ) : flatCmdItems.map((item, i) => {
-                const Icon = item.kind === "cmd" ? item.icon : null;
-                const FileIcon = item.kind === "file" && !item.obj.isDirectory ? fileTypeIcon(getFileType(item.obj.name)) : null;
-                return (
-                  <button
-                    key={i}
-                    onMouseEnter={() => setCmdIndex(i)}
-                    onClick={() => execCmdItem(item)}
-                    className={`flex items-center gap-3 w-full px-4 py-2 text-left text-sm ${i === cmdIndex ? "bg-blue-500/10 text-blue-600 dark:text-blue-300" : "text-zinc-700 dark:text-zinc-200"} ${item.kind === "cmd" && item.disabled ? "opacity-40" : ""}`}
-                  >
-                    {item.kind === "cmd" && Icon ? <Icon className="h-4 w-4 shrink-0" />
-                      : item.kind === "file" ? (item.obj.isDirectory ? <Folder className="h-4 w-4 text-blue-500 shrink-0" /> : FileIcon ? <FileIcon className="h-4 w-4 text-zinc-400 shrink-0" /> : null)
-                      : <Star className="h-4 w-4 text-yellow-500 shrink-0" />}
-                    <span className="truncate flex-1">{item.kind === "cmd" ? item.label : item.kind === "file" ? item.obj.name : item.fav.name}</span>
-                    {item.kind === "file" && item.obj.isDirectory && <span className="text-xs text-zinc-400">文件夹</span>}
-                    {item.kind === "fav" && <span className="text-xs text-zinc-400">收藏</span>}
-                  </button>
-                );
-              })}
+                <div className="px-4 py-8 text-center text-sm text-zinc-400">
+                  无匹配结果
+                </div>
+              ) : (
+                flatCmdItems.map((item, i) => {
+                  const Icon = item.kind === 'cmd' ? item.icon : null;
+                  const FileIcon =
+                    item.kind === 'file' && !item.obj.isDirectory
+                      ? fileTypeIcon(getFileType(item.obj.name))
+                      : null;
+                  return (
+                    <button
+                      key={i}
+                      onMouseEnter={() => setCmdIndex(i)}
+                      onClick={() => execCmdItem(item)}
+                      className={`flex items-center gap-3 w-full px-4 py-2 text-left text-sm ${i === cmdIndex ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300' : 'text-zinc-700 dark:text-zinc-200'} ${item.kind === 'cmd' && item.disabled ? 'opacity-40' : ''}`}
+                    >
+                      {item.kind === 'cmd' && Icon ? (
+                        <Icon className="h-4 w-4 shrink-0" />
+                      ) : item.kind === 'file' ? (
+                        item.obj.isDirectory ? (
+                          <Folder className="h-4 w-4 text-blue-500 shrink-0" />
+                        ) : FileIcon ? (
+                          <FileIcon className="h-4 w-4 text-zinc-400 shrink-0" />
+                        ) : null
+                      ) : (
+                        <Star className="h-4 w-4 text-yellow-500 shrink-0" />
+                      )}
+                      <span className="truncate flex-1">
+                        {item.kind === 'cmd'
+                          ? item.label
+                          : item.kind === 'file'
+                            ? item.obj.name
+                            : item.fav.name}
+                      </span>
+                      {item.kind === 'file' && item.obj.isDirectory && (
+                        <span className="text-xs text-zinc-400">文件夹</span>
+                      )}
+                      {item.kind === 'fav' && (
+                        <span className="text-xs text-zinc-400">收藏</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
             </div>
             <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 flex items-center gap-3 text-[11px] text-zinc-400">
-              <span>↑↓ 导航</span><span>↵ 执行</span><span>esc 关闭</span>
+              <span>↑↓ 导航</span>
+              <span>↵ 执行</span>
+              <span>esc 关闭</span>
               <span className="ml-auto">⌘K 呼出</span>
             </div>
           </div>
@@ -5233,7 +7391,15 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       )}
 
       {(scanning || scanResults) && (
-        <ScanModal results={scanResults} scanning={scanning} onNavigate={navigateToParent} onClose={() => { setScanResults(null); setScanning(false); }} />
+        <ScanModal
+          results={scanResults}
+          scanning={scanning}
+          onNavigate={navigateToParent}
+          onClose={() => {
+            setScanResults(null);
+            setScanning(false);
+          }}
+        />
       )}
     </div>
   );
@@ -5241,24 +7407,41 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
 
 // 分享过期倒计时：每秒刷新剩余时间
 function ShareExpiryCountdown({ expiresAt }: { expiresAt: string }) {
-  const [remaining, setRemaining] = useState(() => new Date(expiresAt).getTime() - Date.now());
+  const [remaining, setRemaining] = useState(
+    () => new Date(expiresAt).getTime() - Date.now(),
+  );
   useEffect(() => {
-    const t = setInterval(() => setRemaining(new Date(expiresAt).getTime() - Date.now()), 1000);
+    const t = setInterval(
+      () => setRemaining(new Date(expiresAt).getTime() - Date.now()),
+      1000,
+    );
     return () => clearInterval(t);
   }, [expiresAt]);
 
   if (remaining <= 0) {
-    return <div className="text-xs text-red-500 dark:text-red-400 font-medium">该分享已过期</div>;
+    return (
+      <div className="text-xs text-red-500 dark:text-red-400 font-medium">
+        该分享已过期
+      </div>
+    );
   }
   const total = Math.floor(remaining / 1000);
   const d = Math.floor(total / 86400);
   const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  const text = d > 0 ? `${d}天 ${h}小时 ${m}分 ${s}秒` : h > 0 ? `${h}小时 ${m}分 ${s}秒` : `${m}分 ${s}秒`;
+  const text =
+    d > 0
+      ? `${d}天 ${h}小时 ${m}分 ${s}秒`
+      : h > 0
+        ? `${h}小时 ${m}分 ${s}秒`
+        : `${m}分 ${s}秒`;
   return (
     <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2">
-      剩余有效时间：<span className="font-medium text-zinc-700 dark:text-zinc-300">{text}</span>
+      剩余有效时间：
+      <span className="font-medium text-zinc-700 dark:text-zinc-300">
+        {text}
+      </span>
     </div>
   );
 }
@@ -5266,7 +7449,9 @@ function ShareExpiryCountdown({ expiresAt }: { expiresAt: string }) {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const [isAdmin, setIsAdmin] = useState(loaderData.isAdmin);
   const [storages, setStorages] = useState<StorageInfo[]>(loaderData.storages);
-  const [selectedStorage, setSelectedStorage] = useState<StorageInfo | null>(null);
+  const [selectedStorage, setSelectedStorage] = useState<StorageInfo | null>(
+    null,
+  );
   const [showLogin, setShowLogin] = useState(false);
   const [showStorageForm, setShowStorageForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -5274,32 +7459,34 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [statsStorage, setStatsStorage] = useState<StorageInfo | null>(null);
-  const [editingStorage, setEditingStorage] = useState<StorageInfo | null>(null);
+  const [editingStorage, setEditingStorage] = useState<StorageInfo | null>(
+    null,
+  );
   const [isDark, setIsDark] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
-  const siteTitle = loaderData.siteTitle || "Starx";
-  const siteAnnouncement = loaderData.siteAnnouncement || "";
+  const siteTitle = loaderData.siteTitle || 'Starx';
+  const siteAnnouncement = loaderData.siteAnnouncement || '';
   const chunkSizeMB = loaderData.chunkSizeMB || 50;
   const webdavEnabled = loaderData.webdavEnabled || false;
 
   useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved === "light") {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light') {
       setIsDark(false);
-      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.remove('dark');
     } else {
-      document.documentElement.classList.add("dark");
+      document.documentElement.classList.add('dark');
     }
 
     // Show announcement on first visit (per session)
     if (siteAnnouncement) {
-      const announcementShown = sessionStorage.getItem("announcement_shown");
+      const announcementShown = sessionStorage.getItem('announcement_shown');
       if (!announcementShown) {
         setShowAnnouncement(true);
-        sessionStorage.setItem("announcement_shown", "true");
+        sessionStorage.setItem('announcement_shown', 'true');
       }
     }
   }, [siteAnnouncement]);
@@ -5308,124 +7495,147 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   // 弹窗内处理：显示结果后自动关闭弹窗；主窗口通过 postMessage 触发存储刷新
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const oauth = params.get("oauth");
+    const oauth = params.get('oauth');
     if (!oauth) {
       return;
     }
-    if (oauth === "google-success") {
-      toast("Google Drive 授权成功，刷新令牌已保存", "success");
-    } else if (oauth === "google-error") {
-      toast(`Google Drive 授权失败：${params.get("reason") || "未知错误"}`, "error");
-    } else if (oauth === "microsoft-success") {
-      toast("OneDrive 授权成功，令牌已保存", "success");
-    } else if (oauth === "microsoft-error") {
-      toast(`OneDrive 授权失败：${params.get("reason") || "未知错误"}`, "error");
-    } else if (oauth === "cloudflare-success") {
-      toast("Cloudflare R2 授权成功，令牌已保存", "success");
-    } else if (oauth === "cloudflare-error") {
-      toast(`Cloudflare R2 授权失败：${params.get("reason") || "未知错误"}`, "error");
+    if (oauth === 'google-success') {
+      toast('Google Drive 授权成功，刷新令牌已保存', 'success');
+    } else if (oauth === 'google-error') {
+      toast(
+        `Google Drive 授权失败：${params.get('reason') || '未知错误'}`,
+        'error',
+      );
+    } else if (oauth === 'microsoft-success') {
+      toast('OneDrive 授权成功，令牌已保存', 'success');
+    } else if (oauth === 'microsoft-error') {
+      toast(
+        `OneDrive 授权失败：${params.get('reason') || '未知错误'}`,
+        'error',
+      );
+    } else if (oauth === 'cloudflare-success') {
+      toast('Cloudflare R2 授权成功，令牌已保存', 'success');
+    } else if (oauth === 'cloudflare-error') {
+      toast(
+        `Cloudflare R2 授权失败：${params.get('reason') || '未知错误'}`,
+        'error',
+      );
     }
-    params.delete("oauth");
-    params.delete("reason");
+    params.delete('oauth');
+    params.delete('reason');
     const query = params.toString();
-    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+    window.history.replaceState(
+      null,
+      '',
+      query ? `?${query}` : window.location.pathname,
+    );
     // 该窗口若是 OAuth 弹窗（脚本打开的窗口可自关），处理完自动关闭
     if (window.opener === null) {
       window.close();
     }
   }, [toast]);
 
-  const toggleTheme = useCallback((event: React.MouseEvent) => {
-    const newIsDark = !isDark;
+  const toggleTheme = useCallback(
+    (event: React.MouseEvent) => {
+      const newIsDark = !isDark;
 
-    const changeTheme = () => {
-      setIsDark(newIsDark);
-      if (newIsDark) {
-        document.documentElement.classList.add("dark");
-        localStorage.setItem("theme", "dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-        localStorage.setItem("theme", "light");
-      }
-    };
-
-    if (!document.startViewTransition) {
-      changeTheme();
-      return;
-    }
-
-    const x = event.clientX;
-    const y = event.clientY;
-    const endRadius = Math.hypot(
-      Math.max(x, window.innerWidth - x),
-      Math.max(y, window.innerHeight - y)
-    );
-
-    const transition = document.startViewTransition(() => {
-      changeTheme();
-    });
-
-    transition.ready.then(() => {
-      const clipPath = [
-        `circle(0px at ${x}px ${y}px)`,
-        `circle(${endRadius}px at ${x}px ${y}px)`,
-      ];
-      document.documentElement.animate(
-        { clipPath: isDark ? clipPath : clipPath.reverse() },
-        {
-          duration: 400,
-          easing: "ease-in-out",
-          pseudoElement: isDark
-            ? "::view-transition-new(root)"
-            : "::view-transition-old(root)",
+      const changeTheme = () => {
+        setIsDark(newIsDark);
+        if (newIsDark) {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('theme', 'dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('theme', 'light');
         }
+      };
+
+      if (!document.startViewTransition) {
+        changeTheme();
+        return;
+      }
+
+      const x = event.clientX;
+      const y = event.clientY;
+      const endRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y),
       );
-    });
-  }, [isDark]);
+
+      const transition = document.startViewTransition(() => {
+        changeTheme();
+      });
+
+      transition.ready.then(() => {
+        const clipPath = [
+          `circle(0px at ${x}px ${y}px)`,
+          `circle(${endRadius}px at ${x}px ${y}px)`,
+        ];
+        document.documentElement.animate(
+          { clipPath: isDark ? clipPath : clipPath.reverse() },
+          {
+            duration: 400,
+            easing: 'ease-in-out',
+            pseudoElement: isDark
+              ? '::view-transition-new(root)'
+              : '::view-transition-old(root)',
+          },
+        );
+      });
+    },
+    [isDark],
+  );
 
   const refreshStorages = async () => {
     try {
-      const res = await fetch("/api/storages");
+      const res = await fetch('/api/storages');
       if (res.ok) {
-        const data = (await res.json()) as { storages: StorageInfo[]; isAdmin: boolean };
+        const data = (await res.json()) as {
+          storages: StorageInfo[];
+          isAdmin: boolean;
+        };
         setStorages(data.storages);
         setIsAdmin(data.isAdmin);
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/storages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "logout" }),
+      await fetch('/api/storages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
       });
       setIsAdmin(false);
       setSelectedStorage(null);
       refreshStorages();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   const handleDeleteStorage = async (s: StorageInfo) => {
     const ok = await confirm({
-      title: "删除存储",
+      title: '删除存储',
       message: `删除存储 "${s.name}"？此操作会同时移除其分享链接，但不会删除云端文件。`,
-      confirmText: "删除",
+      confirmText: '删除',
       danger: true,
     });
     if (!ok) return;
     try {
-      const res = await fetch(`/api/storages?id=${s.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/storages?id=${s.id}`, { method: 'DELETE' });
       if (res.ok) {
         if (selectedStorage?.id === s.id) setSelectedStorage(null);
         refreshStorages();
-        toast(`已删除存储 "${s.name}"`, "success");
+        toast(`已删除存储 "${s.name}"`, 'success');
       } else {
-        toast("删除存储失败", "error");
+        toast('删除存储失败', 'error');
       }
     } catch {
-      toast("网络错误", "error");
+      toast('网络错误', 'error');
     }
   };
 
@@ -5441,13 +7651,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <span className="text-lg font-bold tracking-tight">Starx</span>
           </div>
           <div className="flex-1 text-center min-w-0">
-            <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate block">{siteTitle}</span>
+            <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate block">
+              {siteTitle}
+            </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={toggleTheme}
               className="icon-btn h-8 w-8"
-              title={isDark ? "切换到亮色" : "切换到暗色"}
+              title={isDark ? '切换到亮色' : '切换到暗色'}
               aria-label="切换主题"
             >
               {isDark ? <Sun /> : <Moon />}
@@ -5491,13 +7703,20 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}
-        <aside className={`${sidebarCollapsed ? "w-0" : "w-64"} border-r border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900/50 flex flex-col transition-all duration-300 overflow-hidden relative`}>
+        <aside
+          className={`${sidebarCollapsed ? 'w-0' : 'w-64'} border-r border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900/50 flex flex-col transition-all duration-300 overflow-hidden relative`}
+        >
           <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
-            <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider whitespace-nowrap">存储列表</span>
+            <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider whitespace-nowrap">
+              存储列表
+            </span>
             <div className="flex items-center gap-1">
               {isAdmin && (
                 <button
-                  onClick={() => { setEditingStorage(null); setShowStorageForm(true); }}
+                  onClick={() => {
+                    setEditingStorage(null);
+                    setShowStorageForm(true);
+                  }}
                   className="icon-btn h-7 w-7 text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10"
                   title="添加存储"
                   aria-label="添加存储"
@@ -5526,28 +7745,37 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   key={s.id}
                   className={`group flex items-center justify-between mx-1 my-0.5 rounded-lg pl-3 pr-1.5 py-2 cursor-pointer transition-colors ${
                     selectedStorage?.id === s.id
-                      ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
+                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
+                      : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
                   }`}
                   onClick={() => setSelectedStorage(s)}
                   onTouchStart={() => setSelectedStorage(s)}
                 >
                   <div className="min-w-0 flex-1">
-                    <div className={`text-sm font-medium truncate ${selectedStorage?.id === s.id ? "" : "text-zinc-700 dark:text-zinc-300"}`}>
+                    <div
+                      className={`text-sm font-medium truncate ${selectedStorage?.id === s.id ? '' : 'text-zinc-700 dark:text-zinc-300'}`}
+                    >
                       {s.name}
                     </div>
-                    <span className={`mt-0.5 inline-flex items-center gap-1 text-xs ${s.isPublic ? "text-green-600 dark:text-green-400" : "text-zinc-400 dark:text-zinc-500"}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${s.isPublic ? "bg-green-500" : "bg-zinc-400 dark:bg-zinc-600"}`} />
-                      {s.isPublic ? "公开" : "私有"}
+                    <span
+                      className={`mt-0.5 inline-flex items-center gap-1 text-xs ${s.isPublic ? 'text-green-600 dark:text-green-400' : 'text-zinc-400 dark:text-zinc-500'}`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${s.isPublic ? 'bg-green-500' : 'bg-zinc-400 dark:bg-zinc-600'}`}
+                      />
+                      {s.isPublic ? '公开' : '私有'}
                     </span>
                   </div>
                   {isAdmin && (
-                    <div 
-                        className="flex items-center gap-0.5"
-                        onClick={(e) => e.stopPropagation()}
-                     >
+                    <div
+                      className="flex items-center gap-0.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
-                        onClick={() => { setStatsStorage(s); setShowStats(true); }}
+                        onClick={() => {
+                          setStatsStorage(s);
+                          setShowStats(true);
+                        }}
                         className="icon-btn h-7 w-7"
                         title="统计"
                         aria-label="统计"
@@ -5555,7 +7783,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                         <BarChart3 />
                       </button>
                       <button
-                        onClick={() => { setEditingStorage(s); setShowStorageForm(true); }}
+                        onClick={() => {
+                          setEditingStorage(s);
+                          setShowStorageForm(true);
+                        }}
                         className="icon-btn h-7 w-7"
                         title="编辑"
                         aria-label="编辑"
@@ -5593,14 +7824,22 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {/* Main */}
         <main className="flex-1 bg-zinc-50 dark:bg-zinc-900 min-w-0 overflow-hidden">
           {selectedStorage ? (
-            selectedStorage.type === "mysql" ? (
+            selectedStorage.type === 'mysql' ? (
               <div className="p-4">
-                <a href={`/mysql/${selectedStorage.id}`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                <a
+                  href={`/mysql/${selectedStorage.id}`}
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
                   前往 MySQL 浏览器: {selectedStorage.name}
                 </a>
               </div>
             ) : (
-              <FileBrowser storage={selectedStorage} isAdmin={isAdmin} isDark={isDark} chunkSizeMB={chunkSizeMB} />
+              <FileBrowser
+                storage={selectedStorage}
+                isAdmin={isAdmin}
+                isDark={isDark}
+                chunkSizeMB={chunkSizeMB}
+              />
             )
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400 dark:text-zinc-600">
@@ -5613,22 +7852,32 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* Footer */}
       <footer className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2">
-        <div className="flex items-center justify-center gap-3 text-xs text-zinc-500 dark:text-zinc-500">
-        </div>
+        <div className="flex items-center justify-center gap-3 text-xs text-zinc-500 dark:text-zinc-500"></div>
       </footer>
 
       {/* Modals */}
       {showLogin && (
         <LoginModal
-          onLogin={() => { setShowLogin(false); refreshStorages(); setIsAdmin(true); }}
+          onLogin={() => {
+            setShowLogin(false);
+            refreshStorages();
+            setIsAdmin(true);
+          }}
           onClose={() => setShowLogin(false)}
         />
       )}
       {showStorageForm && (
         <StorageModal
           storage={editingStorage || undefined}
-          onSave={() => { setShowStorageForm(false); setEditingStorage(null); refreshStorages(); }}
-          onCancel={() => { setShowStorageForm(false); setEditingStorage(null); }}
+          onSave={() => {
+            setShowStorageForm(false);
+            setEditingStorage(null);
+            refreshStorages();
+          }}
+          onCancel={() => {
+            setShowStorageForm(false);
+            setEditingStorage(null);
+          }}
         />
       )}
       {showSettings && (
@@ -5656,7 +7905,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {showStats && statsStorage && (
         <StorageStatsModal
           storage={statsStorage}
-          onClose={() => { setShowStats(false); setStatsStorage(null); }}
+          onClose={() => {
+            setShowStats(false);
+            setStatsStorage(null);
+          }}
         />
       )}
     </div>

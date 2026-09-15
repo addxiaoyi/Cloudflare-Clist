@@ -1,0 +1,83 @@
+import tseslint from "typescript-eslint";
+import reactPlugin from "eslint-plugin-react";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
+
+export default [
+  {
+    files: ["app/**/*.{ts,tsx}", "workers/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        project: "./tsconfig.cloudflare.json",
+        tsconfigRootDir: import.meta.dirname,
+      },
+      parser: tseslint.parser,
+      globals: {
+        console: "readonly",
+        module: "readonly",
+        process: "readonly",
+        require: "readonly",
+        __dirname: "readonly",
+        fetch: "readonly",
+        Request: "readonly",
+        Response: "readonly",
+        Headers: "readonly",
+        FormData: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        ReadableStream: "readonly",
+        WritableStream: "readonly",
+        TransformStream: "readonly",
+        crypto: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        ArrayBuffer: "readonly",
+        Uint8Array: "readonly",
+        Blob: "readonly",
+        File: "readonly",
+        FileReader: "readonly",
+        localStorage: "readonly",
+        sessionStorage: "readonly",
+        document: "readonly",
+        window: "readonly",
+        navigator: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        alert: "readonly",
+        confirm: "readonly",
+        prompt: "readonly",
+        React: "readonly",
+        JSX: "readonly",
+      },
+    },
+  },
+  ...tseslint.configs.recommended,
+  {
+    plugins: {
+      react: reactPlugin,
+      "react-hooks": reactHooksPlugin,
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "no-unused-vars": "off",
+      "react/react-in-jsx-scope": "off",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+      "@typescript-eslint/no-unused-expressions": "error",
+    },
+  },
+  {
+    ignores: [
+      "node_modules/**",
+      "dist/**",
+      "build/**",
+      ".wrangler/**",
+      "coverage/**",
+      ".react-router/**",
+      "*.config.*",
+      "scripts/**",
+    ],
+  },
+];

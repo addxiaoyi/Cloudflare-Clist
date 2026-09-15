@@ -1,8 +1,8 @@
-import type { Route } from "./+types/share";
+import type { Route } from './+types/share';
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  const token = url.searchParams.get("token");
+  const token = url.searchParams.get('token');
 
   if (!token) {
     return { token: null };
@@ -11,11 +11,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { token };
 }
 
-import { useState, useEffect } from "react";
-import { FilePreview } from "~/components/FilePreview";
-import { Folder, Download, Link as LinkIcon, Clock, AlertCircle, ChevronRight, Play, Lock, fileTypeIcon } from "~/components/icons";
-import { getFileType } from "~/lib/file-utils";
-import { apiFileUrl } from "~/lib/api-path";
+import { useState, useEffect, useCallback } from 'react';
+import { FilePreview } from '~/components/FilePreview';
+import {
+  Folder,
+  Download,
+  Link as LinkIcon,
+  Clock,
+  AlertCircle,
+  ChevronRight,
+  Play,
+  Lock,
+  fileTypeIcon,
+} from '~/components/icons';
+import { getFileType } from '~/lib/file-utils';
+import { apiFileUrl } from '~/lib/api-path';
 
 interface S3Object {
   key: string;
@@ -42,17 +52,17 @@ interface StorageInfo {
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "-";
+  if (bytes === 0) return '-';
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return "-";
+  if (!dateStr) return '-';
   const date = new Date(dateStr);
-  return date.toLocaleString("zh-CN");
+  return date.toLocaleString('zh-CN');
 }
 
 function getFileIcon(name: string) {
@@ -64,19 +74,19 @@ export default function Share({ loaderData }: Route.ComponentProps) {
   const { token } = loaderData as { token: string | null };
   const [share, setShare] = useState<Share | null>(null);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState('');
   const [objects, setObjects] = useState<S3Object[]>([]);
   const [previewFile, setPreviewFile] = useState<S3Object | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [accessPassword, setAccessPassword] = useState("");
+  const [error, setError] = useState('');
+  const [accessPassword, setAccessPassword] = useState('');
   const [passwordVerified, setPasswordVerified] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
+  const [passwordError, setPasswordError] = useState('');
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     if (!token) {
-      setError("分享令牌缺失");
+      setError('分享令牌缺失');
       setLoading(false);
       return;
     }
@@ -85,15 +95,18 @@ export default function Share({ loaderData }: Route.ComponentProps) {
       try {
         const res = await fetch(`/api/shares?token=${token}`);
         if (res.ok) {
-          const data = (await res.json()) as { share: Share; storage: StorageInfo };
+          const data = (await res.json()) as {
+            share: Share;
+            storage: StorageInfo;
+          };
           setShare(data.share);
           setStorage(data.storage);
         } else {
           const data = (await res.json()) as { error?: string };
-          setError(data.error || "分享链接不存在或已过期");
+          setError(data.error || '分享链接不存在或已过期');
         }
       } catch {
-        setError("网络错误");
+        setError('网络错误');
       } finally {
         setLoading(false);
       }
@@ -102,13 +115,7 @@ export default function Share({ loaderData }: Route.ComponentProps) {
     fetchShareInfo();
   }, [token]);
 
-  useEffect(() => {
-    if (share && storage && (!share.hasPassword || passwordVerified)) {
-      loadFiles();
-    }
-  }, [share, storage, path, passwordVerified]);
-
-  const loadFiles = async () => {
+  const loadFiles = useCallback(async () => {
     if (!share || !storage || !token) return;
 
     setLoading(true);
@@ -117,7 +124,7 @@ export default function Share({ loaderData }: Route.ComponentProps) {
       // If sharing a single file and at root level, show the file itself
       if (!share.isDirectory && !path) {
         // Create a single object representing the shared file
-        const fileName = share.filePath.split("/").pop() || share.filePath;
+        const fileName = share.filePath.split('/').pop() || share.filePath;
         const fileObj: S3Object = {
           key: share.filePath,
           name: fileName,
@@ -134,7 +141,7 @@ export default function Share({ loaderData }: Route.ComponentProps) {
       const fullPath = path ? `${basePath}/${path}` : basePath;
 
       const res = await fetch(
-        `${apiFileUrl(storage.id, fullPath)}?action=list&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ""}`
+        `${apiFileUrl(storage.id, fullPath)}?action=list&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ''}`,
       );
 
       if (res.ok) {
@@ -142,71 +149,84 @@ export default function Share({ loaderData }: Route.ComponentProps) {
         setObjects(data.objects || []);
       } else {
         const data = (await res.json()) as { error?: string };
-        setError(data.error || "加载失败");
+        setError(data.error || '加载失败');
       }
     } catch {
-      setError("网络错误");
+      setError('网络错误');
     } finally {
       setLoading(false);
     }
-  };
+  }, [share, storage, token, path, accessPassword]);
+
+  useEffect(() => {
+    if (share && storage && (!share.hasPassword || passwordVerified)) {
+      loadFiles();
+    }
+  }, [share, storage, path, passwordVerified, loadFiles]);
 
   const navigateTo = (newPath: string) => {
     // If sharing a single file, don't allow navigation
     if (!share?.isDirectory) return;
-    setPath(newPath.replace(/^\//, "").replace(/\/$/, ""));
+    setPath(newPath.replace(/^\//, '').replace(/\/$/, ''));
   };
 
   const downloadFile = async (key: string) => {
-    const query = `action=download&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ""}`;
+    const query = `action=download&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ''}`;
     try {
       const res = await fetch(`${apiFileUrl(storage!.id, key)}?${query}`);
       if (res.status === 429) {
-        const data = await res.json().catch(() => null) as { error?: string } | null;
-        alert(data?.error || "下载过于频繁，请稍后再试");
+        const data = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        alert(data?.error || '下载过于频繁，请稍后再试');
         return;
       }
       if (!res.ok) {
-        alert("下载失败，请稍后再试");
+        alert('下载失败，请稍后再试');
         return;
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
-      a.download = key.split("/").pop() || "download";
+      a.download = key.split('/').pop() || 'download';
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      alert("网络错误");
+      alert('网络错误');
     }
   };
 
   const verifyPassword = async () => {
-    setPasswordError("");
+    setPasswordError('');
     setVerifying(true);
     try {
-      const res = await fetch("/api/shares", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "verify", token, password: accessPassword }),
+      const res = await fetch('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify',
+          token,
+          password: accessPassword,
+        }),
       });
       const data = (await res.json()) as { success?: boolean; error?: string };
       if (res.ok && data.success) {
         setPasswordVerified(true);
       } else {
-        setPasswordError(data.error || "密码错误，请重试");
+        setPasswordError(data.error || '密码错误，请重试');
       }
     } catch {
-      setPasswordError("网络错误");
+      setPasswordError('网络错误');
     } finally {
       setVerifying(false);
     }
   };
 
-  const canPreviewImage = (obj: S3Object) => !obj.isDirectory && getFileType(obj.name) === "image";
+  const canPreviewImage = (obj: S3Object) =>
+    !obj.isDirectory && getFileType(obj.name) === 'image';
 
   if (error && !share) {
     return (
@@ -236,21 +256,33 @@ export default function Share({ loaderData }: Route.ComponentProps) {
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-600/20">
               <Lock className="h-5 w-5" />
             </span>
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">需要访问密码</h2>
-            <p className="text-xs text-zinc-500">该分享受密码保护，请输入密码继续访问</p>
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+              需要访问密码
+            </h2>
+            <p className="text-xs text-zinc-500">
+              该分享受密码保护，请输入密码继续访问
+            </p>
           </div>
           <input
             type="password"
             value={accessPassword}
             onChange={(e) => setAccessPassword(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !verifying) verifyPassword(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !verifying) verifyPassword();
+            }}
             placeholder="输入访问密码"
             className="field"
             autoFocus
           />
-          {passwordError && <div className="mt-2 text-xs text-red-500">{passwordError}</div>}
-          <button onClick={verifyPassword} disabled={verifying || !accessPassword} className="btn btn-primary w-full py-2 mt-3">
-            {verifying ? "验证中…" : "验证"}
+          {passwordError && (
+            <div className="mt-2 text-xs text-red-500">{passwordError}</div>
+          )}
+          <button
+            onClick={verifyPassword}
+            disabled={verifying || !accessPassword}
+            className="btn btn-primary w-full py-2 mt-3"
+          >
+            {verifying ? '验证中…' : '验证'}
           </button>
         </div>
       </div>
@@ -268,7 +300,14 @@ export default function Share({ loaderData }: Route.ComponentProps) {
           <div>
             <div className="text-lg font-bold tracking-tight">分享内容</div>
             <div className="text-xs text-zinc-500 mt-0.5">
-              存储: <span className="text-zinc-700 dark:text-zinc-300">{storage.name}</span> · 项目: <span className="text-zinc-700 dark:text-zinc-300">{share.filePath}</span>
+              存储:{' '}
+              <span className="text-zinc-700 dark:text-zinc-300">
+                {storage.name}
+              </span>{' '}
+              · 项目:{' '}
+              <span className="text-zinc-700 dark:text-zinc-300">
+                {share.filePath}
+              </span>
             </div>
             {share.expiresAt && (
               <div className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 mt-1">
@@ -283,17 +322,17 @@ export default function Share({ loaderData }: Route.ComponentProps) {
       {/* Breadcrumb */}
       <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40 shrink-0 flex items-center gap-0.5 text-sm overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
-          onClick={() => setPath("")}
+          onClick={() => setPath('')}
           className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 font-medium text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-400 shrink-0"
         >
           <Folder className="h-4 w-4 text-blue-500" />
           根目录
         </button>
         {path
-          .split("/")
+          .split('/')
           .filter(Boolean)
           .map((part, index, arr) => {
-            const fullPath = arr.slice(0, index + 1).join("/");
+            const fullPath = arr.slice(0, index + 1).join('/');
             return (
               <div key={fullPath} className="flex items-center shrink-0">
                 <ChevronRight className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />
@@ -329,10 +368,18 @@ export default function Share({ loaderData }: Route.ComponentProps) {
           <table className="w-full text-sm">
             <thead className="text-xs text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur">
               <tr>
-                <th className="text-left py-2.5 px-6 font-medium uppercase tracking-wider">名称</th>
-                <th className="text-right py-2.5 px-6 font-medium uppercase tracking-wider w-28">大小</th>
-                <th className="text-right py-2.5 px-6 font-medium uppercase tracking-wider w-44">修改时间</th>
-                <th className="text-right py-2.5 px-6 font-medium uppercase tracking-wider w-20">操作</th>
+                <th className="text-left py-2.5 px-6 font-medium uppercase tracking-wider">
+                  名称
+                </th>
+                <th className="text-right py-2.5 px-6 font-medium uppercase tracking-wider w-28">
+                  大小
+                </th>
+                <th className="text-right py-2.5 px-6 font-medium uppercase tracking-wider w-44">
+                  修改时间
+                </th>
+                <th className="text-right py-2.5 px-6 font-medium uppercase tracking-wider w-20">
+                  操作
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -352,13 +399,15 @@ export default function Share({ loaderData }: Route.ComponentProps) {
                       </button>
                     ) : (
                       <span className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                        <span className="text-zinc-400 dark:text-zinc-500">{getFileIcon(obj.name)}</span>
+                        <span className="text-zinc-400 dark:text-zinc-500">
+                          {getFileIcon(obj.name)}
+                        </span>
                         <span className="truncate">{obj.name}</span>
                       </span>
                     )}
                   </td>
                   <td className="py-2 px-6 text-right text-zinc-500 tabular-nums">
-                    {obj.isDirectory ? "-" : formatBytes(obj.size)}
+                    {obj.isDirectory ? '-' : formatBytes(obj.size)}
                   </td>
                   <td className="py-2 px-6 text-right text-zinc-500 tabular-nums">
                     {formatDate(obj.lastModified)}

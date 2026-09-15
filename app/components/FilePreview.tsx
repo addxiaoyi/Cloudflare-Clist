@@ -1,11 +1,26 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { getFileType, formatDuration, getCodeLanguage, getMimeType, type FileType } from "~/lib/file-utils";
-import { apiFileUrl } from "~/lib/api-path";
-import { useToast } from "~/components/feedback";
-import hljs from "highlight.js";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
-import { X, Download, Play, Pause, RefreshCw, AlertCircle, Pencil, Check } from "~/components/icons";
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  getFileType,
+  formatDuration,
+  getCodeLanguage,
+  getMimeType,
+  type FileType,
+} from '~/lib/file-utils';
+import { apiFileUrl } from '~/lib/api-path';
+import { useToast } from '~/components/feedback';
+import hljs from 'highlight.js';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import {
+  X,
+  Download,
+  Play,
+  Pause,
+  RefreshCw,
+  AlertCircle,
+  Pencil,
+  Check,
+} from '~/components/icons';
 
 interface FilePreviewProps {
   storageId: number;
@@ -43,52 +58,63 @@ export function FilePreview({
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
-  useEffect(() => { setMediaInfo(null); }, [fileKey]);
+  useEffect(() => {
+    setMediaInfo(null);
+  }, [fileKey]);
   // 图片幻灯片自动轮播
   useEffect(() => {
-    if (!autoPlay || fileType !== "image" || !hasNext || !onNext) return;
+    if (!autoPlay || fileType !== 'image' || !hasNext || !onNext) return;
     const t = setInterval(() => onNext(), 3500);
     return () => clearInterval(t);
   }, [autoPlay, fileType, hasNext, onNext]);
   const inlineFileUrl = apiFileUrl(storageId, fileKey);
   const queryParams = [
-    shareToken ? `token=${encodeURIComponent(shareToken)}` : "",
-    password ? `password=${encodeURIComponent(password)}` : "",
-  ].filter(Boolean).join("&");
-  const inlineFileUrlWithToken = queryParams ? `${inlineFileUrl}?${queryParams}` : inlineFileUrl;
-  const downloadFileUrl = `${inlineFileUrl}?action=download${queryParams ? `&${queryParams}` : ""}`;
+    shareToken ? `token=${encodeURIComponent(shareToken)}` : '',
+    password ? `password=${encodeURIComponent(password)}` : '',
+  ]
+    .filter(Boolean)
+    .join('&');
+  const inlineFileUrlWithToken = queryParams
+    ? `${inlineFileUrl}?${queryParams}`
+    : inlineFileUrl;
+  const downloadFileUrl = `${inlineFileUrl}?action=download${queryParams ? `&${queryParams}` : ''}`;
   // 图片走 inline 直链；PDF 走 download + inline 参数（避免 iframe 触发下载）；其余走 download
-  const previewFileUrlWithToken = fileType === "image"
-    ? inlineFileUrlWithToken
-    : fileType === "pdf"
-    ? `${downloadFileUrl}&inline=1`
-    : downloadFileUrl;
+  const previewFileUrlWithToken =
+    fileType === 'image'
+      ? inlineFileUrlWithToken
+      : fileType === 'pdf'
+        ? `${downloadFileUrl}&inline=1`
+        : downloadFileUrl;
   // 编辑保存用：不带 action 的纯路径 url（PUT 覆盖写入）
   const uploadUrl = inlineFileUrlWithToken;
 
-  const getAbsoluteUrl = (url: string) => new URL(url, window.location.origin).href;
+  const getAbsoluteUrl = (url: string) =>
+    new URL(url, window.location.origin).href;
   const copyImageLink = () => {
-    navigator.clipboard.writeText(getAbsoluteUrl(inlineFileUrlWithToken)).then(() => {
-      toast("图片链接已复制", "success");
-    }).catch(() => {
-      toast("复制失败，请手动复制", "error");
-    });
+    navigator.clipboard
+      .writeText(getAbsoluteUrl(inlineFileUrlWithToken))
+      .then(() => {
+        toast('图片链接已复制', 'success');
+      })
+      .catch(() => {
+        toast('复制失败，请手动复制', 'error');
+      });
   };
 
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         onClose();
-      } else if (e.key === "ArrowLeft" && onPrev && hasPrev) {
+      } else if (e.key === 'ArrowLeft' && onPrev && hasPrev) {
         onPrev();
-      } else if (e.key === "ArrowRight" && onNext && hasNext) {
+      } else if (e.key === 'ArrowRight' && onNext && hasNext) {
         onNext();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, onPrev, onNext, hasPrev, hasNext]);
 
   return (
@@ -102,10 +128,12 @@ export function FilePreview({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-white font-mono text-sm truncate">{fileName}</span>
+          <span className="text-white font-mono text-sm truncate">
+            {fileName}
+          </span>
         </div>
         <div className="flex items-center gap-2">
-          {fileType === "image" && (
+          {fileType === 'image' && (
             <>
               <button
                 onClick={(e) => {
@@ -127,21 +155,27 @@ export function FilePreview({
               </a>
             </>
           )}
-          {fileType === "image" && (
+          {fileType === 'image' && (
             <button
               onClick={() => setAutoPlay((a) => !a)}
               disabled={!hasNext && !autoPlay}
               className="inline-flex items-center gap-1.5 text-zinc-300 hover:text-white text-sm px-3 py-1.5 border border-zinc-700 hover:border-zinc-500 rounded-md transition disabled:opacity-40 disabled:pointer-events-none"
-              title={autoPlay ? "暂停轮播" : "自动播放（幻灯片，3.5 秒一张）"}
+              title={autoPlay ? '暂停轮播' : '自动播放（幻灯片，3.5 秒一张）'}
             >
-              {autoPlay ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {autoPlay ? "暂停" : "播放"}
+              {autoPlay ? (
+                <Pause className="h-4 w-4" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              {autoPlay ? '暂停' : '播放'}
             </button>
           )}
-          {(fileType === "image" || fileType === "video" || fileType === "audio") && (
+          {(fileType === 'image' ||
+            fileType === 'video' ||
+            fileType === 'audio') && (
             <button
               onClick={() => setShowInfo((s) => !s)}
-              className={`text-sm font-mono px-3 py-1.5 rounded-md transition border ${showInfo ? "text-white border-zinc-500 bg-white/10" : "text-zinc-400 border-zinc-700 hover:border-zinc-500 hover:text-white"}`}
+              className={`text-sm font-mono px-3 py-1.5 rounded-md transition border ${showInfo ? 'text-white border-zinc-500 bg-white/10' : 'text-zinc-400 border-zinc-700 hover:border-zinc-500 hover:text-white'}`}
             >
               信息
             </button>
@@ -171,13 +205,26 @@ export function FilePreview({
         onClick={(e) => e.stopPropagation()}
       >
         {showInfo && mediaInfo && (
-          <div className="absolute right-4 top-4 z-20 w-52 bg-black/70 backdrop-blur border border-white/10 rounded-lg p-3 text-xs space-y-1.5" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="absolute right-4 top-4 z-20 w-52 bg-black/70 backdrop-blur border border-white/10 rounded-lg p-3 text-xs space-y-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="text-zinc-400 font-medium mb-1.5">媒体信息</div>
             {mediaInfo.width && mediaInfo.height ? (
-              <div className="flex justify-between"><span className="text-zinc-400">尺寸</span><span className="text-zinc-100 font-mono">{mediaInfo.width} × {mediaInfo.height}</span></div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">尺寸</span>
+                <span className="text-zinc-100 font-mono">
+                  {mediaInfo.width} × {mediaInfo.height}
+                </span>
+              </div>
             ) : null}
             {mediaInfo.duration != null && mediaInfo.duration > 0 ? (
-              <div className="flex justify-between"><span className="text-zinc-400">时长</span><span className="text-zinc-100 font-mono">{formatDuration(mediaInfo.duration)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">时长</span>
+                <span className="text-zinc-100 font-mono">
+                  {formatDuration(mediaInfo.duration)}
+                </span>
+              </div>
             ) : null}
           </div>
         )}
@@ -201,24 +248,58 @@ export function FilePreview({
 
         {/* Preview content */}
         <div className="w-full h-full flex items-center justify-center p-4">
-          {fileType === "video" && <VideoPlayer url={previewFileUrlWithToken} onInfo={setMediaInfo} />}
-          {fileType === "audio" && <AudioPlayer url={previewFileUrlWithToken} fileName={fileName} onInfo={setMediaInfo} />}
-          {fileType === "image" && <ImageViewer url={previewFileUrlWithToken} fileName={fileName} onInfo={setMediaInfo} />}
-          {fileType === "text" && (
-            <TextViewer url={previewFileUrlWithToken} fileName={fileName} canEdit={canEdit} uploadUrl={uploadUrl} onFileChanged={onFileChanged} />
+          {fileType === 'video' && (
+            <VideoPlayer url={previewFileUrlWithToken} onInfo={setMediaInfo} />
           )}
-          {fileType === "code" && (
-            <CodeViewer url={previewFileUrlWithToken} fileName={fileName} canEdit={canEdit} uploadUrl={uploadUrl} onFileChanged={onFileChanged} />
+          {fileType === 'audio' && (
+            <AudioPlayer
+              url={previewFileUrlWithToken}
+              fileName={fileName}
+              onInfo={setMediaInfo}
+            />
           )}
-          {fileType === "markdown" && (
-            <MarkdownViewer url={previewFileUrlWithToken} fileName={fileName} canEdit={canEdit} uploadUrl={uploadUrl} onFileChanged={onFileChanged} />
+          {fileType === 'image' && (
+            <ImageViewer
+              url={previewFileUrlWithToken}
+              fileName={fileName}
+              onInfo={setMediaInfo}
+            />
           )}
-          {fileType === "pdf" && <PDFViewer url={previewFileUrlWithToken} />}
-          {fileType === "docx" && <DocxViewer url={previewFileUrlWithToken} />}
-          {fileType === "xlsx" && <XlsxViewer url={previewFileUrlWithToken} />}
-          {fileType === "pptx" && <PptxViewer url={previewFileUrlWithToken} />}
-          {fileType === "archive" && <ArchiveViewer url={previewFileUrlWithToken} fileName={fileName} />}
-          {fileType === "unknown" && (
+          {fileType === 'text' && (
+            <TextViewer
+              url={previewFileUrlWithToken}
+              fileName={fileName}
+              canEdit={canEdit}
+              uploadUrl={uploadUrl}
+              onFileChanged={onFileChanged}
+            />
+          )}
+          {fileType === 'code' && (
+            <CodeViewer
+              url={previewFileUrlWithToken}
+              fileName={fileName}
+              canEdit={canEdit}
+              uploadUrl={uploadUrl}
+              onFileChanged={onFileChanged}
+            />
+          )}
+          {fileType === 'markdown' && (
+            <MarkdownViewer
+              url={previewFileUrlWithToken}
+              fileName={fileName}
+              canEdit={canEdit}
+              uploadUrl={uploadUrl}
+              onFileChanged={onFileChanged}
+            />
+          )}
+          {fileType === 'pdf' && <PDFViewer url={previewFileUrlWithToken} />}
+          {fileType === 'docx' && <DocxViewer url={previewFileUrlWithToken} />}
+          {fileType === 'xlsx' && <XlsxViewer url={previewFileUrlWithToken} />}
+          {fileType === 'pptx' && <PptxViewer url={previewFileUrlWithToken} />}
+          {fileType === 'archive' && (
+            <ArchiveViewer url={previewFileUrlWithToken} fileName={fileName} />
+          )}
+          {fileType === 'unknown' && (
             <div className="text-zinc-400 font-mono text-center">
               <p className="text-lg mb-2">无法预览此文件类型</p>
               <a
@@ -237,15 +318,23 @@ export function FilePreview({
 }
 
 // 编辑文本文件后保存（PUT 覆盖原文件）
-async function saveTextFile(uploadUrl: string, content: string, mime: string): Promise<void> {
+async function saveTextFile(
+  uploadUrl: string,
+  content: string,
+  mime: string,
+): Promise<void> {
   // 文本编辑统一兜底为 text/plain，并补 charset=utf-8，避免中文编码与误判下载
-  let finalMime = mime && mime !== "application/octet-stream" ? mime : "text/plain";
-  if (!/charset=/.test(finalMime) && /^(text\/|application\/(json|xml))/.test(finalMime)) {
-    finalMime += "; charset=utf-8";
+  let finalMime =
+    mime && mime !== 'application/octet-stream' ? mime : 'text/plain';
+  if (
+    !/charset=/.test(finalMime) &&
+    /^(text\/|application\/(json|xml))/.test(finalMime)
+  ) {
+    finalMime += '; charset=utf-8';
   }
   const res = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": finalMime },
+    method: 'PUT',
+    headers: { 'Content-Type': finalMime },
     body: content,
   });
   if (!res.ok) {
@@ -268,29 +357,29 @@ function useFileEditor(opts: {
 }) {
   const { enabled, content, uploadUrl, mime, onSaved } = opts;
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
+  const [saveError, setSaveError] = useState('');
 
   const start = () => {
     setDraft(content);
     setEditing(true);
-    setSaveError("");
+    setSaveError('');
   };
   const cancel = () => {
     setEditing(false);
-    setSaveError("");
+    setSaveError('');
   };
   const save = async () => {
     if (!uploadUrl) return;
     setSaving(true);
-    setSaveError("");
+    setSaveError('');
     try {
       await saveTextFile(uploadUrl, draft, mime);
       setEditing(false);
       onSaved?.();
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "保存失败");
+      setSaveError(e instanceof Error ? e.message : '保存失败');
     } finally {
       setSaving(false);
     }
@@ -298,7 +387,9 @@ function useFileEditor(opts: {
 
   const controls = enabled ? (
     <div className="flex items-center gap-1.5">
-      {saveError && <span className="text-red-400 text-xs mr-1">{saveError}</span>}
+      {saveError && (
+        <span className="text-red-400 text-xs mr-1">{saveError}</span>
+      )}
       {!editing && (
         <button
           onClick={start}
@@ -314,7 +405,7 @@ function useFileEditor(opts: {
             disabled={saving}
             className="inline-flex items-center gap-1 text-xs text-emerald-300 hover:text-emerald-200 px-2 py-1 border border-emerald-700/60 hover:border-emerald-500 rounded transition disabled:opacity-50"
           >
-            <Check className="h-3.5 w-3.5" /> {saving ? "保存中" : "保存"}
+            <Check className="h-3.5 w-3.5" /> {saving ? '保存中' : '保存'}
           </button>
           <button
             onClick={cancel}
@@ -346,7 +437,13 @@ function progressStorageKey(url: string): string {
   return `video_progress_${hash.toString(36)}`;
 }
 
-function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) => void }) {
+function VideoPlayer({
+  url,
+  onInfo,
+}: {
+  url: string;
+  onInfo?: (info: MediaInfo) => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -379,7 +476,9 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
       setCurrentTime(videoRef.current.currentTime);
       // Update buffered
       if (videoRef.current.buffered.length > 0) {
-        setBuffered(videoRef.current.buffered.end(videoRef.current.buffered.length - 1));
+        setBuffered(
+          videoRef.current.buffered.end(videoRef.current.buffered.length - 1),
+        );
       }
     }
   };
@@ -388,7 +487,11 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
       setIsLoading(false);
-      onInfo?.({ duration: videoRef.current.duration, width: videoRef.current.videoWidth, height: videoRef.current.videoHeight });
+      onInfo?.({
+        duration: videoRef.current.duration,
+        width: videoRef.current.videoWidth,
+        height: videoRef.current.videoHeight,
+      });
     }
   };
 
@@ -412,7 +515,7 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
     }
   };
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (videoRef.current) {
       const newMuted = !isMuted;
       setIsMuted(newMuted);
@@ -422,7 +525,7 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
         videoRef.current.volume = 0.5;
       }
     }
-  };
+  }, [isMuted, volume]);
 
   const changeSpeed = (speed: number) => {
     setPlaybackRate(speed);
@@ -442,11 +545,14 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
     }
   };
 
-  const skip = (seconds: number) => {
+  const skip = useCallback((seconds: number) => {
     if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
+      videoRef.current.currentTime = Math.max(
+        0,
+        Math.min(duration, videoRef.current.currentTime + seconds),
+      );
     }
-  };
+  }, [duration]);
 
   const handleMouseMove = () => {
     setShowControls(true);
@@ -503,7 +609,7 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, volume, duration]);
+  }, [togglePlay, toggleMute, skip, volume, duration]);
 
   useEffect(() => {
     return () => {
@@ -523,7 +629,10 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
       const v = videoRef.current;
       if (!v || Number.isNaN(v.currentTime)) return;
       try {
-        localStorage.setItem(key, JSON.stringify({ position: v.currentTime, lastUpdated: Date.now() }));
+        localStorage.setItem(
+          key,
+          JSON.stringify({ position: v.currentTime, lastUpdated: Date.now() }),
+        );
       } catch {
         /* localStorage 不可用（隐私模式等）时静默降级 */
       }
@@ -533,8 +642,14 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
     try {
       const saved = localStorage.getItem(key);
       if (saved) {
-        const data = JSON.parse(saved) as { position: number; lastUpdated: number };
-        if (data.position > 0 && Date.now() - data.lastUpdated < PROGRESS_TTL_MS) {
+        const data = JSON.parse(saved) as {
+          position: number;
+          lastUpdated: number;
+        };
+        if (
+          data.position > 0 &&
+          Date.now() - data.lastUpdated < PROGRESS_TTL_MS
+        ) {
           const seek = () => {
             const v = videoRef.current;
             if (v && !cancelled) {
@@ -545,7 +660,10 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
           // 元数据未就绪时等 loadedmetadata 后再定位
           const readyState = videoRef.current?.readyState;
           if (readyState !== undefined && readyState >= 1) seek();
-          else videoRef.current?.addEventListener("loadedmetadata", seek, { once: true });
+          else
+            videoRef.current?.addEventListener('loadedmetadata', seek, {
+              once: true,
+            });
         }
       }
     } catch {
@@ -581,7 +699,10 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={() => setIsPlaying(true)}
-        onPause={() => { setIsPlaying(false); saveProgressRef.current(); }}
+        onPause={() => {
+          setIsPlaying(false);
+          saveProgressRef.current();
+        }}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
         onCanPlay={() => setIsLoading(false)}
@@ -602,7 +723,7 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-all hover:scale-110"
         >
           <svg className="w-7 h-7 ml-1" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
+            <path d="M8 5v14l11-7z" />
           </svg>
         </button>
       )}
@@ -639,23 +760,40 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {/* Play/Pause */}
-            <button onClick={togglePlay} className="text-white p-1.5 hover:bg-white/10 rounded transition">
+            <button
+              onClick={togglePlay}
+              className="text-white p-1.5 hover:bg-white/10 rounded transition"
+            >
               {isPlaying ? (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
                 </svg>
               )}
             </button>
 
             {/* Skip buttons */}
-            <button onClick={() => skip(-10)} className="text-white/70 hover:text-white p-1 text-xs font-mono">
+            <button
+              onClick={() => skip(-10)}
+              className="text-white/70 hover:text-white p-1 text-xs font-mono"
+            >
               -10s
             </button>
-            <button onClick={() => skip(10)} className="text-white/70 hover:text-white p-1 text-xs font-mono">
+            <button
+              onClick={() => skip(10)}
+              className="text-white/70 hover:text-white p-1 text-xs font-mono"
+            >
               +10s
             </button>
 
@@ -681,7 +819,9 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
                       key={speed}
                       onClick={() => changeSpeed(speed)}
                       className={`block w-full px-3 py-1 text-xs font-mono text-left hover:bg-white/10 transition ${
-                        playbackRate === speed ? 'text-blue-400' : 'text-white/80'
+                        playbackRate === speed
+                          ? 'text-blue-400'
+                          : 'text-white/80'
                       }`}
                     >
                       {speed}x
@@ -693,14 +833,25 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
 
             {/* Volume */}
             <div className="flex items-center gap-1 group/vol">
-              <button onClick={toggleMute} className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition">
+              <button
+                onClick={toggleMute}
+                className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition"
+              >
                 {isMuted || volume === 0 ? (
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
+                  <svg
+                    className="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
                   </svg>
                 ) : (
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                  <svg
+                    className="w-4 h-4"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
                   </svg>
                 )}
               </button>
@@ -718,9 +869,12 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
             </div>
 
             {/* Fullscreen */}
-            <button onClick={toggleFullscreen} className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition">
+            <button
+              onClick={toggleFullscreen}
+              className="text-white/70 hover:text-white p-1.5 hover:bg-white/10 rounded transition"
+            >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
               </svg>
             </button>
           </div>
@@ -731,7 +885,15 @@ function VideoPlayer({ url, onInfo }: { url: string; onInfo?: (info: MediaInfo) 
 }
 
 // Audio Player Component
-function AudioPlayer({ url, fileName, onInfo }: { url: string; fileName: string; onInfo?: (info: MediaInfo) => void }) {
+function AudioPlayer({
+  url,
+  fileName,
+  onInfo,
+}: {
+  url: string;
+  fileName: string;
+  onInfo?: (info: MediaInfo) => void;
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -824,13 +986,19 @@ function AudioPlayer({ url, fileName, onInfo }: { url: string; fileName: string;
           onClick={togglePlay}
           className="grid h-14 w-14 place-items-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-500 transition"
         >
-          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 translate-x-0.5" />}
+          {isPlaying ? (
+            <Pause className="h-6 w-6" />
+          ) : (
+            <Play className="h-6 w-6 translate-x-0.5" />
+          )}
         </button>
       </div>
 
       {/* Volume */}
       <div className="flex items-center justify-center gap-2 mt-6">
-        <span className="text-zinc-400 text-sm">{volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}</span>
+        <span className="text-zinc-400 text-sm">
+          {volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}
+        </span>
         <input
           type="range"
           min="0"
@@ -848,7 +1016,15 @@ function AudioPlayer({ url, fileName, onInfo }: { url: string; fileName: string;
 }
 
 // Image Viewer Component
-function ImageViewer({ url, fileName, onInfo }: { url: string; fileName: string; onInfo?: (info: MediaInfo) => void }) {
+function ImageViewer({
+  url,
+  fileName,
+  onInfo,
+}: {
+  url: string;
+  fileName: string;
+  onInfo?: (info: MediaInfo) => void;
+}) {
   const [scale, setScale] = useState(1);
   const [loading, setLoading] = useState(true);
   const [imgError, setImgError] = useState(false);
@@ -861,10 +1037,27 @@ function ImageViewer({ url, fileName, onInfo }: { url: string; fileName: string;
     <div className="flex flex-col items-center max-h-full">
       {/* Zoom controls */}
       <div className="flex items-center gap-2 mb-4 bg-black/50 rounded-lg px-3 py-2">
-        <button onClick={zoomOut} className="text-white px-2 hover:text-blue-400">−</button>
-        <span className="text-white text-sm font-mono w-16 text-center">{Math.round(scale * 100)}%</span>
-        <button onClick={zoomIn} className="text-white px-2 hover:text-blue-400">+</button>
-        <button onClick={resetZoom} className="text-zinc-400 text-xs ml-2 hover:text-white">重置</button>
+        <button
+          onClick={zoomOut}
+          className="text-white px-2 hover:text-blue-400"
+        >
+          −
+        </button>
+        <span className="text-white text-sm font-mono w-16 text-center">
+          {Math.round(scale * 100)}%
+        </span>
+        <button
+          onClick={zoomIn}
+          className="text-white px-2 hover:text-blue-400"
+        >
+          +
+        </button>
+        <button
+          onClick={resetZoom}
+          className="text-zinc-400 text-xs ml-2 hover:text-white"
+        >
+          重置
+        </button>
       </div>
 
       {/* Image */}
@@ -877,16 +1070,31 @@ function ImageViewer({ url, fileName, onInfo }: { url: string; fileName: string;
         {imgError && !loading && (
           <div className="flex flex-col items-center justify-center gap-2 w-64 h-64 text-zinc-400">
             <AlertCircle className="h-8 w-8" />
-            <span className="text-sm font-mono">图片加载失败（可能下载过于频繁）</span>
+            <span className="text-sm font-mono">
+              图片加载失败（可能下载过于频繁）
+            </span>
           </div>
         )}
         <img
           src={url}
           alt={fileName}
           className="transition-transform"
-          style={{ transform: `scale(${scale})`, display: (loading || imgError) ? 'none' : 'block' }}
-          onLoad={(e) => { setLoading(false); setImgError(false); onInfo?.({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight }); }}
-          onError={() => { setLoading(false); setImgError(true); }}
+          style={{
+            transform: `scale(${scale})`,
+            display: loading || imgError ? 'none' : 'block',
+          }}
+          onLoad={(e) => {
+            setLoading(false);
+            setImgError(false);
+            onInfo?.({
+              width: e.currentTarget.naturalWidth,
+              height: e.currentTarget.naturalHeight,
+            });
+          }}
+          onError={() => {
+            setLoading(false);
+            setImgError(true);
+          }}
         />
       </div>
     </div>
@@ -894,10 +1102,22 @@ function ImageViewer({ url, fileName, onInfo }: { url: string; fileName: string;
 }
 
 // Text Viewer Component (plain text without syntax highlighting)
-function TextViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url: string; fileName: string; canEdit?: boolean; uploadUrl?: string; onFileChanged?: () => void }) {
-  const [content, setContent] = useState<string>("");
+function TextViewer({
+  url,
+  fileName,
+  canEdit,
+  uploadUrl,
+  onFileChanged,
+}: {
+  url: string;
+  fileName: string;
+  canEdit?: boolean;
+  uploadUrl?: string;
+  onFileChanged?: () => void;
+}) {
+  const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState<string>('');
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -905,11 +1125,11 @@ function TextViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch file");
+        if (!res.ok) throw new Error('Failed to fetch file');
         const text = await res.text();
         setContent(text);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load file");
+        setError(err instanceof Error ? err.message : 'Failed to load file');
       } finally {
         setLoading(false);
       }
@@ -952,7 +1172,9 @@ function TextViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
         <span className="text-zinc-400 text-xs font-mono">plaintext</span>
         <div className="flex items-center gap-3">
           {editor.controls}
-          <span className="text-zinc-500 text-xs font-mono">{content.split('\n').length} 行</span>
+          <span className="text-zinc-500 text-xs font-mono">
+            {content.split('\n').length} 行
+          </span>
         </div>
       </div>
 
@@ -976,11 +1198,23 @@ function TextViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
 }
 
 // Code Viewer Component (with syntax highlighting)
-function CodeViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url: string; fileName: string; canEdit?: boolean; uploadUrl?: string; onFileChanged?: () => void }) {
-  const [content, setContent] = useState<string>("");
+function CodeViewer({
+  url,
+  fileName,
+  canEdit,
+  uploadUrl,
+  onFileChanged,
+}: {
+  url: string;
+  fileName: string;
+  canEdit?: boolean;
+  uploadUrl?: string;
+  onFileChanged?: () => void;
+}) {
+  const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [highlightedCode, setHighlightedCode] = useState<string>("");
+  const [error, setError] = useState<string>('');
+  const [highlightedCode, setHighlightedCode] = useState<string>('');
   const [reloadKey, setReloadKey] = useState(0);
   const language = getCodeLanguage(fileName);
 
@@ -989,13 +1223,16 @@ function CodeViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch file");
+        if (!res.ok) throw new Error('Failed to fetch file');
         const text = await res.text();
         setContent(text);
 
         // Apply syntax highlighting
         try {
-          const result = hljs.highlight(text, { language, ignoreIllegals: true });
+          const result = hljs.highlight(text, {
+            language,
+            ignoreIllegals: true,
+          });
           setHighlightedCode(result.value);
         } catch {
           // Fallback to auto-detection if language is not supported
@@ -1003,7 +1240,7 @@ function CodeViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
           setHighlightedCode(result.value);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load file");
+        setError(err instanceof Error ? err.message : 'Failed to load file');
       } finally {
         setLoading(false);
       }
@@ -1046,7 +1283,9 @@ function CodeViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
         <span className="text-zinc-400 text-xs font-mono">{language}</span>
         <div className="flex items-center gap-3">
           {editor.controls}
-          <span className="text-zinc-500 text-xs font-mono">{content.split('\n').length} 行</span>
+          <span className="text-zinc-500 text-xs font-mono">
+            {content.split('\n').length} 行
+          </span>
         </div>
       </div>
 
@@ -1151,11 +1390,23 @@ function CodeViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url:
 }
 
 // Markdown Viewer Component
-function MarkdownViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { url: string; fileName: string; canEdit?: boolean; uploadUrl?: string; onFileChanged?: () => void }) {
-  const [content, setContent] = useState<string>("");
+function MarkdownViewer({
+  url,
+  fileName,
+  canEdit,
+  uploadUrl,
+  onFileChanged,
+}: {
+  url: string;
+  fileName: string;
+  canEdit?: boolean;
+  uploadUrl?: string;
+  onFileChanged?: () => void;
+}) {
+  const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [renderedHtml, setRenderedHtml] = useState<string>("");
+  const [error, setError] = useState<string>('');
+  const [renderedHtml, setRenderedHtml] = useState<string>('');
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -1163,7 +1414,7 @@ function MarkdownViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { 
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch file");
+        if (!res.ok) throw new Error('Failed to fetch file');
         const text = await res.text();
         setContent(text);
 
@@ -1178,7 +1429,10 @@ function MarkdownViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { 
         renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
           if (lang && hljs.getLanguage(lang)) {
             try {
-              const highlighted = hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+              const highlighted = hljs.highlight(text, {
+                language: lang,
+                ignoreIllegals: true,
+              }).value;
               return `<pre class="hljs-code-block"><code class="hljs language-${lang}">${highlighted}</code></pre>`;
             } catch {
               // fallback
@@ -1193,7 +1447,7 @@ function MarkdownViewer({ url, fileName, canEdit, uploadUrl, onFileChanged }: { 
         // 净化 HTML，防止恶意 Markdown 内嵌脚本/事件处理器（存储型 XSS）
         setRenderedHtml(DOMPurify.sanitize(html));
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load file");
+        setError(err instanceof Error ? err.message : 'Failed to load file');
       } finally {
         setLoading(false);
       }
@@ -1452,11 +1706,11 @@ function PDFViewer({ url }: { url: string }) {
 }
 
 function formatBytesPreview(bytes: number): string {
-  if (!bytes) return "0 B";
+  if (!bytes) return '0 B';
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
+  const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function PreviewLoading() {
@@ -1481,9 +1735,9 @@ function PreviewError({ msg }: { msg: string }) {
 
 // Docx Viewer (mammoth → HTML)
 function DocxViewer({ url }: { url: string }) {
-  const [html, setHtml] = useState("");
+  const [html, setHtml] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -1491,35 +1745,48 @@ function DocxViewer({ url }: { url: string }) {
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("加载失败");
+        if (!res.ok) throw new Error('加载失败');
         const arrayBuffer = await res.arrayBuffer();
-        const mammoth = (await import("mammoth")).default;
+        const mammoth = (await import('mammoth')).default;
         const result = await mammoth.convertToHtml({ arrayBuffer });
-        if (!cancelled) setHtml(DOMPurify.sanitize(result.value || "<p style='color:#999'>（空文档）</p>"));
+        if (!cancelled)
+          setHtml(
+            DOMPurify.sanitize(
+              result.value || "<p style='color:#999'>（空文档）</p>",
+            ),
+          );
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "解析 docx 失败");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : '解析 docx 失败');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   if (loading) return <PreviewLoading />;
   if (error) return <PreviewError msg={error} />;
   return (
     <div className="w-full max-w-3xl max-h-[calc(100vh-120px)] overflow-auto bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 rounded-lg p-8 sm:p-12 shadow-lg">
-      <div className="docx-content" dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        className="docx-content"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </div>
   );
 }
 
 // Xlsx Viewer (SheetJS)
 function XlsxViewer({ url }: { url: string }) {
-  const [sheets, setSheets] = useState<{ name: string; rows: unknown[][] }[]>([]);
+  const [sheets, setSheets] = useState<{ name: string; rows: unknown[][] }[]>(
+    [],
+  );
   const [activeSheet, setActiveSheet] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -1527,23 +1794,33 @@ function XlsxViewer({ url }: { url: string }) {
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("加载失败");
+        if (!res.ok) throw new Error('加载失败');
         const arrayBuffer = await res.arrayBuffer();
-        const XLSX = await import("xlsx");
-        const wb = XLSX.read(arrayBuffer, { type: "array" });
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(arrayBuffer, { type: 'array' });
         const data = wb.SheetNames.map((name) => {
           const ws = wb.Sheets[name];
-          const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false, defval: "" });
+          const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+            header: 1,
+            blankrows: false,
+            defval: '',
+          });
           return { name, rows };
         });
-        if (!cancelled) { setSheets(data); setActiveSheet(0); }
+        if (!cancelled) {
+          setSheets(data);
+          setActiveSheet(0);
+        }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "解析表格失败");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : '解析表格失败');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   if (loading) return <PreviewLoading />;
@@ -1554,7 +1831,13 @@ function XlsxViewer({ url }: { url: string }) {
       {sheets.length > 1 && (
         <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-700 p-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sheets.map((s, i) => (
-            <button key={i} onClick={() => setActiveSheet(i)} className={`px-3 py-1 text-xs rounded whitespace-nowrap ${i === activeSheet ? "bg-blue-600 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"}`}>{s.name}</button>
+            <button
+              key={i}
+              onClick={() => setActiveSheet(i)}
+              className={`px-3 py-1 text-xs rounded whitespace-nowrap ${i === activeSheet ? 'bg-blue-600 text-white' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'}`}
+            >
+              {s.name}
+            </button>
           ))}
         </div>
       )}
@@ -1563,9 +1846,16 @@ function XlsxViewer({ url }: { url: string }) {
           <tbody>
             {sheet?.rows.map((row, ri) => (
               <tr key={ri}>
-                <td className="border border-zinc-200 dark:border-zinc-700 px-2 py-1 bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 sticky left-0">{ri + 1}</td>
+                <td className="border border-zinc-200 dark:border-zinc-700 px-2 py-1 bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 sticky left-0">
+                  {ri + 1}
+                </td>
                 {(row as unknown[]).map((cell, ci) => (
-                  <td key={ci} className="border border-zinc-200 dark:border-zinc-700 px-2 py-1 whitespace-nowrap">{String(cell ?? "")}</td>
+                  <td
+                    key={ci}
+                    className="border border-zinc-200 dark:border-zinc-700 px-2 py-1 whitespace-nowrap"
+                  >
+                    {String(cell ?? '')}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -1580,7 +1870,7 @@ function XlsxViewer({ url }: { url: string }) {
 function PptxViewer({ url }: { url: string }) {
   const [slides, setSlides] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -1588,43 +1878,59 @@ function PptxViewer({ url }: { url: string }) {
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("加载失败");
+        if (!res.ok) throw new Error('加载失败');
         const ab = await res.arrayBuffer();
-        const JSZip = (await import("jszip")).default;
+        const JSZip = (await import('jszip')).default;
         const zip = await JSZip.loadAsync(ab);
         const slideFiles = Object.keys(zip.files)
           .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
           .sort((a, b) => {
-            const na = parseInt(a.match(/slide(\d+)/)?.[1] || "0", 10);
-            const nb = parseInt(b.match(/slide(\d+)/)?.[1] || "0", 10);
+            const na = parseInt(a.match(/slide(\d+)/)?.[1] || '0', 10);
+            const nb = parseInt(b.match(/slide(\d+)/)?.[1] || '0', 10);
             return na - nb;
           });
         const out: string[] = [];
         for (const f of slideFiles) {
-          const xml = await zip.files[f].async("string");
-          const texts = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => decodeXmlEntities(m[1]));
-          out.push(texts.join("\n").trim());
+          const xml = await zip.files[f].async('string');
+          const texts = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) =>
+            decodeXmlEntities(m[1]),
+          );
+          out.push(texts.join('\n').trim());
         }
         if (!cancelled) setSlides(out);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "解析 pptx 失败");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : '解析 pptx 失败');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   if (loading) return <PreviewLoading />;
   if (error) return <PreviewError msg={error} />;
   return (
     <div className="w-full max-w-3xl max-h-[calc(100vh-120px)] overflow-auto bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 rounded-lg shadow-lg p-6 space-y-4">
-      <p className="text-xs text-zinc-400">提示：仅提取幻灯片文本，不还原图文版式</p>
-      {slides.length === 0 && <p className="text-zinc-400 text-sm">（无可读取文本，可能是纯图片 PPT）</p>}
+      <p className="text-xs text-zinc-400">
+        提示：仅提取幻灯片文本，不还原图文版式
+      </p>
+      {slides.length === 0 && (
+        <p className="text-zinc-400 text-sm">
+          （无可读取文本，可能是纯图片 PPT）
+        </p>
+      )}
       {slides.map((s, i) => (
-        <div key={i} className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-4">
+        <div
+          key={i}
+          className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-4"
+        >
           <div className="text-xs text-zinc-400 mb-2">第 {i + 1} 页</div>
-          <pre className="whitespace-pre-wrap text-sm font-sans">{s || "（空白页）"}</pre>
+          <pre className="whitespace-pre-wrap text-sm font-sans">
+            {s || '（空白页）'}
+          </pre>
         </div>
       ))}
     </div>
@@ -1633,9 +1939,11 @@ function PptxViewer({ url }: { url: string }) {
 
 // Archive Viewer (jszip，支持 zip；rar/7z/tar 会失败提示)
 function ArchiveViewer({ url, fileName }: { url: string; fileName: string }) {
-  const [entries, setEntries] = useState<{ name: string; size: number; isDir: boolean }[]>([]);
+  const [entries, setEntries] = useState<
+    { name: string; size: number; isDir: boolean }[]
+  >([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -1643,24 +1951,33 @@ function ArchiveViewer({ url, fileName }: { url: string; fileName: string }) {
       try {
         setLoading(true);
         const res = await fetch(url);
-        if (!res.ok) throw new Error("加载失败");
+        if (!res.ok) throw new Error('加载失败');
         const ab = await res.arrayBuffer();
-        const JSZip = (await import("jszip")).default;
+        const JSZip = (await import('jszip')).default;
         const zip = await JSZip.loadAsync(ab);
         const list: { name: string; size: number; isDir: boolean }[] = [];
         zip.forEach((path, file) => {
-          const size = (file as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0;
+          const size =
+            (file as unknown as { _data?: { uncompressedSize?: number } })._data
+              ?.uncompressedSize ?? 0;
           list.push({ name: path, size, isDir: file.dir });
         });
         list.sort((a, b) => a.name.localeCompare(b.name));
         if (!cancelled) setEntries(list);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "解析失败（rar/7z/tar 等格式暂不支持在线预览，请下载）");
+        if (!cancelled)
+          setError(
+            e instanceof Error
+              ? e.message
+              : '解析失败（rar/7z/tar 等格式暂不支持在线预览，请下载）',
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   if (loading) return <PreviewLoading />;
@@ -1668,16 +1985,31 @@ function ArchiveViewer({ url, fileName }: { url: string; fileName: string }) {
   const fileCount = entries.filter((e) => !e.isDir).length;
   return (
     <div className="w-full max-w-3xl max-h-[calc(100vh-120px)] overflow-hidden bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-100 rounded-lg shadow-lg flex flex-col">
-      <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400 shrink-0">{fileCount} 个文件 · {fileName}</div>
+      <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400 shrink-0">
+        {fileCount} 个文件 · {fileName}
+      </div>
       <div className="overflow-auto">
         <table className="w-full text-sm">
           <tbody>
             {entries.map((e, i) => (
-              <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800">
+              <tr
+                key={i}
+                className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              >
                 <td className="px-4 py-1.5">
-                  <span className={e.isDir ? "font-medium text-blue-600 dark:text-blue-400" : "text-zinc-700 dark:text-zinc-300"}>{e.name}</span>
+                  <span
+                    className={
+                      e.isDir
+                        ? 'font-medium text-blue-600 dark:text-blue-400'
+                        : 'text-zinc-700 dark:text-zinc-300'
+                    }
+                  >
+                    {e.name}
+                  </span>
                 </td>
-                <td className="px-4 py-1.5 text-right text-zinc-500 dark:text-zinc-400 tabular-nums w-24">{e.isDir ? "-" : formatBytesPreview(e.size)}</td>
+                <td className="px-4 py-1.5 text-right text-zinc-500 dark:text-zinc-400 tabular-nums w-24">
+                  {e.isDir ? '-' : formatBytesPreview(e.size)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1688,5 +2020,10 @@ function ArchiveViewer({ url, fileName }: { url: string; fileName: string }) {
 }
 
 function decodeXmlEntities(s: string): string {
-  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
