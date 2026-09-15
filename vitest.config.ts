@@ -13,7 +13,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "json", "html", "lcov"],
+      reporter: ["text", "json", "json-summary", "html", "lcov"],
       reportsDirectory: "./coverage",
       include: [
         "app/lib/quark-login.ts",
@@ -24,10 +24,11 @@ export default defineConfig({
         "app/lib/git/**",
       ],
       thresholds: {
-        lines: 40,
-        functions: 40,
-        branches: 30,
-        statements: 40,
+        lines: 35,
+        functions: 35,
+        branches: 25,
+        statements: 35,
+        perFile: true,
       },
     },
   },

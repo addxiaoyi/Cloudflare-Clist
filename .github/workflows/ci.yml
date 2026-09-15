@@ -22,11 +22,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
+      - name: Quality check
+        run: npm run quality
 
   coverage:
     name: Coverage
@@ -46,14 +43,25 @@ jobs:
 
       - name: Test with coverage
         run: npm run test:coverage
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/lcov.info
+          flags: core-lib,quark-login
           fail_ci_if_error: true
           verbose: true
+          name: codecov-umbrella
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
 
   build:
     name: Build

@@ -5,22 +5,50 @@ codecov:
   require_ci_to_pass: true
   notify:
     wait_for_ci: true
+    after_n_builds: 2
+  carryforward: true
+  parallel:
+    required: false
+  require_pull_request_approval: false
 
 coverage:
   precision: 2
   round: down
   range: "70...100"
-  
+
+flags:
+  core-lib:
+    paths:
+      - app/lib/client-factory.ts
+      - app/lib/github-client.ts
+  quark-login:
+    paths:
+      - app/lib/quark-login.ts
+
   status:
     project:
       default:
         target: 40%
-        threshold: 2%
+        threshold: 1%
         branches:
           - main
           - master
         only_pulls: false
-  
+      core-lib:
+        target: 50%
+        threshold: 1%
+        branches:
+          - main
+          - master
+        only_pulls: false
+      quark-login:
+        target: 60%
+        threshold: 5%
+        branches:
+          - main
+          - master
+        only_pulls: false
+
     patch:
       default:
         target: 60%
@@ -30,7 +58,7 @@ coverage:
           - master
         only_pulls: true
 
-# File patterns to include/exclude
+# File patterns to include/exclude from coverage
 ignore:
   - "app/lib/git/**"
   - "app/routes/**"
@@ -43,3 +71,12 @@ comment:
   behavior: default
   require_changes: false
   require_base: true
+  notification:
+    enabled: true
+    types:
+      - changed
+      - new
+      - missing
+      - inactive
+      - no_changes
+      - not_found

@@ -14,6 +14,8 @@
 		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
 		"test": "vitest run",
 		"test:coverage": "vitest run --coverage",
+		"quality": "npm run typecheck && npm test",
+		"quality:ci": "npm run quality && npm run test:coverage",
 		"prepare": "husky"
 	},
 	"dependencies": {
