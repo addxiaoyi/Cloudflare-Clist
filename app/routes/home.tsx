@@ -162,8 +162,16 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         ],
         defaultValue: "global",
       },
-      { key: "refresh_token", label: "刷新令牌", type: "textarea", required: true, placeholder: "Microsoft OAuth 刷新令牌" },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true },
+      {
+        key: "refresh_token",
+        label: "刷新令牌",
+        type: "textarea",
+        required: true,
+        placeholder: "Microsoft OAuth 刷新令牌",
+        help: "最省事：点表单底部「通过 Microsoft 授权」按钮自动换取。手动获取需先在 Azure 注册应用并走授权码流程，详见 docs/CREDENTIAL_GUIDE.md。",
+        link: { url: "https://learn.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth", text: "Graph OAuth 教程 →" },
+      },
+      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true, help: "开启后由在线服务托管密钥并自动续期令牌" },
       {
         key: "api_address",
         label: "在线API地址",
@@ -171,6 +179,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         defaultValue: "https://api.oplist.org/onedrive/renewapi",
         placeholder: "自建刷新接口地址",
         show: (values) => values.use_online_api === true,
+        help: "默认使用公共刷新网关；自建服务时替换为自己的 renewapi 地址",
       },
       {
         key: "client_id",
@@ -178,6 +187,8 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "text",
         placeholder: "本地客户端ID",
         show: (values) => values.use_online_api !== true,
+        help: "Azure 应用注册里的 Application (client) ID",
+        link: { url: "https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade", text: "Azure 应用注册 →" },
       },
       {
         key: "client_secret",
@@ -185,6 +196,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "password",
         placeholder: "本地客户端密钥",
         show: (values) => values.use_online_api !== true,
+        help: "同一应用内 Certificates & secrets → New client secret，值只显示一次请立即复制",
       },
       {
         key: "redirect_uri",
@@ -193,6 +205,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         placeholder: "https://api.oplist.org/onedrive/callback",
         defaultValue: "https://api.oplist.org/onedrive/callback",
         show: (values) => values.use_online_api !== true,
+        help: "必须与 Azure 应用 Authentication 页登记的 Redirect URI 完全一致，否则报 AADSTS50011",
       },
       { key: "is_sharepoint", label: "SharePoint 模式", type: "boolean", defaultValue: false },
       {
@@ -211,8 +224,16 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "Google Drive",
     supportsMultipart: true,
     fields: [
-      { key: "refresh_token", label: "刷新令牌", type: "textarea", required: true, placeholder: "Google OAuth 刷新令牌" },
-      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true },
+      {
+        key: "refresh_token",
+        label: "刷新令牌",
+        type: "textarea",
+        required: true,
+        placeholder: "Google OAuth 刷新令牌",
+        help: "最省事：点表单底部「通过 Google 授权」按钮。手动获取需在 Google Cloud 创建 Web 应用型 OAuth 客户端并换取 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。",
+        link: { url: "https://console.cloud.google.com/apis/credentials", text: "Google Cloud 凭据页 →" },
+      },
+      { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: true, help: "开启后由在线服务托管密钥并自动续期令牌" },
       {
         key: "api_address",
         label: "在线API地址",
@@ -220,6 +241,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         defaultValue: "https://api.oplist.org/googleui/renewapi",
         placeholder: "自建刷新接口地址",
         show: (values) => values.use_online_api === true,
+        help: "默认使用公共刷新网关；自建服务时替换为自己的 renewapi 地址",
       },
       {
         key: "client_id",
@@ -227,6 +249,8 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "text",
         placeholder: "本地客户端ID",
         show: (values) => values.use_online_api !== true,
+        help: "OAuth 客户端 ID；先在 OAuth 同意屏幕启用 Drive 范围",
+        link: { url: "https://console.cloud.google.com/apis/credentials", text: "创建 OAuth 客户端 →" },
       },
       {
         key: "client_secret",
@@ -234,6 +258,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "password",
         placeholder: "本地客户端密钥",
         show: (values) => values.use_online_api !== true,
+        help: "同一 OAuth 客户端的 Client secret",
       },
       { key: "root_folder_id", label: "根目录ID", type: "text", defaultValue: "root", placeholder: "默认 root" },
       { key: "order_by", label: "排序字段", type: "text", defaultValue: "folder,name,modifiedTime", placeholder: "folder,name,modifiedTime" },
@@ -266,7 +291,14 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         ],
         defaultValue: "resource",
       },
-      { key: "refresh_token", label: "刷新令牌", type: "textarea", required: true },
+      {
+        key: "refresh_token",
+        label: "刷新令牌",
+        type: "textarea",
+        required: true,
+        help: "开启「使用在线API」时无需填写；本地模式需从阿里云盘开放平台或已登录会话中取得 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。",
+        link: { url: "https://open.alipan.com/", text: "阿里云盘开放平台 →" },
+      },
       { key: "root_folder_id", label: "根目录ID", type: "text", defaultValue: "root" },
       {
         key: "order_by",
@@ -305,6 +337,8 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "text",
         placeholder: "本地客户端ID",
         show: (values) => values.use_online_api !== true,
+        help: "阿里云盘开放平台应用的 AppID",
+        link: { url: "https://open.alipan.com/", text: "申请应用 →" },
       },
       {
         key: "client_secret",
@@ -312,6 +346,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "password",
         placeholder: "本地客户端密钥",
         show: (values) => values.use_online_api !== true,
+        help: "同一应用的 AppSecret，注意不要泄露给前端",
       },
       {
         key: "remove_way",
@@ -351,7 +386,14 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "百度网盘",
     supportsMultipart: false,
     fields: [
-      { key: "refresh_token", label: "刷新令牌", type: "textarea", required: true },
+      {
+        key: "refresh_token",
+        label: "刷新令牌",
+        type: "textarea",
+        required: true,
+        help: "开启「使用在线API」时由后端自动续期。若本地使用，需在百度智能云创建应用并走授权码流程换取 refresh_token，详见 docs/CREDENTIAL_GUIDE.md。",
+        link: { url: "https://console.bce.baidu.com/iam/app", text: "百度智能云应用管理 →" },
+      },
       { key: "root_path", label: "根目录路径", type: "text", defaultValue: "/" },
       {
         key: "order_by",
@@ -389,6 +431,8 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "text",
         placeholder: "本地客户端ID",
         show: (values) => values.use_online_api !== true,
+        help: "百度智能云应用的 Client ID（API Key），需在应用详情里查看",
+        link: { url: "https://console.bce.baidu.com/iam/app", text: "创建应用 →" },
       },
       {
         key: "client_secret",
@@ -396,6 +440,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         type: "password",
         placeholder: "本地客户端密钥",
         show: (values) => values.use_online_api !== true,
+        help: "同应用的 Secret Key，创建后请妥善保存",
       },
     ],
   },
@@ -473,9 +518,31 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         defaultValue: "z0",
       },
       { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-kodo-bucket" },
-      { key: "access_key", label: "Access Key", type: "password", required: true, placeholder: "七牛 Access Key" },
-      { key: "secret_key", label: "Secret Key", type: "password", required: true, placeholder: "七牛 Secret Key" },
-      { key: "session_token", label: "会话令牌", type: "password", placeholder: "可选：STS 临时凭证 Security Token" },
+      {
+        key: "access_key",
+        label: "Access Key",
+        type: "password",
+        required: true,
+        placeholder: "七牛 Access Key",
+        help: "七牛云控制台 -> 个人中心 -> 密钥管理 -> AccessKey",
+        link: { url: "https://portal.qiniu.com/user/key", text: "密钥管理 →" },
+      },
+      {
+        key: "secret_key",
+        label: "Secret Key",
+        type: "password",
+        required: true,
+        placeholder: "七牛 Secret Key",
+        help: "同上创建时显示一次的 SecretKey",
+      },
+      {
+        key: "session_token",
+        label: "会话令牌",
+        type: "password",
+        placeholder: "可选：STS 临时凭证 Security Token",
+        help: "使用 STS Federated Token 时填写 SecurityToken，可提升安全性",
+        link: { url: "https://developer.qiniu.com/kodo/kb/3495/sts", text: "七牛 STS 文档 →" },
+      },
       { key: "domain", label: "域名", type: "text", placeholder: "https://cdn.example.com（可选）" },
       { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
       { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
@@ -485,10 +552,17 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "FTP 文件网关",
     supportsMultipart: false,
     fields: [
-      { key: "endpoint", label: "HTTP 网关地址", type: "text", required: true, placeholder: "https://ftp.example.com/dav" },
-      { key: "username", label: "用户名", type: "text", required: true, placeholder: "FTP 用户名" },
-      { key: "password", label: "密码", type: "password", required: true, placeholder: "FTP 密码" },
-      { key: "base_path", label: "根目录路径", type: "text", defaultValue: "/" },
+      {
+        key: "endpoint",
+        label: "HTTP 网关地址",
+        type: "text",
+        required: true,
+        placeholder: "https://ftp.example.com/dav",
+        help: "自建 FTP/WebDAV 网关的 HTTP 入口地址，需以 https:// 开头并以路径结尾",
+      },
+      { key: "username", label: "用户名", type: "text", required: true, placeholder: "FTP 用户名", help: "网关登录用户名" },
+      { key: "password", label: "密码", type: "password", required: true, placeholder: "FTP 密码", help: "网关登录密码" },
+      { key: "base_path", label: "根目录路径", type: "text", defaultValue: "/", help: "限定可访问的起始目录，越界路径会被拒绝" },
       { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
     ],
   },
@@ -496,17 +570,33 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "MySQL 数据库",
     supportsMultipart: false,
     fields: [
-      { key: "database", label: "数据库名", type: "text", required: true, placeholder: "my_database" },
-      { key: "table_prefix", label: "表前缀", type: "text", placeholder: "可选：wp_" },
-      { key: "connection_string", label: "直连连接串（可选）", type: "textarea", required: false, placeholder: "mysql://user:pass@host:port/db（未绑定 Hyperdrive 时使用）" },
+      { key: "database", label: "数据库名", type: "text", required: true, placeholder: "my_database", help: "通过 Hyperdrive 绑定时填写目标数据库名" },
+      { key: "table_prefix", label: "表前缀", type: "text", placeholder: "可选：wp_", help: "仅处理带该前缀的表，常用于 WordPress 等" },
+      {
+        key: "connection_string",
+        label: "直连连接串（可选）",
+        type: "textarea",
+        required: false,
+        placeholder: "mysql://user:pass@host:port/db（未绑定 Hyperdrive 时使用）",
+        help: "未绑定 Hyperdrive 时才填写，建议仅在本地开发使用；生产推荐绑定 Cloudflare Hyperdrive",
+        link: { url: "https://developers.cloudflare.com/hyperdrive/", text: "Hyperdrive 文档 →" },
+      },
     ],
   },
   "r2-oauth": {
     name: "Cloudflare R2 (OAuth)",
     supportsMultipart: false,
     fields: [
-      { key: "account_id", label: "Cloudflare 账户 ID", type: "text", required: true, placeholder: "e.g.: 1234567890abcdef" },
-      { key: "bucket", label: "R2 存储桶名", type: "text", required: true, placeholder: "my-r2-bucket" },
+      {
+        key: "account_id",
+        label: "Cloudflare 账户 ID",
+        type: "text",
+        required: true,
+        placeholder: "e.g.: 1234567890abcdef",
+        help: "在 Cloudflare 控制台右侧「账户 ID」处复制",
+        link: { url: "https://dash.cloudflare.com/", text: "Cloudflare 控制台 →" },
+      },
+      { key: "bucket", label: "R2 存储桶名", type: "text", required: true, placeholder: "my-r2-bucket", help: "授权方账户下可访问的 R2 Bucket 名称" },
     ],
     oauth: true,
   },
@@ -514,8 +604,15 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "Dropbox",
     supportsMultipart: false,
     fields: [
-      { key: "access_token", label: "Access Token", type: "password", required: true },
-      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "" },
+      {
+        key: "access_token",
+        label: "Access Token",
+        type: "password",
+        required: true,
+        help: "在 Dropbox App Console 创建 Scoped Access 应用，勾选权限后生成 Access Token。长期令牌需选择 Offline 授权并换取 refresh_token。",
+        link: { url: "https://www.dropbox.com/developers/apps", text: "Dropbox 应用控制台 →" },
+      },
+      { key: "root_path", label: "根目录路径", type: "text", defaultValue: "", help: "限定在 /Appname 等目录内操作，留空表示账户根目录" },
     ],
   },
   github: {
@@ -929,7 +1026,19 @@ const isS3 = formData.type === "s3";
     if (field.type === "textarea") {
       return (
         <div key={field.key}>
-          <label className="block text-xs text-zinc-500 mb-1.5">{field.label}{field.required ? " *" : ""}</label>
+          <label className="block text-xs text-zinc-500 mb-1.5">
+            {field.label}{field.required ? " *" : ""}
+            {field.link && (
+              <a
+                href={field.link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2"
+              >
+                {field.link.text}
+              </a>
+            )}
+          </label>
           <textarea
             value={String(value)}
             onChange={(e) => updateConfigValue(field.key, e.target.value)}
@@ -1382,6 +1491,17 @@ const isS3 = formData.type === "s3";
                   placeholder={isWebdav ? "https://example.com/webdav" : "https://s3.us-east-1.amazonaws.com"}
                   required
                 />
+                {isWebdav && (
+                  <p className="text-xs text-zinc-500 mt-1.5">
+                    WebDAV 用户名/密码由你的服务器（Nginx/Apache/Nextcloud/坚果云）生成，参见 <code className="text-zinc-700 dark:text-zinc-300">docs/WEBDAV_SETUP.md</code>。
+                  </p>
+                )}
+                {isS3 && (
+                  <p className="text-xs text-zinc-500 mt-1.5">
+                    Endpoint 从对象存储控制台复制；AWS 形如 <code className="text-zinc-700 dark:text-zinc-300">https://s3.地区.amazonaws.com</code>，
+                    R2 形如 <code className="text-zinc-700 dark:text-zinc-300">https://account_id.r2.cloudflarestorage.com</code>。
+                  </p>
+                )}
               </div>
             )}
             {isS3 && (
@@ -1491,6 +1611,7 @@ const isS3 = formData.type === "s3";
                   使用部署时 wrangler 配置的 <code className="text-zinc-700 dark:text-zinc-300">r2_buckets</code> 绑定，
                   无需填写密钥。部署了 R2 绑定后系统会自动挂载，这里可手动添加或调整根路径。
                 </div>
+                <a href="https://developers.cloudflare.com/r2/" target="_blank" rel="noopener noreferrer" className="text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2 mt-2 inline-block">Cloudflare R2 文档 →</a>
                 <label className="block text-xs text-zinc-500 mb-1.5 mt-3">根路径（可选）</label>
                 <input
                   type="text"
@@ -1514,8 +1635,9 @@ const isS3 = formData.type === "s3";
             {isR2OAuth && (
               <div className="col-span-2">
                 <div className="text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded p-2.5 leading-relaxed">
-                  通过 Cloudflare OAuth 授权访问他人的 R2 存储桶。需要在 wrangler 配置 CF_CLIENT_ID / CF_CLIENT_SECRET。
+                  通过 Cloudflare OAuth 授权访问他人的 R2 存储桶。需要在 wrangler 配置 CF_CLIENT_ID / CF_CLIENT_SECRET，详见 docs/DEPLOY_SECRETS.md。
                 </div>
+                <a href="https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/" target="_blank" rel="noopener noreferrer" className="text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 underline underline-offset-2 mt-2 inline-block">创建 OAuth 客户端 →</a>
                 <button
                   type="button"
                   onClick={startR2OAuth}

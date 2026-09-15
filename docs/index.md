@@ -80,6 +80,7 @@ For GitHub Actions deployment, see [Deployment Guide](./deployment.md).
 - [Deployment Guide](./deployment.md)
 - [Configuration Reference](./configuration.md)
 - [WebDAV Setup](./webdav.md)
+- [Credential Guide](./CREDENTIAL_GUIDE.md)
 
 ## Technologies Used
 

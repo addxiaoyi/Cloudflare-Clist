@@ -78,6 +78,7 @@ npm run deploy
 - [部署指南](./deployment.md)
 - [配置参考](./configuration.md)
 - [WebDAV 配置](./webdav.md)
+- [凭证获取指南](./CREDENTIAL_GUIDE.md)
 
 ## 使用的技术
 
