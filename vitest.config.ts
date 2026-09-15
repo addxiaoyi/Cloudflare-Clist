@@ -11,5 +11,24 @@ export default defineConfig({
     environment: "node",
     globals: true,
     include: ["tests/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html", "lcov"],
+      reportsDirectory: "./coverage",
+      include: [
+        "app/lib/quark-login.ts",
+        "app/lib/client-factory.ts",
+        "app/lib/github-client.ts",
+      ],
+      exclude: [
+        "app/lib/git/**",
+      ],
+      thresholds: {
+        lines: 40,
+        functions: 40,
+        branches: 30,
+        statements: 40,
+      },
+    },
   },
 });
