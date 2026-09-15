@@ -7,6 +7,8 @@ export interface S3Config {
   basePath?: string;
   usePathStyle?: boolean;
   signatureVersion?: "v2" | "v4";
+  // STS temporary credentials (e.g. Qiniu get_federation_token) require x-amz-security-token
+  sessionToken?: string;
 }
 
 export interface S3Object {
@@ -257,10 +259,14 @@ export class S3Client {
     payload: string = "",
     useUnsignedPayload: boolean = false
   ): Promise<Record<string, string>> {
+    // Temporary credentials must carry x-amz-security-token in the signed headers
+    const headersWithToken = this.config.sessionToken
+      ? { ...headers, "x-amz-security-token": this.config.sessionToken }
+      : headers;
     if (this.signatureVersion === "v2") {
-      return this.signRequestV2(method, path, queryParams, headers);
+      return this.signRequestV2(method, path, queryParams, headersWithToken);
     }
-    return this.signRequestV4(method, path, queryParams, headers, payload, useUnsignedPayload);
+    return this.signRequestV4(method, path, queryParams, headersWithToken, payload, useUnsignedPayload);
   }
 
   private async signRequestV4(
@@ -526,6 +532,8 @@ export class S3Client {
       Signature: signature,
     });
     for (const k of subKeys) params.set(k, subresources[k]);
+    // SigV2 query auth carries the STS token as an unsigned security-token param
+    if (this.config.sessionToken) params.set("security-token", this.config.sessionToken);
 
     return `${url.protocol}//${host}${encodedPath}?${params.toString()}`;
   }
@@ -552,6 +560,10 @@ export class S3Client {
       "X-Amz-Expires": expiresIn.toString(),
       "X-Amz-SignedHeaders": "host",
     };
+    // X-Amz-Security-Token joins the canonical query string, so it is covered by the signature
+    if (this.config.sessionToken) {
+      queryParams["X-Amz-Security-Token"] = this.config.sessionToken;
+    }
 
     const canonicalQueryString = buildCanonicalQueryString(queryParams);
 
@@ -616,6 +628,9 @@ export class S3Client {
       "partNumber": partNumber.toString(),
       "uploadId": uploadId,
     };
+    if (this.config.sessionToken) {
+      queryParams["X-Amz-Security-Token"] = this.config.sessionToken;
+    }
 
     const canonicalQueryString = buildCanonicalQueryString(queryParams);
 

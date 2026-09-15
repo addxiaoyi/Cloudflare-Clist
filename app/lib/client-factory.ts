@@ -66,6 +66,7 @@ export function createClient(
       secretAccessKey: cfg.secret_access_key || storage.secretAccessKey || "",
       bucket: cfg.bucket || storage.bucket || "",
       basePath: cfg.root_folder_path || storage.basePath || "/",
+      sessionToken: cfg.session_token || "",
     });
   }
   if (storage.type === "qiniu") {
@@ -88,6 +89,7 @@ export function createClient(
       bucket: cfg.bucket || storage.bucket || "",
       basePath: cfg.root_folder_path || storage.basePath || "/",
       usePathStyle: cfg.path_style ?? true,
+      sessionToken: cfg.session_token || "",
     });
   }
   if (storage.type === "webdev") {
@@ -173,6 +175,7 @@ export function createClient(
       basePath: storage.basePath || cfg.root_folder_path || cfg.base_path || "/",
       usePathStyle: cfg.path_style === true || cfg.use_path_style === true ? true : (cfg.path_style === false || cfg.use_path_style === false ? false : undefined),
       signatureVersion: sv === "v2" ? "v2" : "v4",
+      sessionToken: cfg.session_token || "",
     });
   }
   return new S3Client({

@@ -475,6 +475,7 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
       { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-kodo-bucket" },
       { key: "access_key", label: "Access Key", type: "password", required: true, placeholder: "七牛 Access Key" },
       { key: "secret_key", label: "Secret Key", type: "password", required: true, placeholder: "七牛 Secret Key" },
+      { key: "session_token", label: "会话令牌", type: "password", placeholder: "可选：STS 临时凭证 Security Token" },
       { key: "domain", label: "域名", type: "text", placeholder: "https://cdn.example.com（可选）" },
       { key: "root_folder_path", label: "根目录路径", type: "text", defaultValue: "/" },
       { key: "use_https", label: "使用 HTTPS", type: "boolean", defaultValue: true },
@@ -1433,6 +1434,16 @@ const isS3 = formData.type === "s3";
                     <option value="v4">SigV4 (AWS4-HMAC-SHA256)</option>
                     <option value="v2">SigV2 (AWS-HMAC-SHA1, 旧版兼容)</option>
                   </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-zinc-500 mb-1.5">会话令牌 (Session Token)</label>
+                  <input
+                    type="password"
+                    value={formData.config?.session_token ?? ""}
+                    onChange={(e) => updateConfigValue("session_token", e.target.value)}
+                    className="w-full field"
+                    placeholder="可选：STS 临时凭证 Security Token"
+                  />
                 </div>
               </div>
             )}
