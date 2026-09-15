@@ -3,6 +3,9 @@
 	"private": true,
 	"license": "MIT",
 	"type": "module",
+	"engines": {
+		"node": ">=22.0.0"
+	},
 	"scripts": {
 		"build": "react-router build",
 		"cf-typegen": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join('.wrangler','tmp');fs.mkdirSync(dir,{recursive:true});const cfg=path.join(dir,'wrangler.jsonc');fs.writeFileSync(cfg,fs.readFileSync('wrangler.jsonc.example','utf8'));\" && wrangler types --config .wrangler/tmp/wrangler.jsonc",

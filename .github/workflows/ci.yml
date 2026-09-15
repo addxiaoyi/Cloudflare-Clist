@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main, master, develop]
@@ -88,3 +92,23 @@ jobs:
           name: build-output
           path: build/
           retention-days: 7
+
+  security:
+    name: Security
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true

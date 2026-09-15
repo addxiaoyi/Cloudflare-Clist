@@ -1,0 +1,8 @@
+# 默认所有者
+* @owner
+
+# 核心库
+app/lib/* @owner
+
+# 测试
+tests/* @owner
