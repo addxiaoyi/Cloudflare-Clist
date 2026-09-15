@@ -14,7 +14,7 @@ import {
   ChevronRight, ArrowLeft, ArrowRightLeft, RefreshCw, PanelLeft,
   FolderPlus, Upload, Download, Copy, Share2, Pencil, Trash2, Play, BarChart3, FileText,
   Folder, AlertCircle, fileTypeIcon, Globe, LayoutGrid, List, Star, Calculator,
-  Eye, EyeClosed,
+  Eye, EyeClosed, QrCode, Smartphone,
 } from "~/components/icons";
 
 export function meta({ data }: Route.MetaArgs) {
@@ -1190,6 +1190,17 @@ const isS3 = formData.type === "s3";
   const [oauthError, setOauthError] = useState("");
   const [oauthConfigured, setOauthConfigured] = useState(false);
   const [oauthAuthorized, setOauthAuthorized] = useState(false);
+
+  // 夸克扫码登录：弹窗内的二维码、轮询状态与定时器
+  type QrStatus = "loading" | "waiting" | "scanned" | "success" | "expired" | "failed";
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrImage, setQrImage] = useState("");
+  const [qrStatus, setQrStatus] = useState<QrStatus>("loading");
+  const [qrHint, setQrHint] = useState("");
+  const [qrCountdown, setQrCountdown] = useState(0);
+  const qrSessionRef = useRef("");
+  const qrPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qrTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // gdrive 类型时查询 OAuth 配置与授权状态，用于显示按钮提示
   useEffect(() => {

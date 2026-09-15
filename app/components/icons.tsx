@@ -186,6 +186,12 @@ export const AlertCircle = (p: IconProps) => (
 export const Link = (p: IconProps) => (
   <Svg {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></Svg>
 );
+export const QrCode = (p: IconProps) => (
+  <Svg {...p}><rect width="5" height="5" x="3" y="3" rx="1" /><rect width="5" height="5" x="16" y="3" rx="1" /><rect width="5" height="5" x="3" y="16" rx="1" /><path d="M21 16h-3a2 2 0 0 0-2 2v3" /><path d="M21 21v.01" /><path d="M12 21v-3a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M12 12h.01" /><path d="M16 12h.01" /><path d="M12 8h.01" /></Svg>
+);
+export const Smartphone = (p: IconProps) => (
+  <Svg {...p}><rect width="14" height="20" x="5" y="2" rx="2" ry="2" /><path d="M12 18h.01" /></Svg>
+);
 export const Megaphone = (p: IconProps) => (
   <Svg {...p}><path d="m3 11 18-5v12L3 14v-3z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></Svg>
 );
