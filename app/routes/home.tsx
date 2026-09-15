@@ -448,7 +448,15 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
     name: "夸克网盘",
     supportsMultipart: false,
     fields: [
-      { key: "cookie", label: "Cookie", type: "textarea", required: true, placeholder: "登录 pan.quark.cn 后 F12 抓取完整 Cookie" },
+      {
+        key: "cookie",
+        label: "Cookie",
+        type: "textarea",
+        required: true,
+        placeholder: "点下方「扫码登录获取 Cookie」自动填入；或登录 pan.quark.cn 后 F12 抓取",
+        help: "推荐用下方「扫码登录」按钮，夸克 App 扫码后 Cookie 自动回填；手动抓取步骤见 docs/CREDENTIAL_GUIDE.md。",
+        link: { url: "https://pan.quark.cn/", text: "夸克网盘网页版 →" },
+      },
       { key: "root_path", label: "根目录路径", type: "text", defaultValue: "/" },
       { key: "use_online_api", label: "使用在线API", type: "boolean", defaultValue: false },
       {
@@ -477,9 +485,9 @@ const driveConfigMap: Record<string, { name: string; supportsMultipart: boolean;
         ],
         defaultValue: "us-east-1",
       },
-      { key: "endpoint", label: "端点", type: "text", defaultValue: "https://fly/storage", placeholder: "https://fly/storage" },
+      { key: "endpoint", label: "端点", type: "text", defaultValue: "https://fly/storage", placeholder: "https://fly/storage", help: "Tigris 的 S3 兼容端点，按区域选择", link: { url: "https://docs.tigrisdata.com/overview", text: "Tigris 端点说明 →" } },
       { key: "bucket", label: "存储桶名", type: "text", required: true, placeholder: "my-bucket" },
-      { key: "access_key_id", label: "访问密钥 ID", type: "password", required: true, placeholder: "Tigris Access Key ID" },
+      { key: "access_key_id", label: "访问密钥 ID", type: "password", required: true, placeholder: "Tigris Access Key ID", help: "控制台 Access Keys → Create New Access Key 生成", link: { url: "https://console.storage.dev/", text: "Tigris 控制台 →" } },
       { key: "secret_access_key", label: "访问密钥", type: "password", required: true, placeholder: "Tigris Secret Access Key" },
       { key: "session_token", label: "会话令牌", type: "password", placeholder: "可选：临时凭证" },
       { key: "use_ssl", label: "启用 SSL", type: "boolean", defaultValue: true },
@@ -895,6 +903,10 @@ function LoginModal({ onLogin, onClose }: { onLogin: () => void; onClose: () => 
     </div>
   );
 }
+
+/* ---------- 夸克扫码登录常量 ---------- */
+const QUARK_QR_TTL_SEC = 300;
+const QUARK_QR_POLL_MS = 3000;
 
 function StorageModal({
   storage,
@@ -1401,6 +1413,116 @@ const isS3 = formData.type === "s3";
     }
   };
 
+  // 夸克扫码：Cookie 属于账号凭据，轮询成功后直接写回表单，不落库、不外发
+  const stopQuarkQr = () => {
+    if (qrPollRef.current) {
+      clearTimeout(qrPollRef.current);
+      qrPollRef.current = null;
+    }
+    if (qrTickRef.current) {
+      clearInterval(qrTickRef.current);
+      qrTickRef.current = null;
+    }
+  };
+
+  const closeQuarkQr = () => {
+    stopQuarkQr();
+    qrSessionRef.current = "";
+    setQrOpen(false);
+  };
+
+  const writeQuarkCookie = (cookie: string) => {
+    // 函数式更新：轮询回调持有的是旧的 formData 快照，直接覆盖会丢掉用户其他输入
+    setFormData((prev) => ({ ...prev, config: { ...(prev.config || {}), cookie } }));
+  };
+
+  const pollQuarkQr = async () => {
+    const session = qrSessionRef.current;
+    if (!session) return;
+
+    let result: { status?: string; cookie?: string; message?: string };
+    try {
+      const res = await fetch(`/api/quark-qr?action=query&session=${encodeURIComponent(session)}`);
+      result = (await res.json()) as typeof result;
+    } catch {
+      result = {};
+    }
+    if (qrSessionRef.current !== session) return;
+
+    if (result.status === "success") {
+      stopQuarkQr();
+      setQrStatus("success");
+      setQrHint("已获取登录 Cookie，请保存配置");
+      writeQuarkCookie(result.cookie || "");
+      qrPollRef.current = setTimeout(closeQuarkQr, 1200);
+      return;
+    }
+    if (result.status === "expired" || result.status === "failed") {
+      stopQuarkQr();
+      setQrStatus(result.status);
+      setQrHint(result.message || (result.status === "expired" ? "二维码已过期" : "扫码登录失败"));
+      return;
+    }
+    // 未扫码/网络抖动都继续等，避免一次失败就打断用户
+    setQrStatus("waiting");
+    qrPollRef.current = setTimeout(pollQuarkQr, QUARK_QR_POLL_MS);
+  };
+
+  const startQuarkQr = async () => {
+    stopQuarkQr();
+    qrSessionRef.current = "";
+    setQrImage("");
+    setQrStatus("loading");
+    setQrHint("正在获取二维码...");
+    setQrCountdown(QUARK_QR_TTL_SEC);
+    setQrOpen(true);
+
+    try {
+      const res = await fetch("/api/quark-qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        session?: string;
+        qrUrl?: string;
+        expiresIn?: number;
+        pollIntervalMs?: number;
+      };
+      if (!res.ok || !data.session || !data.qrUrl) {
+        setQrStatus("failed");
+        setQrHint(data.error || "获取二维码失败，请稍后重试");
+        return;
+      }
+
+      const QRCode = await import("qrcode");
+      setQrImage(await QRCode.toDataURL(data.qrUrl, { margin: 1, width: 220 }));
+
+      qrSessionRef.current = data.session;
+      setQrCountdown(data.expiresIn || QUARK_QR_TTL_SEC);
+      setQrStatus("waiting");
+      setQrHint("打开夸克 App 扫码并确认登录");
+      qrPollRef.current = setTimeout(pollQuarkQr, data.pollIntervalMs || QUARK_QR_POLL_MS);
+      qrTickRef.current = setInterval(() => {
+        setQrCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    } catch {
+      setQrStatus("failed");
+      setQrHint("网络错误，获取二维码失败");
+    }
+  };
+
+  useEffect(() => stopQuarkQr, []);
+
+  useEffect(() => {
+    if (qrOpen && qrStatus === "waiting" && qrCountdown === 0) {
+      stopQuarkQr();
+      setQrStatus("expired");
+      setQrHint("二维码已过期，请重新获取");
+    }
+  }, [qrOpen, qrStatus, qrCountdown]);
+
   // OneDrive OAuth 配置状态查询
   useEffect(() => {
     if (formData.type !== "onedrive") {
@@ -1432,6 +1554,7 @@ const isS3 = formData.type === "s3";
   }, [formData.type, storage?.id]);
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onCancel}>
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between sticky top-0 bg-white dark:bg-zinc-900 rounded-t-lg">
@@ -1712,6 +1835,21 @@ const isS3 = formData.type === "s3";
                     )}
                   </div>
                 )}
+                {formData.type === "quark" && (
+                  <div className="pt-1 space-y-2">
+                    <div className="text-xs text-zinc-500 leading-relaxed">
+                      不必手动 F12 抓包：扫码确认后系统会自动取回登录 Cookie 并填入下方输入框。
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startQuarkQr}
+                      className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition inline-flex items-center justify-center gap-1.5"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      扫码登录获取 Cookie
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             <div className="col-span-2">
@@ -1805,6 +1943,55 @@ const isS3 = formData.type === "s3";
         </form>
       </div>
     </div>
+      {qrOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={closeQuarkQr}>
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-xs rounded-xl shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                <Smartphone className="w-4 h-4" />
+                夸克扫码登录
+              </span>
+              <button onClick={closeQuarkQr} className="icon-btn h-7 w-7" aria-label="关闭">
+                <X />
+              </button>
+            </div>
+
+            <div className="relative aspect-square rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white flex items-center justify-center overflow-hidden">
+              {qrImage ? (
+                <img src={qrImage} alt="夸克登录二维码" className="w-full h-full object-contain p-2" />
+              ) : (
+                <RefreshCw className={`w-6 h-6 text-zinc-400 ${qrStatus === "loading" ? "animate-spin" : ""}`} />
+              )}
+              {(qrStatus === "expired" || qrStatus === "failed") && (
+                <div className="absolute inset-0 bg-white/95 dark:bg-zinc-900/95 flex flex-col items-center justify-center gap-3 px-4">
+                  <span className="text-xs text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">{qrHint}</span>
+                  <button
+                    type="button"
+                    onClick={startQuarkQr}
+                    className="py-1.5 px-3 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+                  >
+                    重新获取二维码
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-3 text-xs text-center leading-relaxed">
+              {qrStatus === "success" ? (
+                <span className="text-emerald-600 dark:text-emerald-400">{qrHint}</span>
+              ) : qrStatus === "waiting" || qrStatus === "loading" ? (
+                <span className="text-zinc-500">
+                  {qrHint}
+                  {qrStatus === "waiting" && <span className="ml-1 text-zinc-400">{qrCountdown}s 后过期</span>}
+                </span>
+              ) : (
+                <span className="text-red-500 dark:text-red-400">{qrHint}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

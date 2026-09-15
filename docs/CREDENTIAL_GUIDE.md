@@ -123,11 +123,14 @@
 
 ## 夸克网盘
 
-**Cookie 登录**
-- 登录夸克网页版 → 浏览器开发者工具 → `Application / Storage` 导出 `cookie` 字符串。
-- 直接填入 `cookie` 字段即可使用。
+**扫码登录（推荐）**
+- 在存储配置表单里点击「扫码登录获取 Cookie」按钮，弹出二维码。
+- 用夸克 App 扫码并确认登录，系统会自动取回登录 Cookie 并填入表单。
+- 仅管理员可用该功能，Cookie 有效期约 30 天，过期后重新扫码即可。
 
-注意：Cookie 会过期，需要定期更新。
+**手动方式**
+- 登录 https://pan.quark.cn/ → 浏览器开发者工具 → `Application / Storage` 导出 `cookie` 字符串。
+- 直接填入 `cookie` 字段即可使用。
 
 ---
 
