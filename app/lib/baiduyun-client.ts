@@ -104,19 +104,6 @@ export class BaiduYunClient {
     return Date.now() >= this.saving.expires_at - 5 * 60 * 1000;
   }
 
-  private hasBduss(): boolean {
-    return !!(
-      (this.config as Record<string, any>).bduss ||
-      (this.saving as Record<string, any>).bduss
-    );
-  }
-
-  private getBduss(): string {
-    return (this.config as Record<string, any>).bduss ||
-      (this.saving as Record<string, any>).bduss ||
-      '';
-  }
-
   private async ensureToken(): Promise<void> {
     const bduss = this.getBduss();
     if (bduss) {
@@ -303,7 +290,11 @@ export class BaiduYunClient {
     }
 
     if (data.errno !== undefined && data.errno !== 0) {
-      if ((data.errno === 111 || data.errno === -6) && retryAuth && !this.hasBduss()) {
+      if (
+        (data.errno === 111 || data.errno === -6) &&
+        retryAuth &&
+        !this.hasBduss()
+      ) {
         await this.refreshToken();
         return this.request(pathname, method, params, body, false);
       }
