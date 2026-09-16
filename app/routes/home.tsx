@@ -2143,8 +2143,16 @@ function StorageModal({
         return;
       }
 
-      const QRCode = await import('qrcode');
-      setQrImage(await QRCode.toDataURL(data.qrUrl, { margin: 1, width: 220 }));
+      try {
+        const QRCode = await import('qrcode');
+        // qrcode.toDataURL 可能是同步的，使用 await 确保安值
+        const qrDataUrl = await QRCode.toDataURL(data.qrUrl, { margin: 1, width: 220 });
+        setQrImage(qrDataUrl);
+      } catch (e) {
+        setQrStatus('failed');
+        setQrHint('二维码生成失败，请稍后重试');
+        return;
+      }
 
       qrSessionRef.current = data.session;
       setQrCountdown(data.expiresIn || QUARK_QR_TTL_SEC);
