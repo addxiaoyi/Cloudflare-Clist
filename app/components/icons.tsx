@@ -161,6 +161,12 @@ export const Cloud = (p: IconProps) => (
     <path d="M17.5 19H19a5 5 0 0 0 0-10h-.5a5.5 5.5 0 0 0-9.5-3.5A5.5 5.5 0 0 0 4 9a5 5 0 0 0 5 5h4.5a4.5 4.5 0 0 1 4 4.5z" />
   </Svg>
 );
+export const StarCloud = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 2l2.09 6.26H20l-5.17 3.76 2.09 6.26L12 14.77l-4.92 3.51 2.09-6.26L4 8.26h5.91z" fill="currentColor" stroke="none" opacity=".9"/>
+    <path d="M17.5 19H19a5 5 0 0 0 0-10h-.5a5.5 5.5 0 0 0-9.5-3.5A5.5 5.5 0 0 0 4 9a5 5 0 0 0 5 5h4.5a4.5 4.5 0 0 1 4 4.5z" opacity=".9"/>
+  </Svg>
+);
 export const Globe = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="10" />
