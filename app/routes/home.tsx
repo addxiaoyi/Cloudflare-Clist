@@ -4962,12 +4962,6 @@ function FileBrowser({
     setSearchQuery('');
   }, [storage.id]);
 
-  useEffect(() => {
-    loadFiles();
-    setSelectedKeys(new Set()); // Clear selection on path change
-    setCursor(-1);
-  }, [storage.id, path, loadFiles]);
-
   // 目录 README.md 自动展示
   useEffect(() => {
     setReadme(null);
@@ -5016,6 +5010,12 @@ function FileBrowser({
       setLoading(false);
     }
   }, [storage.id, path]);
+
+  useEffect(() => {
+    loadFiles();
+    setSelectedKeys(new Set()); // path 变化后清空选中
+    setCursor(-1);
+  }, [storage.id, path, loadFiles]);
 
   const navigateTo = (newPath: string) => {
     setPath(newPath.replace(/^\//, '').replace(/\/$/, ''));

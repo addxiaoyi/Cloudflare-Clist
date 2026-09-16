@@ -12,6 +12,8 @@ import {
   queryQrSession,
   requestId,
   CAS_VERSION,
+  QUARK_QR_TTL_SEC,
+  QUARK_QR_POLL_MS,
 } from '~/lib/quark-login';
 import type { QueryResult } from '~/lib/quark-login';
 
