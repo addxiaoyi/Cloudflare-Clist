@@ -224,7 +224,8 @@ export class R2Client {
     body: ArrayBuffer | string,
     contentType?: string,
   ): Promise<void> {
-    await this.bucket.put(this.getFullPath(key), body, {
+    const bodyData = typeof body === "string" ? new TextEncoder().encode(body).buffer as ArrayBuffer : body;
+    await this.bucket.put(this.getFullPath(key), bodyData, {
       httpMetadata: contentType ? { contentType } : undefined,
     });
   }
@@ -321,7 +322,7 @@ export class R2Client {
 
   async createFolder(folderPath: string): Promise<void> {
     const normalized = folderPath.endsWith('/') ? folderPath : folderPath + '/';
-    await this.bucket.put(this.getFullPath(normalized), '', {
+    await this.bucket.put(this.getFullPath(normalized), new Uint8Array(0), {
       httpMetadata: { contentType: 'application/x-directory' },
     });
   }
