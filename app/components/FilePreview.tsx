@@ -923,6 +923,7 @@ function AudioPlayer({
   fileName: string;
   onInfo?: (info: MediaInfo) => void;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -930,6 +931,7 @@ function AudioPlayer({
   const [volume, setVolume] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isMuted, setIsMuted] = useState(false);
 
   const togglePlay = () => {
     if (audioRef.current) {
@@ -940,6 +942,22 @@ function AudioPlayer({
       }
     }
   };
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const onCanPlay = () => setLoading(false);
+    const onError = () => {
+      setLoading(false);
+      setError('音频加载失败');
+    };
+    el.addEventListener('canplay', onCanPlay, { once: true });
+    el.addEventListener('error', onError, { once: true });
+    return () => {
+      el.removeEventListener('canplay', onCanPlay);
+      el.removeEventListener('error', onError);
+    };
+  }, [url]);
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
@@ -968,7 +986,69 @@ function AudioPlayer({
     if (audioRef.current) {
       audioRef.current.volume = vol;
     }
+    if (vol > 0) setIsMuted(false);
   };
+
+  const toggleMute = () => {
+    if (!audioRef.current) return;
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    audioRef.current.muted = newMuted;
+    if (!newMuted) audioRef.current.volume = volume || 0.8;
+  };
+
+  const seek = (delta: number) => {
+    if (!audioRef.current) return;
+    const next = Math.max(0, Math.min(duration || 0, audioRef.current.currentTime + delta));
+    audioRef.current.currentTime = next;
+    setCurrentTime(next);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      if (!containerRef.current?.contains(document.activeElement) && !document.activeElement?.closest('.audio-player')) {
+        // allow global shortcuts when audio is present but not focused
+      }
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          seek(-5);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          seek(5);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          {
+            const nv = Math.min(1, volume + 0.1);
+            setVolume(nv);
+            if (audioRef.current) audioRef.current.volume = nv;
+          }
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          {
+            const nv = Math.max(0, volume - 0.1);
+            setVolume(nv);
+            if (audioRef.current) audioRef.current.volume = nv;
+          }
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [volume, isMuted, duration]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -990,7 +1070,13 @@ function AudioPlayer({
   if (error) return <PreviewError msg={error} />;
 
   return (
-    <div className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-lg p-6">
+    <div
+      ref={containerRef}
+      className="w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-lg p-6 audio-player"
+      role="region"
+      aria-label="音频播放器"
+      tabIndex={0}
+    >
       <audio
         ref={audioRef}
         src={url}
@@ -1009,6 +1095,7 @@ function AudioPlayer({
       {/* File name */}
       <div className="text-center mb-6">
         <p className="text-white font-mono text-sm truncate">{fileName}</p>
+        <p className="text-zinc-500 text-[11px] mt-1">空格播放/暂停 · ← → 快进/快退 · M 静音 · ↑ ↓ 调音量</p>
       </div>
 
       {/* Progress bar */}
@@ -1024,7 +1111,7 @@ function AudioPlayer({
             [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer"
         />
         <div className="flex justify-between text-xs text-zinc-400 mt-1 font-mono">
-          <span>{formatDuration(currentTime)}</span>
+          <span aria-live="polite">{formatDuration(currentTime)}</span>
           <span>{formatDuration(duration)}</span>
         </div>
       </div>
@@ -1034,7 +1121,8 @@ function AudioPlayer({
         {/* Play/Pause */}
         <button
           onClick={togglePlay}
-          className="grid h-14 w-14 place-items-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-500 transition"
+          aria-label={isPlaying ? '暂停' : '播放'}
+          className="grid h-14 w-14 place-items-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/30 hover:bg-blue-500 transition focus-visible:ring-2 focus-visible:ring-white/80"
         >
           {isPlaying ? (
             <Pause className="h-6 w-6" />
