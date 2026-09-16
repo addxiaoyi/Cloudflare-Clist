@@ -71,6 +71,24 @@ export class BaiduYunClient {
     };
   }
 
+  private getCookie(): string {
+    return this.config.cookie || this.saving.cookie || '';
+  }
+
+  private extractBduss(cookie: string): string {
+    const match = cookie.match(/BDUSS=([^;]+)/);
+    return match ? match[1] : '';
+  }
+
+  private hasBduss(): boolean {
+    const bduss = this.extractBduss(this.getCookie());
+    return bduss.length > 0;
+  }
+
+  private getBduss(): string {
+    return this.extractBduss(this.getCookie());
+  }
+
   private markSavingChanged(): void {
     this.savingChanged = true;
   }
@@ -86,7 +104,28 @@ export class BaiduYunClient {
     return Date.now() >= this.saving.expires_at - 5 * 60 * 1000;
   }
 
+  private hasBduss(): boolean {
+    return !!(
+      (this.config as Record<string, any>).bduss ||
+      (this.saving as Record<string, any>).bduss
+    );
+  }
+
+  private getBduss(): string {
+    return (this.config as Record<string, any>).bduss ||
+      (this.saving as Record<string, any>).bduss ||
+      '';
+  }
+
   private async ensureToken(): Promise<void> {
+    const bduss = this.getBduss();
+    if (bduss) {
+      if (!this.saving.access_token || this.saving.access_token !== bduss) {
+        this.saving.access_token = bduss;
+        this.markSavingChanged();
+      }
+      return;
+    }
     if (!this.saving.access_token || this.isTokenExpired()) {
       await this.refreshToken();
     }
@@ -264,7 +303,7 @@ export class BaiduYunClient {
     }
 
     if (data.errno !== undefined && data.errno !== 0) {
-      if ((data.errno === 111 || data.errno === -6) && retryAuth) {
+      if ((data.errno === 111 || data.errno === -6) && retryAuth && !this.hasBduss()) {
         await this.refreshToken();
         return this.request(pathname, method, params, body, false);
       }

@@ -158,66 +158,7 @@ export const ShieldCheck = (p: IconProps) => (
 );
 export const Cloud = (p: IconProps) => (
   <Svg {...p}>
-    <g fill="currentColor">
-      <rect x="6" y="14" width="2" height="2" />
-      <rect x="8" y="14" width="2" height="2" />
-      <rect x="10" y="14" width="2" height="2" />
-      <rect x="12" y="12" width="2" height="2" />
-      <rect x="14" y="12" width="2" height="2" />
-      <rect x="16" y="12" width="2" height="2" />
-      <rect x="18" y="12" width="2" height="2" />
-      <rect x="20" y="12" width="2" height="2" />
-      <rect x="22" y="14" width="2" height="2" />
-      <rect x="24" y="14" width="2" height="2" />
-      <rect x="10" y="10" width="2" height="2" />
-      <rect x="12" y="10" width="2" height="2" />
-      <rect x="14" y="10" width="2" height="2" />
-      <rect x="16" y="10" width="2" height="2" />
-      <rect x="18" y="10" width="2" height="2" />
-      <rect x="8" y="10" width="2" height="2" />
-      <rect x="6" y="12" width="2" height="2" />
-      <rect x="4" y="14" width="2" height="2" />
-      <rect x="4" y="16" width="2" height="2" />
-      <rect x="4" y="18" width="2" height="2" />
-      <rect x="4" y="20" width="2" height="2" />
-      <rect x="6" y="22" width="2" height="2" />
-      <rect x="8" y="22" width="2" height="2" />
-      <rect x="10" y="22" width="2" height="2" />
-      <rect x="12" y="22" width="2" height="2" />
-      <rect x="14" y="22" width="2" height="2" />
-      <rect x="16" y="20" width="2" height="2" />
-      <rect x="18" y="18" width="2" height="2" />
-      <rect x="20" y="16" width="2" height="2" />
-      <rect x="22" y="14" width="2" height="2" />
-      <rect x="24" y="12" width="2" height="2" />
-      <rect x="26" y="10" width="2" height="2" />
-      <rect x="26" y="8" width="2" height="2" />
-      <rect x="26" y="6" width="2" height="2" />
-      <rect x="24" y="4" width="2" height="2" />
-      <rect x="22" y="4" width="2" height="2" />
-      <rect x="20" y="4" width="2" height="2" />
-      <rect x="18" y="6" width="2" height="2" />
-      <rect x="18" y="8" width="2" height="2" />
-      <rect x="18" y="10" width="2" height="2" />
-      <rect x="16" y="12" width="2" height="2" />
-      <rect x="16" y="14" width="2" height="2" />
-      <rect x="16" y="16" width="2" height="2" />
-      <rect x="14" y="18" width="2" height="2" />
-      <rect x="14" y="20" width="2" height="2" />
-      <rect x="14" y="22" width="2" height="2" />
-      <rect x="12" y="24" width="4" height="2" />
-      <rect x="14" y="24" width="2" height="2" />
-      <rect x="8" y="20" width="2" height="2" />
-      <rect x="8" y="18" width="2" height="2" />
-      <rect x="8" y="16" width="2" height="2" />
-      <rect x="10" y="18" width="2" height="2" />
-      <rect x="12" y="20" width="2" height="2" />
-      <rect x="12" y="18" width="2" height="2" />
-      <rect x="12" y="16" width="2" height="2" />
-      <rect x="10" y="14" width="2" height="2" />
-      <rect x="8" y="12" width="2" height="2" />
-      <rect x="26" y="4" width="4" height="2" />
-    </g>
+    <path d="M17.5 19H19a5 5 0 0 0 0-10h-.5a5.5 5.5 0 0 0-9.5-3.5A5.5 5.5 0 0 0 4 9a5 5 0 0 0 5 5h4.5a4.5 4.5 0 0 1 4 4.5z" />
   </Svg>
 );
 export const Globe = (p: IconProps) => (

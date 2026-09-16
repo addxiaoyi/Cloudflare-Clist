@@ -138,6 +138,8 @@ export class S3Client {
   private config: S3Config;
   private hostStyle: 'path' | 'vhost';
   private signatureVersion: 'v2' | 'v4';
+  
+  private signingKeyCache: Map<string, { key: ArrayBuffer; date: string }> = new Map();
 
   private static readonly SIGV2_SUBRESOURCES = new Set([
     'acl',
@@ -362,12 +364,17 @@ export class S3Client {
       await sha256(canonicalRequest),
     ].join('\n');
 
-    const signingKey = await getSignatureKey(
-      this.config.secretAccessKey,
-      dateStamp,
-      this.config.region,
-      's3',
-    );
+    const cacheKey = `${this.config.secretAccessKey}:${dateStamp}:${this.config.region}`;
+    let signingKey = this.signingKeyCache.get(cacheKey)?.key;
+    if (!signingKey || this.signingKeyCache.get(cacheKey)?.date !== dateStamp) {
+      signingKey = await getSignatureKey(
+        this.config.secretAccessKey,
+        dateStamp,
+        this.config.region,
+        's3',
+      );
+      this.signingKeyCache.set(cacheKey, { key: signingKey, date: dateStamp });
+    }
     const signature = toHex(await hmacSha256(signingKey, stringToSign));
 
     const authorization = `AWS4-HMAC-SHA256 Credential=${this.config.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeadersStr}, Signature=${signature}`;
@@ -652,12 +659,17 @@ export class S3Client {
       await sha256(canonicalRequest),
     ].join('\n');
 
-    const signingKey = await getSignatureKey(
-      this.config.secretAccessKey,
-      dateStamp,
-      this.config.region,
-      's3',
-    );
+    const cacheKey = `${this.config.secretAccessKey}:${dateStamp}:${this.config.region}`;
+    let signingKey = this.signingKeyCache.get(cacheKey)?.key;
+    if (!signingKey || this.signingKeyCache.get(cacheKey)?.date !== dateStamp) {
+      signingKey = await getSignatureKey(
+        this.config.secretAccessKey,
+        dateStamp,
+        this.config.region,
+        's3',
+      );
+      this.signingKeyCache.set(cacheKey, { key: signingKey, date: dateStamp });
+    }
     const signature = toHex(await hmacSha256(signingKey, stringToSign));
 
     return `${url.protocol}//${host}${encodedPath}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
@@ -719,12 +731,17 @@ export class S3Client {
       await sha256(canonicalRequest),
     ].join('\n');
 
-    const signingKey = await getSignatureKey(
-      this.config.secretAccessKey,
-      dateStamp,
-      this.config.region,
-      's3',
-    );
+    const cacheKey = `${this.config.secretAccessKey}:${dateStamp}:${this.config.region}`;
+    let signingKey = this.signingKeyCache.get(cacheKey)?.key;
+    if (!signingKey || this.signingKeyCache.get(cacheKey)?.date !== dateStamp) {
+      signingKey = await getSignatureKey(
+        this.config.secretAccessKey,
+        dateStamp,
+        this.config.region,
+        's3',
+      );
+      this.signingKeyCache.set(cacheKey, { key: signingKey, date: dateStamp });
+    }
     const signature = toHex(await hmacSha256(signingKey, stringToSign));
 
     return `${url.protocol}//${host}${encodedPath}?${canonicalQueryString}&X-Amz-Signature=${signature}`;

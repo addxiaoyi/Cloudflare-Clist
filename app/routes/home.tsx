@@ -3,6 +3,7 @@ import { requireAuth } from '~/lib/auth';
 import { getAllStorages, getPublicStorages, initDatabase } from '~/lib/storage';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FilePreview } from '~/components/FilePreview';
+import { Logo } from '~/components/Logo';
 import { useToast, useConfirm } from '~/components/feedback';
 import { getFileType, isPreviewable } from '~/lib/file-utils';
 import {
@@ -23,7 +24,6 @@ import {
   LogIn,
   LogOut,
   ShieldCheck,
-  Cloud,
   ChevronRight,
   ArrowLeft,
   ArrowRightLeft,
@@ -1813,6 +1813,30 @@ function StorageModal({
   const qrCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qrAbortRef = useRef<AbortController | null>(null);
 
+  // 百度扫码登录：弹窗内的二维码、轮询状态与定时器
+  const [bdQrOpen, setBdQrOpen] = useState(false);
+  const [bdQrImage, setBdQrImage] = useState('');
+  const [bdQrStatus, setBdQrStatus] = useState<QrStatus>('loading');
+  const [bdQrHint, setBdQrHint] = useState('');
+  const [bdQrCountdown, setBdQrCountdown] = useState(0);
+  const bdQrSessionRef = useRef('');
+  const bdQrPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bdQrTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bdQrCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bdQrAbortRef = useRef<AbortController | null>(null);
+
+  // 阿里云盘扫码登录：弹窗内的二维码、轮询状态与定时器
+  const [alQrOpen, setAlQrOpen] = useState(false);
+  const [alQrImage, setAlQrImage] = useState('');
+  const [alQrStatus, setAlQrStatus] = useState<QrStatus>('loading');
+  const [alQrHint, setAlQrHint] = useState('');
+  const [alQrCountdown, setAlQrCountdown] = useState(0);
+  const alQrSessionRef = useRef('');
+  const alQrPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alQrTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const alQrCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alQrAbortRef = useRef<AbortController | null>(null);
+
   // gdrive 类型时查询 OAuth 配置与授权状态，用于显示按钮提示
   useEffect(() => {
     if (formData.type !== 'gdrive') {
@@ -2180,6 +2204,304 @@ function StorageModal({
   };
 
   useEffect(() => stopQuarkQr, []);
+
+  // 百度扫码登录
+  const stopBaiduQr = () => {
+    if (bdQrPollRef.current) {
+      clearTimeout(bdQrPollRef.current);
+      bdQrPollRef.current = null;
+    }
+    if (bdQrTickRef.current) {
+      clearInterval(bdQrTickRef.current);
+      bdQrTickRef.current = null;
+    }
+    if (bdQrCloseRef.current) {
+      clearTimeout(bdQrCloseRef.current);
+      bdQrCloseRef.current = null;
+    }
+    if (bdQrAbortRef.current) {
+      bdQrAbortRef.current.abort();
+      bdQrAbortRef.current = null;
+    }
+  };
+
+  const closeBaiduQr = () => {
+    stopBaiduQr();
+    bdQrSessionRef.current = '';
+    setBdQrOpen(false);
+  };
+
+  const writeBaiduCookie = (cookie: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      config: { ...(prev.config || {}), cookie },
+    }));
+  };
+
+  const pollBaiduQr = async () => {
+    const session = bdQrSessionRef.current;
+    if (!session) return;
+
+    bdQrAbortRef.current = new AbortController();
+    let result: { status?: string; cookie?: string; message?: string };
+    try {
+      const res = await fetch(
+        `/api/baidu-qr?action=query&session=${encodeURIComponent(session)}`,
+        {
+          signal: bdQrAbortRef.current.signal,
+        },
+      );
+      result = (await res.json()) as typeof result;
+    } catch {
+      result = {};
+    }
+    bdQrAbortRef.current = null;
+    if (bdQrSessionRef.current !== session) return;
+
+    if (result.status === 'success') {
+      stopBaiduQr();
+      setBdQrStatus('success');
+      setBdQrHint('已获取登录 Cookie，请保存配置');
+      writeBaiduCookie(result.cookie || '');
+      bdQrCloseRef.current = setTimeout(closeBaiduQr, 1200);
+      return;
+    }
+    if (result.status === 'expired' || result.status === 'failed') {
+      stopBaiduQr();
+      setBdQrStatus(result.status);
+      setBdQrHint(
+        result.message ||
+          (result.status === 'expired' ? '二维码已过期' : '扫码登录失败'),
+      );
+      return;
+    }
+    setBdQrStatus('waiting');
+    bdQrPollRef.current = setTimeout(pollBaiduQr, 3000);
+  };
+
+  const startBaiduQr = async () => {
+    stopBaiduQr();
+    bdQrSessionRef.current = '';
+    setBdQrImage('');
+    setBdQrStatus('loading');
+    setBdQrHint('正在获取二维码...');
+    setBdQrCountdown(300);
+    setBdQrOpen(true);
+
+    try {
+      const res = await fetch('/api/baidu-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        session?: string;
+        qrUrl?: string;
+        expiresIn?: number;
+        pollIntervalMs?: number;
+      };
+      if (!res.ok || !data.session || !data.qrUrl) {
+        setBdQrStatus('failed');
+        setBdQrHint(data.error || '获取二维码失败，请稍后重试');
+        return;
+      }
+
+      setBdQrImage(data.qrUrl);
+      bdQrSessionRef.current = data.session;
+      setBdQrCountdown(data.expiresIn || 300);
+      setBdQrStatus('waiting');
+      setBdQrHint('打开百度 App 扫码并确认登录');
+      bdQrPollRef.current = setTimeout(
+        pollBaiduQr,
+        data.pollIntervalMs || 3000,
+      );
+      bdQrTickRef.current = setInterval(() => {
+        setBdQrCountdown((prev) => {
+          if (prev <= 1) {
+            stopBaiduQr();
+            setBdQrStatus('expired');
+            setBdQrHint('二维码已过期，请重新获取');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch {
+      setBdQrStatus('failed');
+      setBdQrHint('网络错误，获取二维码失败');
+    }
+  };
+
+  useEffect(() => stopBaiduQr, []);
+
+  // 阿里云盘扫码登录
+  const stopAlQr = () => {
+    if (alQrPollRef.current) {
+      clearTimeout(alQrPollRef.current);
+      alQrPollRef.current = null;
+    }
+    if (alQrTickRef.current) {
+      clearInterval(alQrTickRef.current);
+      alQrTickRef.current = null;
+    }
+    if (alQrCloseRef.current) {
+      clearTimeout(alQrCloseRef.current);
+      alQrCloseRef.current = null;
+    }
+    if (alQrAbortRef.current) {
+      alQrAbortRef.current.abort();
+      alQrAbortRef.current = null;
+    }
+  };
+
+  const closeAlQr = () => {
+    stopAlQr();
+    alQrSessionRef.current = '';
+    setAlQrOpen(false);
+  };
+
+  const pollAlQr = async () => {
+    const session = alQrSessionRef.current;
+    if (!session) return;
+
+    alQrAbortRef.current = new AbortController();
+    let result: { status?: string; code?: string; message?: string };
+    try {
+      const res = await fetch(
+        `/api/alicloud-qr?action=query&session=${encodeURIComponent(session)}`,
+        {
+          signal: alQrAbortRef.current.signal,
+        },
+      );
+      result = (await res.json()) as typeof result;
+    } catch {
+      result = {};
+    }
+    alQrAbortRef.current = null;
+    if (alQrSessionRef.current !== session) return;
+
+    if (result.status === 'success' && result.code) {
+      const clientId = formData.config?.client_id || '';
+      const clientSecret = formData.config?.client_secret || '';
+      if (!clientId || !clientSecret) {
+        setAlQrStatus('failed');
+        setAlQrHint('缺少 client_id 或 client_secret，请先在配置中填写');
+        return;
+      }
+      try {
+        const res = await fetch('/api/alicloud-qr/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session,
+            client_id: clientId,
+            client_secret: clientSecret,
+          }),
+        });
+        const data = (await res.json()) as {
+          error?: string;
+          refresh_token?: string;
+        };
+        if (!res.ok || !data.refresh_token) {
+          stopAlQr();
+          setAlQrStatus('failed');
+          setAlQrHint(data.error || '兑换令牌失败，请重试');
+          return;
+        }
+        stopAlQr();
+        setAlQrStatus('success');
+        setAlQrHint('已获取令牌，请保存配置');
+        setFormData((prev) => ({
+          ...prev,
+          config: {
+            ...(prev.config || {}),
+            refresh_token: data.refresh_token,
+          },
+        }));
+        alQrCloseRef.current = setTimeout(closeAlQr, 1200);
+        return;
+      } catch {
+        stopAlQr();
+        setAlQrStatus('failed');
+        setAlQrHint('兑换令牌失败，请重试');
+        return;
+      }
+    }
+    if (result.status === 'expired' || result.status === 'failed') {
+      stopAlQr();
+      setAlQrStatus(result.status);
+      setAlQrHint(
+        result.message ||
+          (result.status === 'expired' ? '二维码已过期' : '扫码登录失败'),
+      );
+      return;
+    }
+    setAlQrStatus('waiting');
+    alQrPollRef.current = setTimeout(pollAlQr, 3000);
+  };
+
+  const startAlQr = async () => {
+    stopAlQr();
+    alQrSessionRef.current = '';
+    setAlQrImage('');
+    setAlQrStatus('loading');
+    setAlQrHint('正在获取二维码...');
+    setAlQrCountdown(300);
+    setAlQrOpen(true);
+
+    try {
+      const clientId = formData.config?.client_id || '';
+      if (!clientId) {
+        setAlQrStatus('failed');
+        setAlQrHint('请先在配置中填写客户端ID（client_id）');
+        return;
+      }
+      const res = await fetch('/api/alicloud-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', client_id: clientId }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        session?: string;
+        qrUrl?: string;
+        expiresIn?: number;
+        pollIntervalMs?: number;
+      };
+      if (!res.ok || !data.session || !data.qrUrl) {
+        setAlQrStatus('failed');
+        setAlQrHint(data.error || '获取二维码失败，请稍后重试');
+        return;
+      }
+
+      setAlQrImage(data.qrUrl);
+      alQrSessionRef.current = data.session;
+      setAlQrCountdown(data.expiresIn || 300);
+      setAlQrStatus('waiting');
+      setAlQrHint('打开阿里云盘 App 扫码并确认登录');
+      alQrPollRef.current = setTimeout(
+        pollAlQr,
+        data.pollIntervalMs || 3000,
+      );
+      alQrTickRef.current = setInterval(() => {
+        setAlQrCountdown((prev) => {
+          if (prev <= 1) {
+            stopAlQr();
+            setAlQrStatus('expired');
+            setAlQrHint('二维码已过期，请重新获取');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch {
+      setAlQrStatus('failed');
+      setAlQrHint('网络错误，获取二维码失败');
+    }
+  };
+
+  useEffect(() => stopAlQr, []);
 
   // OneDrive OAuth 配置状态查询
   useEffect(() => {
@@ -2637,6 +2959,38 @@ function StorageModal({
                       </button>
                     </div>
                   )}
+                  {formData.type === 'baiduyun' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="text-xs text-zinc-500 leading-relaxed">
+                        不必手动 F12 抓包：扫码确认后系统会自动取回登录 Cookie
+                        并填入下方输入框。
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startBaiduQr}
+                        className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition inline-flex items-center justify-center gap-1.5"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        扫码登录获取 Cookie
+                      </button>
+                    </div>
+                  )}
+                  {formData.type === 'alicloud' && (
+                    <div className="pt-1 space-y-2">
+                      <div className="text-xs text-zinc-500 leading-relaxed">
+                        开启「使用在线API」时扫码即可自动获取令牌；本地模式需先填写
+                        client_id 与 client_secret。
+                      </div>
+                      <button
+                        type="button"
+                        onClick={startAlQr}
+                        className="w-full py-2 px-3 text-sm rounded border border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 transition inline-flex items-center justify-center gap-1.5"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        扫码登录获取令牌
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="col-span-2">
@@ -2842,6 +3196,166 @@ function StorageModal({
                 </span>
               ) : (
                 <span className="text-red-500 dark:text-red-400">{qrHint}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {bdQrOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+          onClick={closeBaiduQr}
+          role="dialog"
+          aria-modal="true"
+          aria-label="百度扫码登录"
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-xs rounded-xl shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                <Smartphone className="w-4 h-4" aria-hidden="true" />
+                百度扫码登录
+              </span>
+              <button
+                onClick={closeBaiduQr}
+                className="icon-btn h-7 w-7"
+                aria-label="关闭扫码弹窗"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="relative aspect-square rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white flex items-center justify-center overflow-hidden">
+              {bdQrImage ? (
+                <img
+                  src={bdQrImage}
+                  alt="百度登录二维码，请使用百度 App 扫码"
+                  className="w-full h-full object-contain p-2"
+                />
+              ) : (
+                <RefreshCw
+                  className={`w-6 h-6 text-zinc-400 ${bdQrStatus === 'loading' ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+              )}
+              {(bdQrStatus === 'expired' || bdQrStatus === 'failed') && (
+                <div className="absolute inset-0 bg-white/95 dark:bg-zinc-900/95 flex flex-col items-center justify-center gap-3 px-4">
+                  <span className="text-xs text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">
+                    {bdQrHint}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={startBaiduQr}
+                    className="py-1.5 px-3 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+                  >
+                    重新获取二维码
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              className="mt-3 text-xs text-center leading-relaxed"
+              role="status"
+              aria-live="polite"
+            >
+              {bdQrStatus === 'success' ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {bdQrHint}
+                </span>
+              ) : bdQrStatus === 'waiting' || bdQrStatus === 'loading' ? (
+                <span className="text-zinc-500">
+                  {bdQrHint}
+                  {bdQrStatus === 'waiting' && (
+                    <span className="ml-1 text-zinc-400">
+                      {bdQrCountdown}s 后过期
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-red-500 dark:text-red-400">{bdQrHint}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {alQrOpen && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4"
+          onClick={closeAlQr}
+          role="dialog"
+          aria-modal="true"
+          aria-label="阿里云盘扫码登录"
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-xs rounded-xl shadow-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                <Smartphone className="w-4 h-4" aria-hidden="true" />
+                阿里云盘扫码登录
+              </span>
+              <button
+                onClick={closeAlQr}
+                className="icon-btn h-7 w-7"
+                aria-label="关闭扫码弹窗"
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="relative aspect-square rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white flex items-center justify-center overflow-hidden">
+              {alQrImage ? (
+                <img
+                  src={alQrImage}
+                  alt="阿里云盘登录二维码，请使用阿里云盘 App 扫码"
+                  className="w-full h-full object-contain p-2"
+                />
+              ) : (
+                <RefreshCw
+                  className={`w-6 h-6 text-zinc-400 ${alQrStatus === 'loading' ? 'animate-spin' : ''}`}
+                  aria-hidden="true"
+                />
+              )}
+              {(alQrStatus === 'expired' || alQrStatus === 'failed') && (
+                <div className="absolute inset-0 bg-white/95 dark:bg-zinc-900/95 flex flex-col items-center justify-center gap-3 px-4">
+                  <span className="text-xs text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">
+                    {alQrHint}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={startAlQr}
+                    className="py-1.5 px-3 text-xs rounded border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+                  >
+                    重新获取二维码
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              className="mt-3 text-xs text-center leading-relaxed"
+              role="status"
+              aria-live="polite"
+            >
+              {alQrStatus === 'success' ? (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {alQrHint}
+                </span>
+              ) : alQrStatus === 'waiting' || alQrStatus === 'loading' ? (
+                <span className="text-zinc-500">
+                  {alQrHint}
+                  {alQrStatus === 'waiting' && (
+                    <span className="ml-1 text-zinc-400">
+                      {alQrCountdown}s 后过期
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-red-500 dark:text-red-400">{alQrHint}</span>
               )}
             </div>
           </div>
@@ -7653,10 +8167,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
         <div className="px-4 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 shrink-0">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-600/20">
-              <Cloud className="h-[18px] w-[18px]" />
-            </span>
-            <span className="text-lg font-bold tracking-tight">Starx</span>
+            <Logo />
           </div>
           <div className="flex-1 text-center min-w-0">
             <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate block">
@@ -7851,7 +8362,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             )
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400 dark:text-zinc-600">
-              <Cloud className="h-12 w-12 text-zinc-300 dark:text-zinc-700" />
+              <Logo showText={false} className="h-12 w-12" />
               <span className="text-sm">选择左侧存储以浏览文件</span>
             </div>
           )}
