@@ -118,7 +118,8 @@ export async function getBaiduQrCode(
   if (data.errno !== 0 || !data.sign) {
     throw new Error(data.message || '百度获取二维码失败');
   }
-  const baiduid = resp.headers.get('set-cookie')?.match(/BAIDUID=([^;]+)/)?.[1] || '';
+  const baiduid =
+    resp.headers.get('set-cookie')?.match(/BAIDUID=([^;]+)/)?.[1] || '';
   return {
     sign: data.sign,
     gid,

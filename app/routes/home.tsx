@@ -2170,7 +2170,10 @@ function StorageModal({
       try {
         const QRCode = await import('qrcode');
         // qrcode.toDataURL 可能是同步的，使用 await 确保安值
-        const qrDataUrl = await QRCode.toDataURL(data.qrUrl, { margin: 1, width: 220 });
+        const qrDataUrl = await QRCode.toDataURL(data.qrUrl, {
+          margin: 1,
+          width: 220,
+        });
         setQrImage(qrDataUrl);
       } catch (e) {
         setQrStatus('failed');
@@ -2480,10 +2483,7 @@ function StorageModal({
       setAlQrCountdown(data.expiresIn || 300);
       setAlQrStatus('waiting');
       setAlQrHint('打开阿里云盘 App 扫码并确认登录');
-      alQrPollRef.current = setTimeout(
-        pollAlQr,
-        data.pollIntervalMs || 3000,
-      );
+      alQrPollRef.current = setTimeout(pollAlQr, data.pollIntervalMs || 3000);
       alQrTickRef.current = setInterval(() => {
         setAlQrCountdown((prev) => {
           if (prev <= 1) {
@@ -3275,7 +3275,9 @@ function StorageModal({
                   )}
                 </span>
               ) : (
-                <span className="text-red-500 dark:text-red-400">{bdQrHint}</span>
+                <span className="text-red-500 dark:text-red-400">
+                  {bdQrHint}
+                </span>
               )}
             </div>
           </div>
@@ -3355,7 +3357,9 @@ function StorageModal({
                   )}
                 </span>
               ) : (
-                <span className="text-red-500 dark:text-red-400">{alQrHint}</span>
+                <span className="text-red-500 dark:text-red-400">
+                  {alQrHint}
+                </span>
               )}
             </div>
           </div>

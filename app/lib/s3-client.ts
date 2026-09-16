@@ -138,8 +138,9 @@ export class S3Client {
   private config: S3Config;
   private hostStyle: 'path' | 'vhost';
   private signatureVersion: 'v2' | 'v4';
-  
-  private signingKeyCache: Map<string, { key: ArrayBuffer; date: string }> = new Map();
+
+  private signingKeyCache: Map<string, { key: ArrayBuffer; date: string }> =
+    new Map();
 
   private static readonly SIGV2_SUBRESOURCES = new Set([
     'acl',

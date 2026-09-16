@@ -87,7 +87,9 @@ export async function loader({
     return Response.json({ error: 'Invalid action' }, { status: 400 });
   }
 
-  const clientSession = decodeBaiduSession(url.searchParams.get('session') || '');
+  const clientSession = decodeBaiduSession(
+    url.searchParams.get('session') || '',
+  );
   if (!clientSession) {
     return Response.json(
       { error: '扫码会话无效，请重新获取二维码' },

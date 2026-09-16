@@ -318,7 +318,7 @@ export async function initDatabase(db: D1Database): Promise<void> {
 
   // 建表（新库）；已存在的表不受 CREATE IF NOT EXISTS 影响
   // 注意: D1 的 exec() 按换行分割语句，故每条 DDL 单独 prepare().run()
-   const ddl = [
+  const ddl = [
     `CREATE TABLE IF NOT EXISTS quark_qr_sessions (
       id TEXT PRIMARY KEY,
       payload TEXT NOT NULL,

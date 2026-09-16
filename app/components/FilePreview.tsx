@@ -749,7 +749,10 @@ function VideoPlayer({
           onMouseMove={(e) => {
             if (!progressRef.current) return;
             const rect = progressRef.current.getBoundingClientRect();
-            const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            const percent = Math.max(
+              0,
+              Math.min(1, (e.clientX - rect.left) / rect.width),
+            );
             setHoverPos(percent * 100);
             setHoverTime(percent * duration);
           }}
@@ -999,7 +1002,10 @@ function AudioPlayer({
 
   const seek = (delta: number) => {
     if (!audioRef.current) return;
-    const next = Math.max(0, Math.min(duration || 0, audioRef.current.currentTime + delta));
+    const next = Math.max(
+      0,
+      Math.min(duration || 0, audioRef.current.currentTime + delta),
+    );
     audioRef.current.currentTime = next;
     setCurrentTime(next);
   };
@@ -1007,7 +1013,10 @@ function AudioPlayer({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-      if (!containerRef.current?.contains(document.activeElement) && !document.activeElement?.closest('.audio-player')) {
+      if (
+        !containerRef.current?.contains(document.activeElement) &&
+        !document.activeElement?.closest('.audio-player')
+      ) {
         // allow global shortcuts when audio is present but not focused
       }
       switch (e.key) {
@@ -1095,7 +1104,9 @@ function AudioPlayer({
       {/* File name */}
       <div className="text-center mb-6">
         <p className="text-white font-mono text-sm truncate">{fileName}</p>
-        <p className="text-zinc-500 text-[11px] mt-1">空格播放/暂停 · ← → 快进/快退 · M 静音 · ↑ ↓ 调音量</p>
+        <p className="text-zinc-500 text-[11px] mt-1">
+          空格播放/暂停 · ← → 快进/快退 · M 静音 · ↑ ↓ 调音量
+        </p>
       </div>
 
       {/* Progress bar */}
@@ -1182,7 +1193,10 @@ function ImageViewer({
         >
           −
         </button>
-        <span className="text-white text-sm font-mono w-16 text-center" aria-live="polite">
+        <span
+          className="text-white text-sm font-mono w-16 text-center"
+          aria-live="polite"
+        >
           {Math.round(scale * 100)}%
         </span>
         <button
@@ -1850,7 +1864,9 @@ function PDFViewer({ url }: { url: string }) {
       .then((blob) => {
         if (!cancelled) setLoading(false);
         const objectUrl = URL.createObjectURL(blob);
-        const iframe = document.getElementById('preview-pdf-iframe') as HTMLIFrameElement | null;
+        const iframe = document.getElementById(
+          'preview-pdf-iframe',
+        ) as HTMLIFrameElement | null;
         if (iframe) iframe.src = objectUrl;
         return () => URL.revokeObjectURL(objectUrl);
       })

@@ -224,7 +224,10 @@ export class R2Client {
     body: ArrayBuffer | string,
     contentType?: string,
   ): Promise<void> {
-    const bodyData = typeof body === "string" ? new TextEncoder().encode(body).buffer as ArrayBuffer : body;
+    const bodyData =
+      typeof body === 'string'
+        ? (new TextEncoder().encode(body).buffer as ArrayBuffer)
+        : body;
     await this.bucket.put(this.getFullPath(key), bodyData, {
       httpMetadata: contentType ? { contentType } : undefined,
     });

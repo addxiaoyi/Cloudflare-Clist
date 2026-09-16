@@ -227,10 +227,7 @@ export async function authorize({
   try {
     const result = await checkAlicloudQrStatus(serverSession.token);
     if (result.status !== 'success' || !result.code) {
-      return Response.json(
-        { error: '请先完成扫码确认' },
-        { status: 400 },
-      );
+      return Response.json({ error: '请先完成扫码确认' }, { status: 400 });
     }
 
     const tokenData = await exchangeAlicloudCodeForToken(

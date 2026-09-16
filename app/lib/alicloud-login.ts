@@ -133,7 +133,11 @@ export async function exchangeAlicloudCodeForToken(
   clientId: string,
   clientSecret: string,
   signal?: AbortSignal,
-): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+): Promise<{
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}> {
   const resp = await fetch('https://openapi.alipan.com/oauth/access_token', {
     method: 'POST',
     headers: {
