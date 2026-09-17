@@ -47,9 +47,8 @@ describe('Quark QR Login Smoke', () => {
 
 describe('Baidu QR Login Smoke', () => {
   test('encodeBaiduSession/decodeBaiduSession round-trip', async () => {
-    const { encodeBaiduSession, decodeBaiduSession } = await import(
-      '~/lib/baidu-login'
-    );
+    const { encodeBaiduSession, decodeBaiduSession } =
+      await import('~/lib/baidu-login');
     const session = {
       sign: 'abc123',
       gid: 'gid-456',
@@ -79,9 +78,8 @@ describe('Baidu QR Login Smoke', () => {
 
 describe('Alicloud QR Login Smoke', () => {
   test('encodeAlicloudSession/decodeAlicloudSession round-trip', async () => {
-    const { encodeAlicloudSession, decodeAlicloudSession } = await import(
-      '~/lib/alicloud-login'
-    );
+    const { encodeAlicloudSession, decodeAlicloudSession } =
+      await import('~/lib/alicloud-login');
     const session = {
       token: 'alipay-token-123',
       clientId: 'cli-456',
@@ -138,25 +136,22 @@ describe('Route Registration Smoke', () => {
 
 describe('QR Lib Constants Smoke', () => {
   test('Quark QR constants are reasonable', async () => {
-    const { QUARK_QR_TTL_SEC, QUARK_QR_POLL_MS } = await import(
-      '~/lib/quark-login'
-    );
+    const { QUARK_QR_TTL_SEC, QUARK_QR_POLL_MS } =
+      await import('~/lib/quark-login');
     expect(QUARK_QR_TTL_SEC).toBe(300);
     expect(QUARK_QR_POLL_MS).toBe(3000);
   });
 
   test('Baidu QR constants are reasonable', async () => {
-    const { BAIDU_QR_TTL_SEC, BAIDU_QR_POLL_MS } = await import(
-      '~/lib/baidu-login'
-    );
+    const { BAIDU_QR_TTL_SEC, BAIDU_QR_POLL_MS } =
+      await import('~/lib/baidu-login');
     expect(BAIDU_QR_TTL_SEC).toBe(300);
     expect(BAIDU_QR_POLL_MS).toBe(3000);
   });
 
   test('Alicloud QR constants are reasonable', async () => {
-    const { ALICLOUD_QR_TTL_SEC, ALICLOUD_QR_POLL_MS } = await import(
-      '~/lib/alicloud-login'
-    );
+    const { ALICLOUD_QR_TTL_SEC, ALICLOUD_QR_POLL_MS } =
+      await import('~/lib/alicloud-login');
     expect(ALICLOUD_QR_TTL_SEC).toBe(300);
     expect(ALICLOUD_QR_POLL_MS).toBe(3000);
   });
