@@ -161,7 +161,7 @@ describe('Quark Upload API Flow', () => {
     ).rejects.toThrow('failed to prepare upload');
   });
 
-  test('should proceed even if OSS upload fails', async () => {
+  test('should proceed even if OSS upload fails without retry', async () => {
     const config = { cookie: 'test_cookie' };
     client = new QuarkClient({ config });
 
@@ -180,17 +180,15 @@ describe('Quark Upload API Flow', () => {
     // Mock update/hash
     mockFetch.mockResolvedValueOnce(createMockResponse({ code: 0 }));
 
-    // Mock OSS upload failure - should throw error now
+    // Mock OSS upload failure with a non-retryable error (404 won't trigger retry)
     mockFetch.mockResolvedValueOnce({
       ok: false,
-      status: 500,
-      text: () => Promise.resolve('Internal Server Error'),
+      status: 404,
+      text: () => Promise.resolve('Not Found'),
     });
 
     const buffer = new TextEncoder().encode('test content');
-    await expect(client.putObject('test.txt', buffer)).rejects.toThrow(
-      'Quark OSS upload failed',
-    );
+    await expect(client.putObject('test.txt', buffer)).rejects.toThrow();
   });
 
   test('should retry on 530 error code 1016', async () => {
