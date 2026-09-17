@@ -140,7 +140,7 @@ export class DropboxClient {
     const objects: DriveObject[] = [];
     const prefixes: string[] = [];
 
-    for (const file of files) {
+    for (const file of files || []) {
       const isDir = file.is_folder === true;
       const key = this.getDisplayPath(file.path_lower);
       objects.push({

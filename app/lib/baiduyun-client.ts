@@ -348,7 +348,7 @@ export class BaiduYunClient {
       ? `${stripTrailingSlash(stripLeadingSlash(prefix))}/`
       : '';
 
-    for (const file of files) {
+    for (const file of files || []) {
       const isDirectory = file.isdir === 1;
       const key = isDirectory
         ? `${keyBase}${file.server_filename}/`

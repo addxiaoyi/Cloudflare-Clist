@@ -5378,7 +5378,7 @@ function FileBrowser({
 
     try {
       // Delete folders first (recursive)
-      for (const folder of folders) {
+      for (const folder of folders || []) {
         try {
           const res = await fetch(
             `${apiFileUrl(storage.id, folder.key)}?action=rmdir`,
@@ -5391,7 +5391,7 @@ function FileBrowser({
       }
 
       // Delete files
-      for (const file of files) {
+      for (const file of files || []) {
         try {
           const res = await fetch(apiFileUrl(storage.id, file.key), {
             method: 'DELETE',
@@ -5522,8 +5522,8 @@ function FileBrowser({
     // 选中了文件夹：递归收集后打包 zip
     if (folders.length > 0) {
       const collected: { key: string; name: string }[] = [];
-      for (const f of files) collected.push({ key: f.key, name: f.name });
-      for (const folder of folders) {
+      for (const f of files || []) collected.push({ key: f.key, name: f.name });
+      for (const folder of folders || []) {
         await collectFolderFiles(folder.key, folder.name + '/', collected);
       }
       if (collected.length === 0) {
@@ -5567,7 +5567,7 @@ function FileBrowser({
 
     // 纯文件直下，间隔触发避免浏览器拦截多窗口
     let delay = 0;
-    for (const f of files) {
+    for (const f of files || []) {
       const key = f.key;
       setTimeout(() => triggerDownload(key), delay);
       delay += 400;

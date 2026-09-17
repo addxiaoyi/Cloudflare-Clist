@@ -201,7 +201,7 @@ export class QuarkClient {
     const prefixes: string[] = [];
 
     const parentDisplay = stripLeadingSlash(stripTrailingSlash(prefix || ''));
-    for (const file of files) {
+    for (const file of files || []) {
       const isDir = file.type === 1 || file.is_dir === 1;
       const childDisplay = parentDisplay
         ? `${parentDisplay}/${file.name}`
