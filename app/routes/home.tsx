@@ -121,36 +121,46 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     };
   }
 
-  await initDatabase(db);
+  try {
+    await initDatabase(db);
+    const { isAdmin } = await requireAuth(request, db);
+    const storages = isAdmin
+      ? await getAllStorages(db)
+      : await getPublicStorages(db);
 
-  const { isAdmin } = await requireAuth(request, db);
-
-  const storages = isAdmin
-    ? await getAllStorages(db)
-    : await getPublicStorages(db);
-
-  return {
-    isAdmin,
-    siteTitle,
-    siteAnnouncement,
-    chunkSizeMB,
-    webdavEnabled,
-    storages: storages.map((s) => ({
-      id: s.id,
-      name: s.name,
-      type: s.type,
-      endpoint: s.endpoint,
-      region: s.region,
-      accessKeyId: s.accessKeyId,
-      bucket: s.bucket,
-      basePath: s.basePath,
-      config: isAdmin ? sanitizeConfigForClient(s.config) : undefined,
-      isPublic: s.isPublic,
-      guestList: s.guestList,
-      guestDownload: s.guestDownload,
-      guestUpload: s.guestUpload,
-    })),
-  };
+    return {
+      isAdmin,
+      siteTitle,
+      siteAnnouncement,
+      chunkSizeMB,
+      webdavEnabled,
+      storages: storages.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        endpoint: s.endpoint,
+        region: s.region,
+        accessKeyId: s.accessKeyId,
+        bucket: s.bucket,
+        basePath: s.basePath,
+        config: isAdmin ? sanitizeConfigForClient(s.config) : undefined,
+        isPublic: s.isPublic,
+        guestList: s.guestList,
+        guestDownload: s.guestDownload,
+        guestUpload: s.guestUpload,
+      })),
+    };
+  } catch (err) {
+    console.error('Failed to initialize database:', err);
+    return {
+      isAdmin: false,
+      storages: [],
+      siteTitle,
+      siteAnnouncement,
+      chunkSizeMB,
+      webdavEnabled,
+    };
+  }
 }
 
 interface S3Object {
