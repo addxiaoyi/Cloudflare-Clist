@@ -322,12 +322,6 @@ export async function queryQrSession(
     CAS_STATUS_FAIL.has(cas.status)
   ) {
     result = { status: 'failed', message: cas.message || '扫码登录失败' };
-  } else if (
-    cas.status === CAS_STATUS_OK &&
-    members?.token &&
-    members.token !== session.token
-  ) {
-    result = { status: 'failed', message: '登录会话已变更，请重新获取二维码' };
   }
 
   return result;
