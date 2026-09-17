@@ -193,58 +193,9 @@ function sha1_kt(t: number): number {
   return 0xca62c1d6;
 }
 
-export function sha1Hex(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const words: number[] = [];
-  let i = 0;
-
-  // Convert bytes to 32-bit words
-  for (i = 0; i < bytes.length * 8; i += 32) {
-    words[i >>> 5] |= bytes[(i >>> 3) % 4] << (24 - (i % 32));
-  }
-
-  // Append padding
-  words[((bytes.length * 8 + 64) >>> 9) << 4] |=
-    0x80 << (24 - ((bytes.length * 8 + 64) % 32));
-  words[(((bytes.length * 8 + 128) >>> 9) << 4) + 14] = bytes.length * 8;
-
-  const w: number[] = new Array(80);
-  let a = 0x67452301;
-  let b = 0xefcdab89;
-  let c = 0x98badcfe;
-  let d = 0x10325476;
-  let e = 0xc3d2e1f0;
-
-  for (i = 0; i < words.length; i += 16) {
-    for (let j = 0; j < 16; j++) {
-      w[j] = words[i + j];
-    }
-    for (let j = 16; j < 80; j++) {
-      w[j] = sha1_rol(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
-    }
-
-    let a0 = a;
-    let b0 = b;
-    let c0 = c;
-    let d0 = d;
-    let e0 = e;
-
-    for (let j = 0; j < 80; j++) {
-      const T =
-        sha1_rol(a0, 5) + sha1_tft(j, b0, c0, d0) + e0 + w[j] + sha1_kt(j);
-      e0 = d0;
-      d0 = c0;
-      c0 = sha1_rol(b0, 30);
-      b0 = a0;
-      a0 = T;
-    }
-
-    a = add32(a, a0);
-    b = add32(b, b0);
-    c = add32(c, c0);
-    d = add32(d, d0);
-    e = add32(e, e0);
-  }
-
-  return `${toHex(a)}${toHex(b)}${toHex(c)}${toHex(d)}${toHex(e)}`;
+export async function sha1Hex(buffer: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }

@@ -329,7 +329,7 @@ export class QuarkClient {
     const fileSize = buffer.length;
 
     const md5 = md5Hex(buffer.buffer);
-    const sha1 = sha1Hex(buffer.buffer);
+    const sha1 = await sha1Hex(buffer.buffer);
     const formatType = fileName.includes('.')
       ? fileName.split('.').pop()?.toLowerCase() || 'bin'
       : 'bin';
