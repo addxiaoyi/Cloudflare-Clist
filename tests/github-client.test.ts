@@ -3,7 +3,9 @@ import { GithubClient } from '~/lib/github-client';
 
 describe('GithubClient', () => {
   test('构造成功', () => {
-    const client = new GithubClient({ config: { token: 'ghp_test', repo: 'owner/repo' } });
+    const client = new GithubClient({
+      config: { token: 'ghp_test', repo: 'owner/repo' },
+    });
     expect(client).toBeInstanceOf(GithubClient);
   });
 

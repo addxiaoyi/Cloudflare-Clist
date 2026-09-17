@@ -1,6 +1,10 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import { createClient, type StorageLike, createMysqlClient } from '~/lib/client-factory';
+import {
+  createClient,
+  type StorageLike,
+  createMysqlClient,
+} from '~/lib/client-factory';
 import { GitRepositoryClient } from '~/lib/git/git-repository-client';
 import { S3Client } from '~/lib/s3-client';
 import { WebdevClient } from '~/lib/webdev-client';
@@ -149,7 +153,12 @@ describe('createClient 路由覆盖', () => {
   test('tigris: 使用 config.endpoint 优先于默认值', () => {
     const storage = makeStorage({
       type: 'tigris',
-      config: { endpoint: 'https://fly.storage', access_key_id: 'ak', secret_access_key: 'sk', bucket: 'bkt' },
+      config: {
+        endpoint: 'https://fly.storage',
+        access_key_id: 'ak',
+        secret_access_key: 'sk',
+        bucket: 'bkt',
+      },
     });
     const client = createClient(storage) as any;
     expect(client._ctor).toBe('S3Client');
@@ -173,7 +182,12 @@ describe('createClient 路由覆盖', () => {
   test('qiniu: region 映射 z0 -> cn-east-1', () => {
     const storage = makeStorage({
       type: 'qiniu',
-      config: { region: 'z0', access_key: 'ak', secret_key: 'sk', bucket: 'qiniu-bkt' },
+      config: {
+        region: 'z0',
+        access_key: 'ak',
+        secret_key: 'sk',
+        bucket: 'qiniu-bkt',
+      },
     });
     const client = createClient(storage) as any;
     expect(client._args[0].endpoint).toBe('https://s3.cn-east-1.qiniucs.com');
@@ -184,14 +198,22 @@ describe('createClient 路由覆盖', () => {
   test('qiniu: region 映射 na0 -> us-east-1', () => {
     const storage = makeStorage({
       type: 'qiniu',
-      config: { region: 'na0', access_key: 'ak', secret_key: 'sk', bucket: 'b' },
+      config: {
+        region: 'na0',
+        access_key: 'ak',
+        secret_key: 'sk',
+        bucket: 'b',
+      },
     });
     const client = createClient(storage) as any;
     expect(client._args[0].region).toBe('us-east-1');
   });
 
   test('qiniu: 默认 region 为 z0', () => {
-    const storage = makeStorage({ type: 'qiniu', config: { access_key: 'ak', secret_key: 'sk', bucket: 'b' } });
+    const storage = makeStorage({
+      type: 'qiniu',
+      config: { access_key: 'ak', secret_key: 'sk', bucket: 'b' },
+    });
     const client = createClient(storage) as any;
     expect(client._args[0].region).toBe('cn-east-1');
   });
@@ -214,7 +236,11 @@ describe('createClient 路由覆盖', () => {
   test('ftp: 使用 config 优先，fallback 到 storage 字段', () => {
     const storage = makeStorage({
       type: 'ftp',
-      config: { endpoint: 'https://ftp.example.com', username: 'ftp-user', password: 'ftp-pass' },
+      config: {
+        endpoint: 'https://ftp.example.com',
+        username: 'ftp-user',
+        password: 'ftp-pass',
+      },
       accessKeyId: 'fallback-user',
       secretAccessKey: 'fallback-pass',
     });
@@ -238,7 +264,11 @@ describe('createClient 路由覆盖', () => {
   });
 
   test('quark: 返回 QuarkClient 实例', () => {
-    const storage = makeStorage({ type: 'quark', config: { key: 'val' }, saving: { x: 1 } });
+    const storage = makeStorage({
+      type: 'quark',
+      config: { key: 'val' },
+      saving: { x: 1 },
+    });
     const client = createClient(storage);
     expect((client as any)._ctor).toBe('QuarkClient');
     expect((client as any)._args[0].config).toEqual({ key: 'val' });
@@ -283,7 +313,10 @@ describe('createClient 路由覆盖', () => {
     const storage = makeStorage({
       type: 'r2-oauth',
       config: { account_id: 'acc', bucket: 'bk' },
-      saving: { access_token: 'saved-tok', cloudflare_access_token: 'also-valid' },
+      saving: {
+        access_token: 'saved-tok',
+        cloudflare_access_token: 'also-valid',
+      },
     });
     const client = createClient(storage) as any;
     expect(client._ctor).toBe('R2OAuthClient');
@@ -342,7 +375,9 @@ describe('createMysqlClient', () => {
       basePath: '',
       config: {},
     };
-    expect(() => createMysqlClient(storage)).toThrow('MySQL 需先绑定 Cloudflare Hyperdrive');
+    expect(() => createMysqlClient(storage)).toThrow(
+      'MySQL 需先绑定 Cloudflare Hyperdrive',
+    );
   });
 
   test('有 connectionString 时正常构造', () => {
