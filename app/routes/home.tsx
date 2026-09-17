@@ -5797,7 +5797,8 @@ function FileBrowser({
           continue;
         }
         const uploadPath = path ? `${path}/${file.name}` : file.name;
-        const canMultipart = supportsMultipart(storage.type);
+        const canMultipart =
+          storage.type === 's3' && supportsMultipart(storage.type);
         if (file.size >= CHUNK_SIZE && canMultipart) {
           await uploadMultipart(file, uploadPath, CHUNK_SIZE);
         } else {

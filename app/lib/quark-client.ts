@@ -306,13 +306,107 @@ export class QuarkClient {
   }
 
   async putObject(
-    _key: string,
-    _body: ArrayBuffer | string,
+    key: string,
+    body: ArrayBuffer | string,
     _contentType?: string,
   ): Promise<void> {
-    throw new Error(
-      'Quark multipart upload not supported via direct API, use proxy upload',
+    const targetPath = this.getFullPath(key);
+    const parentPath = targetPath.split('/').slice(0, -1).join('/');
+    const parentId = await this.findFidByPath(parentPath || '');
+    if (parentId < 0) {
+      throw new Error('Quark: parent folder not found');
+    }
+    const fileName = targetPath.split('/').pop() || '';
+    if (!fileName) {
+      throw new Error('Quark: invalid file path');
+    }
+
+    const fileSize =
+      body instanceof ArrayBuffer
+        ? body.byteLength
+        : new TextEncoder().encode(body).length;
+
+    // Prepare upload
+    const prepareRes: Record<string, any> = await this.request(
+      '/1/clouddrive/file/prepare',
+      'POST',
+      undefined,
+      JSON.stringify({
+        pdir_fid: parentId,
+        file_name: fileName,
+        size: fileSize,
+      }),
     );
+
+    const uploadId = prepareRes.data?.upload_id || prepareRes.upload_id;
+    if (!uploadId) {
+      throw new Error('Quark: failed to prepare upload');
+    }
+
+    // Upload parts (chunk size ~4MB)
+    const chunkSize = 4 * 1024 * 1024;
+    const totalParts = Math.ceil(fileSize / chunkSize);
+    const buffer =
+      body instanceof ArrayBuffer
+        ? new Uint8Array(body)
+        : new TextEncoder().encode(body);
+
+    for (let i = 0; i < totalParts; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, fileSize);
+      const chunk = buffer.slice(start, end);
+
+      await this.uploadChunk(uploadId, i + 1, chunk);
+    }
+
+    // Complete upload
+    await this.request(
+      '/1/clouddrive/file/upload_finish',
+      'POST',
+      undefined,
+      JSON.stringify({
+        pdir_fid: parentId,
+        file_name: fileName,
+        upload_id: uploadId,
+        size: fileSize,
+      }),
+    );
+  }
+
+  // 夸克私有分片协议，与标准 multipart 接口无关
+  private async uploadChunk(
+    uploadId: string,
+    partNumber: number,
+    chunk: Uint8Array,
+  ): Promise<void> {
+    const url = new URL(`${API_BASE}/1/clouddrive/file/upload_part`);
+    url.searchParams.set('upload_id', uploadId);
+    url.searchParams.set('part_number', String(partNumber));
+    url.searchParams.set('pr', 'ucpro');
+    url.searchParams.set('fr', 'pc');
+
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        ...this.headers(),
+        'Content-Type': 'application/octet-stream',
+      },
+      body: chunk,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Quark upload part error: ${res.status} ${text.substring(0, 200)}`,
+      );
+    }
+
+    const data: Record<string, any> = await res.json();
+    if (data.code && data.code !== '0') {
+      throw new Error(
+        `Quark upload part error: ${data.code} ${data.message || ''}`,
+      );
+    }
   }
 
   async deleteObject(key: string): Promise<void> {
