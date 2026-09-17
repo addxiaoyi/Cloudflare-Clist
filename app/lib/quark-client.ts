@@ -330,6 +330,9 @@ export class QuarkClient {
 
     const md5 = md5Hex(buffer.buffer);
     const sha1 = sha1Hex(buffer.buffer);
+    const formatType = fileName.includes('.')
+      ? fileName.split('.').pop()?.toLowerCase() || 'bin'
+      : 'bin';
 
     // Step 1: Prepare upload via correct endpoint
     const prepareRes: Record<string, any> = await this.request(
@@ -340,6 +343,7 @@ export class QuarkClient {
         pdir_fid: parentId,
         file_name: fileName,
         size: fileSize,
+        format_type: formatType,
         md5: md5,
         sha1: sha1,
       }),
