@@ -936,7 +936,7 @@ function AudioPlayer({
   const [error, setError] = useState('');
   const [isMuted, setIsMuted] = useState(false);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
@@ -944,7 +944,7 @@ function AudioPlayer({
         audioRef.current.play();
       }
     }
-  };
+  }, [isPlaying]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -992,23 +992,26 @@ function AudioPlayer({
     if (vol > 0) setIsMuted(false);
   };
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (!audioRef.current) return;
     const newMuted = !isMuted;
     setIsMuted(newMuted);
     audioRef.current.muted = newMuted;
     if (!newMuted) audioRef.current.volume = volume || 0.8;
-  };
+  }, [isMuted, volume]);
 
-  const seek = (delta: number) => {
-    if (!audioRef.current) return;
-    const next = Math.max(
-      0,
-      Math.min(duration || 0, audioRef.current.currentTime + delta),
-    );
-    audioRef.current.currentTime = next;
-    setCurrentTime(next);
-  };
+  const seek = useCallback(
+    (delta: number) => {
+      if (!audioRef.current) return;
+      const next = Math.max(
+        0,
+        Math.min(duration || 0, audioRef.current.currentTime + delta),
+      );
+      audioRef.current.currentTime = next;
+      setCurrentTime(next);
+    },
+    [duration],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1057,7 +1060,7 @@ function AudioPlayer({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [volume, isMuted, duration]);
+  }, [volume, isMuted, duration, seek, toggleMute, togglePlay]);
 
   useEffect(() => {
     const el = audioRef.current;
