@@ -323,8 +323,10 @@ export class QuarkClient {
     }
 
     const buffer =
-      body instanceof ArrayBuffer
-        ? new Uint8Array(body)
+      body instanceof ArrayBuffer || body instanceof Uint8Array
+        ? body instanceof ArrayBuffer
+          ? new Uint8Array(body)
+          : body
         : new TextEncoder().encode(body);
     const fileSize = buffer.length;
 
