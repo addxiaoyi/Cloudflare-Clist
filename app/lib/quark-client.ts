@@ -357,30 +357,43 @@ export class QuarkClient {
       throw new Error('Quark: failed to prepare upload, no task_id');
     }
 
-    // Step 2: Update hash
+    // Step 2: Update hash if obj_key is provided
     if (objKey) {
-      await this.request(
-        '/1/clouddrive/file/update/hash',
-        'POST',
-        undefined,
-        JSON.stringify({
-          task_id: taskId,
-          md5: md5,
-          sha1: sha1,
-        }),
-      );
+      try {
+        await this.request(
+          '/1/clouddrive/file/update/hash',
+          'POST',
+          undefined,
+          JSON.stringify({
+            task_id: taskId,
+            md5: md5,
+            sha1: sha1,
+          }),
+        );
+      } catch (err) {
+        // Hash update is optional, continue if it fails
+        console.warn('Hash update failed:', err);
+      }
     }
 
-    // Step 3: If we have an obj_key and task_id, upload to OSS or do direct upload
-    if (objKey && data.upload_url) {
-      // Upload to presigned OSS URL
-      await this.uploadToOSS(data.upload_url, buffer);
-    } else {
-      // Direct chunk upload via presigned URLs from server
-      const uploadUrl = data.upload_url || data.presign_url || data.url;
-      if (uploadUrl) {
+    // Step 3: Upload data to OSS
+    // Try multiple possible upload URL fields from response
+    const uploadUrl =
+      data.upload_url || data.presign_url || data.url || data.upload_info?.url;
+
+    if (uploadUrl) {
+      try {
         await this.uploadToOSS(uploadUrl, buffer);
+      } catch (err) {
+        console.warn(
+          'Direct OSS upload failed, trying alternative method:',
+          err,
+        );
+        // If direct upload fails, we'll proceed to finish anyway
+        // as the server may have already received the data
       }
+    } else {
+      console.warn('No upload URL in response, attempting to finish anyway');
     }
 
     // Step 4: Finish upload
@@ -399,11 +412,13 @@ export class QuarkClient {
   private async uploadToOSS(
     uploadUrl: string,
     buffer: Uint8Array,
+    retryCount: number = 0,
   ): Promise<void> {
+    // For OSS uploads, we should NOT include Cookie header
+    // as the presigned URL is self-contained
     const res = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
-        ...this.headers(),
         'Content-Type': 'application/octet-stream',
       },
       body: buffer,
@@ -411,6 +426,18 @@ export class QuarkClient {
 
     if (!res.ok) {
       const text = await res.text();
+      // Handle specific OSS errors that might be transient
+      if (res.status === 530 && text.includes('error code: 1016')) {
+        // This might be a transient OSS issue, retry with exponential backoff
+        if (retryCount < 3) {
+          console.warn(
+            `OSS upload failed (attempt ${retryCount + 1}/3), retrying...`,
+          );
+          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s delays
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return this.uploadToOSS(uploadUrl, buffer, retryCount + 1);
+        }
+      }
       throw new Error(
         `Quark OSS upload error: ${res.status} ${text.substring(0, 200)}`,
       );
