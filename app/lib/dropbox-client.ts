@@ -125,7 +125,7 @@ export class DropboxClient {
         include_mounted_folders: true,
       },
     );
-    return result.entries || [];
+    return Array.isArray(result.entries) ? result.entries : [];
   }
 
   public async listObjects(

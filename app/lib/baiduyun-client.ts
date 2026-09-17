@@ -314,7 +314,7 @@ export class BaiduYunClient {
       order: this.config.order_by || 'name',
       desc: this.config.order_direction === 'desc' ? '1' : '0',
     });
-    return result.list || [];
+    return Array.isArray(result.list) ? result.list : [];
   }
 
   private async findFileByPath(path: string): Promise<BaiduFile | null> {

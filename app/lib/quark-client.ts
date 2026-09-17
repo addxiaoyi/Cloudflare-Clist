@@ -168,7 +168,7 @@ export class QuarkClient {
         _sort: 'file_path:asc',
       },
     );
-    return result.data || [];
+    return Array.isArray(result.data) ? result.data : [];
   }
 
   private async findFidByPath(path: string): Promise<number> {
