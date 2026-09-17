@@ -335,6 +335,15 @@ export class QuarkClient {
       : 'bin';
 
     // Step 1: Prepare upload via correct endpoint
+    console.log('[Quark] Preparing upload:', {
+      parentId,
+      fileName,
+      fileSize,
+      formatType,
+      md5,
+      sha1,
+    });
+
     const prepareRes: Record<string, any> = await this.request(
       '/1/clouddrive/file/upload/pre',
       'POST',
@@ -349,13 +358,51 @@ export class QuarkClient {
       }),
     );
 
+    console.log('[Quark] Upload prepare response:', {
+      hasData: !!prepareRes.data,
+      hasCode: !!prepareRes.code,
+      code: prepareRes.code,
+      message: prepareRes.message,
+      dataKeys: prepareRes.data ? Object.keys(prepareRes.data) : [],
+    });
+
     const data = prepareRes.data || prepareRes;
-    const taskId = data.task_id || data.upload_id;
-    const objKey = data.obj_key || data.object_key || '';
+
+    // 尝试多种可能的字段名
+    const taskId =
+      data.task_id ||
+      data.upload_id ||
+      data.session_id ||
+      data.upload_session_id ||
+      data.id;
+
+    const objKey =
+      data.obj_key || data.object_key || data.key || data.file_key || '';
+
+    // 尝试获取 upload_url，可能是嵌套对象或字符串
+    let uploadUrl = data.upload_url || data.presign_url || data.url;
+    if (!uploadUrl && data.upload_info) {
+      uploadUrl =
+        data.upload_info.url ||
+        data.upload_info.upload_url ||
+        data.upload_info.presign_url;
+    }
 
     if (!taskId) {
-      throw new Error('Quark: failed to prepare upload, no task_id');
+      console.error(
+        '[Quark] Full prepare response:',
+        JSON.stringify(prepareRes, null, 2),
+      );
+      throw new Error(
+        'Quark: failed to prepare upload, no task_id in response',
+      );
     }
+
+    console.log('[Quark] Extracted:', {
+      taskId,
+      objKey,
+      uploadUrl: !!uploadUrl,
+    });
 
     // Step 2: Update hash if obj_key is provided
     if (objKey) {
@@ -376,13 +423,13 @@ export class QuarkClient {
       }
     }
 
-    // Step 3: Upload data to OSS
-    // Try multiple possible upload URL fields from response
-    const uploadUrl =
-      data.upload_url || data.presign_url || data.url || data.upload_info?.url;
-
+    // Step 3: Upload data to OSS (use uploadUrl extracted earlier)
     if (uploadUrl) {
       try {
+        console.log(
+          '[Quark] Uploading to OSS URL:',
+          uploadUrl.substring(0, 50) + '...',
+        );
         await this.uploadToOSS(uploadUrl, buffer);
       } catch (err) {
         console.warn(
