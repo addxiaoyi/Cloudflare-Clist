@@ -12,7 +12,7 @@
     "deploy": "npm run build && wrangler deploy --config build/server/wrangler.json",
     "deploy:local": "npm run build && wrangler dev --config build/server/wrangler.json",
     "dev": "react-router dev",
-    "postinstall": "npm run cf-typegen",
+    "postinstall": "echo 'skip cf-typegen in postinstall; run typecheck explicitly'",
     "preview": "npm run build && vite preview",
     "typecheck": "npm run cf-typegen && react-router typegen && tsc -b",
     "test": "vitest run",

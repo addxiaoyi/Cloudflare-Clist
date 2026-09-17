@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate worker types
+        run: npm run cf-typegen
+
       - name: Quality check
         run: npm run quality:ci
         env:
@@ -48,6 +51,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Generate worker types
+        run: npm run cf-typegen
 
       - name: Test with coverage
         run: npm run test:coverage
@@ -88,6 +94,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate worker types
+        run: npm run cf-typegen
+
       - name: Build
         run: npm run build
 
@@ -114,6 +123,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Generate worker types
+        run: npm run cf-typegen
 
       - name: Audit dependencies
         run: npm audit --audit-level=high
