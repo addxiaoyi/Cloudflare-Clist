@@ -468,24 +468,36 @@ export class QuarkClient {
   ): Promise<void> {
     // For OSS uploads, we should NOT include Cookie header
     // as the presigned URL is self-contained
+    console.log(
+      `[Quark] Uploading ${buffer.length} bytes to OSS (attempt ${retryCount + 1})`,
+    );
     const res = await fetch(uploadUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/octet-stream',
+        'Content-Length': String(buffer.length),
       },
       body: buffer,
     });
 
     if (!res.ok) {
       const text = await res.text();
+      console.warn(
+        `[Quark] OSS upload failed: ${res.status} ${text.substring(0, 200)}`,
+      );
+
       // Handle specific OSS errors that might be transient
-      if (res.status === 530 && text.includes('error code: 1016')) {
-        // This might be a transient OSS issue, retry with exponential backoff
-        if (retryCount < 3) {
+      // Error code 1016 is a temporary OSS service issue
+      if (
+        (res.status === 530 && text.includes('error code: 1016')) ||
+        res.status >= 500
+      ) {
+        const maxRetries = 5;
+        if (retryCount < maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
           console.warn(
-            `OSS upload failed (attempt ${retryCount + 1}/3), retrying...`,
+            `[Quark] OSS upload failed (attempt ${retryCount + 1}/${maxRetries}), retrying in ${delay}ms...`,
           );
-          const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s delays
           await new Promise((resolve) => setTimeout(resolve, delay));
           return this.uploadToOSS(uploadUrl, buffer, retryCount + 1);
         }
@@ -494,6 +506,8 @@ export class QuarkClient {
         `Quark OSS upload error: ${res.status} ${text.substring(0, 200)}`,
       );
     }
+
+    console.log('[Quark] OSS upload completed successfully');
   }
 
   // 夸克私有分片协议，与标准 multipart 接口无关

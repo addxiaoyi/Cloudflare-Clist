@@ -212,19 +212,14 @@ describe('Quark Upload API Flow', () => {
     // Mock update/hash
     mockFetch.mockResolvedValueOnce(createMockResponse({ code: 0 }));
 
-    // Mock first OSS upload failure (530 error)
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 530,
-      text: () => Promise.resolve('error code: 1016'),
-    });
-
-    // Mock second OSS upload failure (530 error)
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 530,
-      text: () => Promise.resolve('error code: 1016'),
-    });
+    // Mock first 2 OSS upload failures (530 error) - just enough to verify retry logic
+    for (let i = 0; i < 2; i++) {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 530,
+        text: () => Promise.resolve('error code: 1016'),
+      });
+    }
 
     // Mock successful OSS upload on third attempt
     mockFetch.mockResolvedValueOnce({
@@ -240,7 +235,7 @@ describe('Quark Upload API Flow', () => {
 
     // Should have retried (pre + update/hash + 3 OSS attempts + finish = 6 calls)
     expect(mockFetch).toHaveBeenCalledTimes(6);
-  });
+  }, 10000);
 
   test('should handle responses without upload_url', async () => {
     const config = { cookie: 'test_cookie' };
