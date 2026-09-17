@@ -21,7 +21,19 @@ export async function action({
   context: { cloudflare: { env: Env } };
 }) {
   const db = context.cloudflare.env.DB;
-  await initDatabase(db);
+  if (!db) {
+    return Response.json({ error: 'Database not available' }, { status: 500 });
+  }
+
+  try {
+    await initDatabase(db);
+  } catch (e) {
+    console.error('Failed to initialize database:', e);
+    return Response.json(
+      { error: 'Database initialization failed' },
+      { status: 500 },
+    );
+  }
 
   const { isAdmin } = await requireAuth(request, db);
   if (!isAdmin) {
@@ -75,7 +87,19 @@ export async function loader({
   context: { cloudflare: { env: Env } };
 }) {
   const db = context.cloudflare.env.DB;
-  await initDatabase(db);
+  if (!db) {
+    return Response.json({ error: 'Database not available' }, { status: 500 });
+  }
+
+  try {
+    await initDatabase(db);
+  } catch (e) {
+    console.error('Failed to initialize database:', e);
+    return Response.json(
+      { error: 'Database initialization failed' },
+      { status: 500 },
+    );
+  }
 
   const { isAdmin } = await requireAuth(request, db);
   if (!isAdmin) {
