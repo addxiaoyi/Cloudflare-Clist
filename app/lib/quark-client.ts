@@ -1,5 +1,6 @@
 import { stripLeadingSlash, stripTrailingSlash } from './drive-utils';
 import { getMimeType } from './file-utils';
+import { md5Hex, sha1Hex } from './md5';
 
 export interface DriveObject {
   key: string;
@@ -321,56 +322,95 @@ export class QuarkClient {
       throw new Error('Quark: invalid file path');
     }
 
-    const fileSize =
-      body instanceof ArrayBuffer
-        ? body.byteLength
-        : new TextEncoder().encode(body).length;
-
-    // Prepare upload
-    const prepareRes: Record<string, any> = await this.request(
-      '/1/clouddrive/file/prepare',
-      'POST',
-      undefined,
-      JSON.stringify({
-        pdir_fid: parentId,
-        file_name: fileName,
-        size: fileSize,
-      }),
-    );
-
-    const uploadId = prepareRes.data?.upload_id || prepareRes.upload_id;
-    if (!uploadId) {
-      throw new Error('Quark: failed to prepare upload');
-    }
-
-    // Upload parts (chunk size ~4MB)
-    const chunkSize = 4 * 1024 * 1024;
-    const totalParts = Math.ceil(fileSize / chunkSize);
     const buffer =
       body instanceof ArrayBuffer
         ? new Uint8Array(body)
         : new TextEncoder().encode(body);
+    const fileSize = buffer.length;
 
-    for (let i = 0; i < totalParts; i++) {
-      const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, fileSize);
-      const chunk = buffer.slice(start, end);
+    const md5 = md5Hex(buffer.buffer);
+    const sha1 = sha1Hex(buffer.buffer);
 
-      await this.uploadChunk(uploadId, i + 1, chunk);
-    }
-
-    // Complete upload
-    await this.request(
-      '/1/clouddrive/file/upload_finish',
+    // Step 1: Prepare upload via correct endpoint
+    const prepareRes: Record<string, any> = await this.request(
+      '/1/clouddrive/file/upload/pre',
       'POST',
       undefined,
       JSON.stringify({
         pdir_fid: parentId,
         file_name: fileName,
-        upload_id: uploadId,
+        size: fileSize,
+        md5: md5,
+        sha1: sha1,
+      }),
+    );
+
+    const data = prepareRes.data || prepareRes;
+    const taskId = data.task_id || data.upload_id;
+    const objKey = data.obj_key || data.object_key || '';
+
+    if (!taskId) {
+      throw new Error('Quark: failed to prepare upload, no task_id');
+    }
+
+    // Step 2: Update hash
+    if (objKey) {
+      await this.request(
+        '/1/clouddrive/file/update/hash',
+        'POST',
+        undefined,
+        JSON.stringify({
+          task_id: taskId,
+          md5: md5,
+          sha1: sha1,
+        }),
+      );
+    }
+
+    // Step 3: If we have an obj_key and task_id, upload to OSS or do direct upload
+    if (objKey && data.upload_url) {
+      // Upload to presigned OSS URL
+      await this.uploadToOSS(data.upload_url, buffer);
+    } else {
+      // Direct chunk upload via presigned URLs from server
+      const uploadUrl = data.upload_url || data.presign_url || data.url;
+      if (uploadUrl) {
+        await this.uploadToOSS(uploadUrl, buffer);
+      }
+    }
+
+    // Step 4: Finish upload
+    await this.request(
+      '/1/clouddrive/file/upload/finish',
+      'POST',
+      undefined,
+      JSON.stringify({
+        task_id: taskId,
+        obj_key: objKey,
         size: fileSize,
       }),
     );
+  }
+
+  private async uploadToOSS(
+    uploadUrl: string,
+    buffer: Uint8Array,
+  ): Promise<void> {
+    const res = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        ...this.headers(),
+        'Content-Type': 'application/octet-stream',
+      },
+      body: buffer,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Quark OSS upload error: ${res.status} ${text.substring(0, 200)}`,
+      );
+    }
   }
 
   // 夸克私有分片协议，与标准 multipart 接口无关

@@ -124,7 +124,7 @@ export function md5Hex(buffer: ArrayBuffer): string {
     b = gg(b, c, d, a, words[i + 4] || 0, 20, 0xe7d3fbc8);
     a = gg(a, b, c, d, words[i + 9] || 0, 5, 0x21e1cde6);
     d = gg(d, a, b, c, words[i + 14] || 0, 9, 0xc33707d6);
-    c = gg(c, d, a, b, words[i + 3] || 0, 14, 0xf4d50d87);
+    c = gg(c, d, a, b, words[i + 7] || 0, 14, 0x676f02d9);
     b = gg(b, c, d, a, words[i + 8] || 0, 20, 0x455a14ed);
     a = gg(a, b, c, d, words[i + 13] || 0, 5, 0xa9e3e905);
     d = gg(d, a, b, c, words[i + 2] || 0, 9, 0xfcefa3f8);
@@ -142,7 +142,7 @@ export function md5Hex(buffer: ArrayBuffer): string {
     a = hh(a, b, c, d, words[i + 13] || 0, 4, 0x289b7ec6);
     d = hh(d, a, b, c, words[i + 0] || 0, 11, 0xeaa127fa);
     c = hh(c, d, a, b, words[i + 3] || 0, 16, 0xd4ef3085);
-    b = hh(b, c, d, a, words[i + 6] || 0, 23, 0x04881d05);
+    b = hh(b, c, d, a, words[i + 6] || 0, 23, 0xc4ac5665);
     a = hh(a, b, c, d, words[i + 9] || 0, 4, 0xd9d4d039);
     d = hh(d, a, b, c, words[i + 12] || 0, 11, 0xe6db99e5);
     c = hh(c, d, a, b, words[i + 15] || 0, 16, 0x1fa27cf8);
@@ -172,4 +172,79 @@ export function md5Hex(buffer: ArrayBuffer): string {
   }
 
   return `${toHex(a)}${toHex(b)}${toHex(c)}${toHex(d)}`;
+}
+
+// SHA1 implementation
+function sha1_rol(num: number, cnt: number): number {
+  return (num << cnt) | (num >>> (32 - cnt));
+}
+
+function sha1_tft(t: number, b: number, c: number, d: number): number {
+  if (t < 20) return (b & c) | (~b & d);
+  if (t < 40) return b ^ c ^ d;
+  if (t < 60) return (b & c) | (b & d) | (c & d);
+  return b ^ c ^ d;
+}
+
+function sha1_kt(t: number): number {
+  if (t < 20) return 0x5a827999;
+  if (t < 40) return 0x6ed9eba1;
+  if (t < 60) return 0x8f1bbcdc;
+  return 0xca62c1d6;
+}
+
+export function sha1Hex(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const words: number[] = [];
+  let i = 0;
+
+  // Convert bytes to 32-bit words
+  for (i = 0; i < bytes.length * 8; i += 32) {
+    words[i >>> 5] |= bytes[(i >>> 3) % 4] << (24 - (i % 32));
+  }
+
+  // Append padding
+  words[((bytes.length * 8 + 64) >>> 9) << 4] |=
+    0x80 << (24 - ((bytes.length * 8 + 64) % 32));
+  words[(((bytes.length * 8 + 128) >>> 9) << 4) + 14] = bytes.length * 8;
+
+  const w: number[] = new Array(80);
+  let a = 0x67452301;
+  let b = 0xefcdab89;
+  let c = 0x98badcfe;
+  let d = 0x10325476;
+  let e = 0xc3d2e1f0;
+
+  for (i = 0; i < words.length; i += 16) {
+    for (let j = 0; j < 16; j++) {
+      w[j] = words[i + j];
+    }
+    for (let j = 16; j < 80; j++) {
+      w[j] = sha1_rol(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
+    }
+
+    let a0 = a;
+    let b0 = b;
+    let c0 = c;
+    let d0 = d;
+    let e0 = e;
+
+    for (let j = 0; j < 80; j++) {
+      const T =
+        sha1_rol(a0, 5) + sha1_tft(j, b0, c0, d0) + e0 + w[j] + sha1_kt(j);
+      e0 = d0;
+      d0 = c0;
+      c0 = sha1_rol(b0, 30);
+      b0 = a0;
+      a0 = T;
+    }
+
+    a = add32(a, a0);
+    b = add32(b, b0);
+    c = add32(c, c0);
+    d = add32(d, d0);
+    e = add32(e, e0);
+  }
+
+  return `${toHex(a)}${toHex(b)}${toHex(c)}${toHex(d)}${toHex(e)}`;
 }
