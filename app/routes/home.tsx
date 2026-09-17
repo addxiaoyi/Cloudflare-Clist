@@ -2105,6 +2105,21 @@ function StorageModal({
       ...prev,
       config: { ...(prev.config || {}), cookie },
     }));
+
+    // 同步写入后端存储，确保 QuarkClient 初始化时拿到最新 cookie
+    if (storage?.id) {
+      fetch('/api/storages', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update',
+          id: storage.id,
+          config: { ...(storage.config || {}), cookie },
+        }),
+      }).catch(() => {
+        /* ignore sync failure */
+      });
+    }
   };
 
   const pollQuarkQr = async () => {
