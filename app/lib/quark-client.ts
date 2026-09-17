@@ -433,19 +433,21 @@ export class QuarkClient {
           uploadUrl.substring(0, 50) + '...',
         );
         await this.uploadToOSS(uploadUrl, buffer);
+        console.log('[Quark] OSS upload completed successfully');
       } catch (err) {
-        console.warn(
-          'Direct OSS upload failed, trying alternative method:',
-          err,
+        console.error('[Quark] OSS upload failed, cannot complete file:', err);
+        throw new Error(
+          `Quark OSS upload failed: ${err instanceof Error ? err.message : String(err)}`,
         );
-        // If direct upload fails, we'll proceed to finish anyway
-        // as the server may have already received the data
       }
     } else {
-      console.warn('No upload URL in response, attempting to finish anyway');
+      console.warn(
+        'No upload URL in prepare response, attempting to finish anyway',
+      );
     }
 
-    // Step 4: Finish upload
+    // Step 4: Finish upload (only if data was uploaded or no upload URL was needed)
+    console.log('[Quark] Completing file upload...');
     await this.request(
       '/1/clouddrive/file/upload/finish',
       'POST',
@@ -456,6 +458,7 @@ export class QuarkClient {
         size: fileSize,
       }),
     );
+    console.log('[Quark] File upload completed successfully');
   }
 
   private async uploadToOSS(
