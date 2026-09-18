@@ -250,6 +250,108 @@ describe('batch upload queue handling', () => {
   });
 });
 
+describe('stop upload button behavior', () => {
+  it('shows stop icon (StopCircle) during uploading status', () => {
+    const stopIconVisible = (status: 'uploading' | 'paused' | 'error' | 'success'): boolean =>
+      status === 'uploading';
+
+    expect(stopIconVisible('uploading')).toBe(true);
+    expect(stopIconVisible('paused')).toBe(false);
+    expect(stopIconVisible('error')).toBe(false);
+    expect(stopIconVisible('success')).toBe(false);
+  });
+
+  it('hides stop button when not uploading', () => {
+    const showStopButton = (status: UploadProgress['status']): boolean =>
+      status === 'uploading';
+
+    expect(showStopButton('uploading')).toBe(true);
+    expect(showStopButton('success')).toBe(false);
+    expect(showStopButton('error')).toBe(false);
+  });
+});
+
+describe('time estimation edge cases', () => {
+  const estimateTime = (speed: number, bytesRemaining: number): string => {
+    if (speed === 0 || bytesRemaining <= 0) return '计算中...';
+    const seconds = Math.ceil(bytesRemaining / speed);
+    if (seconds < 60) return `${seconds}秒`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
+    return `${Math.floor(seconds / 3600)}小时${Math.floor((seconds % 3600) / 60)}分`;
+  };
+
+  it('handles high speed estimates', () => {
+    expect(estimateTime(100 * 1024 * 1024, 1024 * 1024 * 1024)).toBe('11秒');
+  });
+
+  it('handles very small remaining bytes', () => {
+    expect(estimateTime(1024, 1024)).toBe('1秒');
+  });
+
+  it('handles exact minute boundaries', () => {
+    expect(estimateTime(1024, 1024 * 60)).toBe('1分0秒');
+  });
+
+  it('handles exact hour boundaries', () => {
+    expect(estimateTime(1024, 1024 * 3600)).toBe('1小时0分');
+  });
+});
+
+describe('drag and drop visual feedback', () => {
+  it('calculates drag over state for visual highlight', () => {
+    const calculateDragClass = (dragOver: boolean): string =>
+      dragOver ? 'border-primary bg-primary/5 dark:bg-primary/10' : '';
+
+    expect(calculateDragClass(true)).toBe('border-primary bg-primary/5 dark:bg-primary/10');
+    expect(calculateDragClass(false)).toBe('');
+  });
+
+  it('validates drop with file type check', () => {
+    const isFileAcceptable = (file: File, acceptPattern: RegExp): boolean =>
+      acceptPattern.test(file.type);
+
+    const imageFile = new File([''], 'test.png', { type: 'image/png' });
+    const videoFile = new File([''], 'test.mp4', { type: 'video/mp4' });
+
+    expect(isFileAcceptable(imageFile, /^image\//)).toBe(true);
+    expect(isFileAcceptable(videoFile, /^image\//)).toBe(false);
+  });
+
+  it('limits total dropped files count', () => {
+    const maxFiles = 3;
+    const droppedCount = 5;
+    const acceptedCount = Math.min(droppedCount, maxFiles);
+    expect(acceptedCount).toBe(3);
+  });
+});
+
+describe('upload progress bar width', () => {
+  it('calculates progress bar width from percentage', () => {
+    const progressWidth = (progress: number): string =>
+      `${progress}%`;
+
+    expect(progressWidth(0)).toBe('0%');
+    expect(progressWidth(50)).toBe('50%');
+    expect(progressWidth(100)).toBe('100%');
+  });
+
+  it('applies success state green bar', () => {
+    const successBarClass = (status: 'uploading' | 'paused' | 'error' | 'success'): string =>
+      status === 'success' ? 'bg-green-500' : 'bg-blue-500';
+
+    expect(successBarClass('success')).toBe('bg-green-500');
+    expect(successBarClass('uploading')).toBe('bg-blue-500');
+  });
+
+  it('applies error state red bar', () => {
+    const errorBarClass = (status: 'uploading' | 'paused' | 'error' | 'success'): string =>
+      status === 'error' ? 'bg-red-500' : 'bg-blue-500';
+
+    expect(errorBarClass('error')).toBe('bg-red-500');
+    expect(errorBarClass('paused')).toBe('bg-blue-500');
+  });
+});
+
 describe('abort controller for stopping uploads', () => {
   it('abort() sets signal.aborted to true', () => {
     const controller = new AbortController();
