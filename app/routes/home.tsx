@@ -4925,6 +4925,9 @@ function FileBrowser({
     status: 'uploading' | 'paused' | 'error' | 'success';
     errorMessage?: string;
     startTime?: number;
+    pausedAt?: number; // timestamp when paused
+    retryCount?: number; // number of retries attempted
+    failedParts?: number[]; // list of failed part numbers
     abortController?: AbortController;
   } | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
@@ -5995,6 +5998,7 @@ function FileBrowser({
         speed: 0,
         loaded: 0,
         total: file.size,
+        status: 'uploading',
       });
 
       const initRes = await fetch(
@@ -7008,6 +7012,11 @@ function FileBrowser({
                 uploadProgress.errorMessage && (
                   <div className="text-xs text-red-500 mt-1">
                     {uploadProgress.errorMessage}
+                    {uploadProgress.retryCount !== undefined && (
+                      <span className="block">
+                        重试次数: {uploadProgress.retryCount}
+                      </span>
+                    )}
                   </div>
                 )}
             </div>
@@ -7024,6 +7033,17 @@ function FileBrowser({
                   <StopCircle className="h-4 w-4 text-red-500" />
                 </button>
               )}
+            {uploadProgress.status === 'paused' && (
+              <button
+                onClick={() => {
+                  setUploadProgress({ ...uploadProgress, status: 'uploading' });
+                }}
+                className="shrink-0 p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded transition"
+                title="继续上传"
+              >
+                <Resume className="h-4 w-4 text-green-500" />
+              </button>
+            )}
           </div>
           {uploadProgress.status === 'uploading' && (
             <div className="mt-2 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
