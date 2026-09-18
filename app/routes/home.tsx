@@ -6663,26 +6663,29 @@ function FileBrowser({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <div className="relative group">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-500 transition-colors" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索文件..."
-              className="w-44 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 py-1.5 pl-7 pr-7 text-xs text-zinc-700 dark:text-zinc-200 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition"
+              placeholder="搜索…"
+              className="w-40 sm:w-48 md:w-56 focus-within:w-60 transition-all duration-200 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 py-1.5 pl-8 pr-7 text-xs text-zinc-700 dark:text-zinc-200 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
                 title="清空搜索"
                 aria-label="清空搜索"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+            <kbd className="absolute right-1.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center gap-0.5 text-[10px] text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded px-1 py-0.5 pointer-events-none">
+              /
+            </kbd>
           </div>
           <button
             onClick={() => {
@@ -8183,8 +8186,11 @@ function FileBrowser({
             </div>
             <div className="max-h-[50vh] overflow-y-auto py-1">
               {flatCmdItems.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-zinc-400">
-                  无匹配结果
+                <div className="px-4 py-8 text-center">
+                  <div className="text-xs text-zinc-400 mb-2">找不到匹配的结果</div>
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    尝试使用更简单的关键词，或按 ⌘K 返回主命令
+                  </div>
                 </div>
               ) : (
                 flatCmdItems.map((item, i) => {
@@ -8198,7 +8204,7 @@ function FileBrowser({
                       key={i}
                       onMouseEnter={() => setCmdIndex(i)}
                       onClick={() => execCmdItem(item)}
-                      className={`flex items-center gap-3 w-full px-4 py-2 text-left text-sm ${i === cmdIndex ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300' : 'text-zinc-700 dark:text-zinc-200'} ${item.kind === 'cmd' && item.disabled ? 'opacity-40' : ''}`}
+                      className={`flex items-center gap-3 w-full px-4 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${i === cmdIndex ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300' : 'text-zinc-700 dark:text-zinc-200'} ${item.kind === 'cmd' && item.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                     >
                       {item.kind === 'cmd' && Icon ? (
                         <Icon className="h-4 w-4 shrink-0" />
@@ -8219,21 +8225,26 @@ function FileBrowser({
                             : item.fav.name}
                       </span>
                       {item.kind === 'file' && item.obj.isDirectory && (
-                        <span className="text-xs text-zinc-400">文件夹</span>
+                        <span className="text-xs text-zinc-400 ml-auto">文件夹</span>
                       )}
                       {item.kind === 'fav' && (
-                        <span className="text-xs text-zinc-400">收藏</span>
+                        <span className="text-xs text-zinc-400 ml-auto">收藏</span>
+                      )}
+                      {item.kind === 'cmd' && (
+                        <kbd className="ml-auto text-[10px] text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5">
+                          ⌘{item.id.length}
+                        </kbd>
                       )}
                     </button>
                   );
                 })
               )}
             </div>
-            <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 flex items-center gap-3 text-[11px] text-zinc-400">
-              <span>↑↓ 导航</span>
-              <span>↵ 执行</span>
-              <span>esc 关闭</span>
-              <span className="ml-auto">⌘K 呼出</span>
+            <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 flex items-center gap-4 text-[11px] text-zinc-400">
+              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">↑↓ 导航</span>
+              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">↵ 执行</span>
+              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">esc 关闭</span>
+              <span className="ml-auto text-blue-600 dark:text-blue-400">⌘K 呼出</span>
             </div>
           </div>
         </div>
@@ -8497,7 +8508,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors flex flex-col">
       {/* Header */}
       <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
-        <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+        <div className="px-4 py-2.5 flex items-center justify-between gap-2 sm:gap-3">
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setShowSidebar(true)}
@@ -8516,7 +8527,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               {siteTitle}
             </span>
           </div>
-          <div className="flex items-center gap-1 md:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0">
             <button
               onClick={toggleTheme}
               className="icon-btn h-8 w-8 sm:h-9 sm:w-9"
@@ -8615,7 +8626,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     setEditingStorage(null);
                     setShowStorageForm(true);
                   }}
-                  className="icon-btn h-7 w-7 text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10 transition-colors"
+                  className="icon-btn h-8 w-8 text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10 transition-all duration-200 hover:scale-105 active:scale-95"
                   title="添加存储"
                   aria-label="添加存储"
                 >
@@ -8624,7 +8635,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               )}
               <button
                 onClick={() => setShowSidebar(false)}
-                className="icon-btn h-7 w-7 md:hidden rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="icon-btn h-8 w-8 md:hidden rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-200 hover:scale-105 active:scale-95"
                 title="收起侧边栏"
                 aria-label="收起侧边栏"
               >
@@ -8632,7 +8643,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </button>
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="icon-btn h-7 w-7 hidden md:inline-flex rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                className="icon-btn h-8 w-8 hidden md:inline-flex rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-200 hover:scale-105 active:scale-95"
                 title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
                 aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
               >
@@ -8642,11 +8653,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
           <div className="overflow-y-auto flex-1 py-1">
             {isLoading ? (
-              <div className="px-2 py-1 space-y-1.5">
+              <div className="px-2 py-1.5 space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="h-5 w-5 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
-                    <div className="h-4 flex-1 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+                  <div key={i} className="flex items-center gap-2.5">
+                    <div className="h-5 w-5 rounded-full bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+                    <div className="flex-1">
+                      <div className="h-3.5 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse mb-1.5" />
+                      <div className="h-2.5 rounded bg-zinc-200/60 dark:bg-zinc-800/60 animate-pulse w-20" />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -8675,7 +8689,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               storages.map((s) => (
                 <div
                   key={s.id}
-                  className={`group flex items-center justify-between mx-1 my-0.5 rounded-xl pl-3 pr-1.5 py-2.5 cursor-pointer transition-all duration-150 ${
+                  className={`group flex items-center justify-between mx-1 my-0.5 rounded-xl pl-3 pr-1.5 py-2.5 cursor-pointer transition-all duration-200 ${
                     selectedStorage?.id === s.id
                       ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
                       : 'hover:bg-zinc-100 hover:shadow-sm dark:hover:bg-zinc-800/60'
@@ -8745,7 +8759,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {sidebarCollapsed && (
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid h-10 w-5 place-items-center rounded-r-md bg-white dark:bg-zinc-800 border border-l-0 border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-sm hover:text-blue-500 transition-colors hidden md:inline-flex"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid h-10 w-8 place-items-center rounded-r-md bg-white dark:bg-zinc-800 border border-l-0 border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-sm hover:text-blue-500 transition-all duration-200 hover:scale-110 active:scale-105 hidden md:inline-flex"
             title="展开侧边栏"
             aria-label="展开侧边栏"
           >
@@ -8790,35 +8804,47 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               )
             ) : (
               <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-400 dark:text-zinc-600 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 select-none">
-                <div className="flex flex-col items-center gap-4 px-6 text-center">
+                <div className="group relative">
                   <div className="p-4 rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-50 dark:from-zinc-800 dark:to-zinc-900 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50">
                     <Folder className="h-8 w-8 text-zinc-500 dark:text-zinc-400" />
                   </div>
-                  <div className="flex flex-col items-center gap-2">
-                    <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
-                      欢迎使用 Starx
-                    </h2>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-xs leading-relaxed">
-                      添加存储空间，开始浏览和管理您的文件
-                    </p>
+                  <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </div>
+                <div className="flex flex-col items-center gap-3">
+                  <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
+                    欢迎使用 Starx
+                  </h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-xs leading-relaxed">
+                    添加存储空间，开始浏览和管理您的文件
+                  </p>
+                </div>
+                <div className="flex flex-col items-center gap-2 pt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20">
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">支持 S3、MinIO</span>
+                    </div>
+                    <div className="px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20">
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">云存储聚合</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-center gap-2 pt-2">
-                    <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                      支持 S3、MinIO、云存储等多种存储类型
-                    </p>
-                  </div>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                    支持多种存储类型，一站式管理
+                  </p>
                 </div>
                 {isAdmin && (
-                  <button
-                    onClick={() => {
-                      setEditingStorage(null);
-                      setShowStorageForm(true);
-                    }}
-                    className="group flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:bg-blue-600 dark:hover:bg-blue-500"
-                  >
-                    <Plus className="h-5 w-5 transition-transform group-hover:scale-110" />
-                    <span className="font-medium">添加存储</span>
-                  </button>
+                  <div className="mt-2">
+                    <button
+                      onClick={() => {
+                        setEditingStorage(null);
+                        setShowStorageForm(true);
+                      }}
+                      className="group relative inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:bg-blue-600 dark:hover:bg-blue-500 font-medium overflow-hidden"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      <Plus className="h-5 w-5 transition-transform group-hover:scale-110 relative z-10" />
+                      <span className="relative z-10">添加存储</span>
+                    </button>
+                  </div>
                 )}
               </div>
             )}
