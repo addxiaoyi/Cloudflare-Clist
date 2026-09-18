@@ -352,6 +352,172 @@ describe('upload progress bar width', () => {
   });
 });
 
+describe('upload speed calculation', () => {
+  it('calculates instantaneous speed correctly', () => {
+    const calculateSpeed = (
+      loaded: number,
+      lastLoaded: number,
+      now: number,
+      lastTs: number,
+    ): number => {
+      const elapsed = (now - lastTs) / 1000;
+      return elapsed > 0 ? Math.max(0, (loaded - lastLoaded) / elapsed) : 0;
+    };
+
+    const now = 1000;
+    const lastTs = 500;
+    const lastLoaded = 0;
+    const loaded = 500000;
+
+    expect(calculateSpeed(loaded, lastLoaded, now, lastTs)).toBe(1000000);
+  });
+
+  it('returns zero speed when no elapsed time', () => {
+    const calculateSpeed = (
+      loaded: number,
+      lastLoaded: number,
+      now: number,
+      lastTs: number,
+    ): number => {
+      const elapsed = (now - lastTs) / 1000;
+      return elapsed > 0 ? Math.max(0, (loaded - lastLoaded) / elapsed) : 0;
+    };
+
+    expect(calculateSpeed(500, 500, 1000, 1000)).toBe(0);
+  });
+
+  it('clamps speed to zero when negative', () => {
+    const calculateSpeed = (
+      loaded: number,
+      lastLoaded: number,
+      now: number,
+      lastTs: number,
+    ): number => {
+      const elapsed = (now - lastTs) / 1000;
+      return elapsed > 0 ? Math.max(0, (loaded - lastLoaded) / elapsed) : 0;
+    };
+
+    expect(calculateSpeed(100, 500, 2000, 1000)).toBe(0);
+  });
+
+  it('calculates average speed over upload duration', () => {
+    const calculateAvgSpeed = (totalBytes: number, startTime: number): number => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      return elapsed > 0 ? totalBytes / elapsed : 0;
+    };
+
+    const startTime = Date.now() - 10000;
+    const totalBytes = 1024 * 1024;
+    const speed = calculateAvgSpeed(totalBytes, startTime);
+
+    expect(speed).toBeGreaterThan(0);
+    expect(speed).toBeLessThan(totalBytes + 1);
+  });
+});
+
+describe('multipart progress aggregation', () => {
+  it('aggregates total bytes from part progress', () => {
+    const totalBytesUploaded = 100000;
+    const partProgress: Record<number, number> = {
+      1: 50000,
+      2: 80000,
+      3: 0,
+    };
+
+    const currentBytes =
+      totalBytesUploaded +
+      Object.values(partProgress).reduce((a, b) => a + b, 0);
+
+    expect(currentBytes).toBe(230000);
+  });
+
+  it('handles empty part progress', () => {
+    const totalBytesUploaded = 50000;
+    const partProgress: Record<number, number> = {};
+
+    const currentBytes =
+      totalBytesUploaded +
+      Object.values(partProgress).reduce((a, b) => a + b, 0);
+
+    expect(currentBytes).toBe(50000);
+  });
+
+  it('calculates multipart progress percentage', () => {
+    const calculateProgress = (
+      totalBytes: number,
+      fileTotal: number,
+    ): number => Math.min(Math.round((totalBytes / fileTotal) * 100), 100);
+
+    expect(calculateProgress(0, 1000)).toBe(0);
+    expect(calculateProgress(500, 1000)).toBe(50);
+    expect(calculateProgress(1000, 1000)).toBe(100);
+    expect(calculateProgress(1500, 1000)).toBe(100);
+  });
+});
+
+describe('error retry handling', () => {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 1000;
+
+  it('validates retry count is within limit', () => {
+    const canRetry = (currentRetry: number): boolean =>
+      currentRetry < MAX_RETRIES;
+
+    expect(canRetry(0)).toBe(true);
+    expect(canRetry(2)).toBe(true);
+    expect(canRetry(3)).toBe(false);
+  });
+
+  it('calculates exponential backoff delay', () => {
+    const calculateBackoff = (retry: number): number =>
+      Math.min(RETRY_DELAY_MS * Math.pow(2, retry), 30000);
+
+    expect(calculateBackoff(0)).toBe(1000);
+    expect(calculateBackoff(1)).toBe(2000);
+    expect(calculateBackoff(2)).toBe(4000);
+    expect(calculateBackoff(5)).toBe(30000);
+  });
+
+  it('returns error message based on status code', () => {
+    const getErrorMessage = (status: number): string => {
+      const messages: Record<number, string> = {
+        413: '文件过大',
+        429: '请求过于频繁',
+        500: '服务器错误',
+        503: '服务不可用',
+      };
+      return messages[status] || `HTTP ${status}`;
+    };
+
+    expect(getErrorMessage(413)).toBe('文件过大');
+    expect(getErrorMessage(429)).toBe('请求过于频繁');
+    expect(getErrorMessage(500)).toBe('服务器错误');
+    expect(getErrorMessage(404)).toBe('HTTP 404');
+  });
+});
+
+describe('file validation', () => {
+  it('validates file size limit', () => {
+    const MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024;
+    const isValidSize = (size: number): boolean =>
+      size > 0 && size <= MAX_FILE_SIZE;
+
+    expect(isValidSize(0)).toBe(false);
+    expect(isValidSize(1024)).toBe(true);
+    expect(isValidSize(MAX_FILE_SIZE)).toBe(true);
+    expect(isValidSize(MAX_FILE_SIZE + 1)).toBe(false);
+  });
+
+  it('validates file name is not empty', () => {
+    const isValidName = (name: string): boolean =>
+      name.trim().length > 0;
+
+    expect(isValidName('')).toBe(false);
+    expect(isValidName('  ')).toBe(false);
+    expect(isValidName('test.txt')).toBe(true);
+  });
+});
+
 describe('abort controller for stopping uploads', () => {
   it('abort() sets signal.aborted to true', () => {
     const controller = new AbortController();
