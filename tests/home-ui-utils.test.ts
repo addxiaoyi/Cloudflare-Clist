@@ -15,10 +15,15 @@ function formatSpeed(bytesPerSecond: number): string {
   const k = 1024;
   const sizes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
   const i = Math.floor(Math.log(bytesPerSecond) / Math.log(k));
-  return parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return (
+    parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  );
 }
 
-function formatTimeLeft(bytesPerSecond: number, bytesRemaining: number): string {
+function formatTimeLeft(
+  bytesPerSecond: number,
+  bytesRemaining: number,
+): string {
   if (bytesPerSecond === 0 || bytesRemaining <= 0) return '计算中...';
   const seconds = Math.ceil(bytesRemaining / bytesPerSecond);
   if (seconds < 60) return `${seconds}秒`;
@@ -132,10 +137,7 @@ describe('uploadProgress state', () => {
   });
 
   it('caps progress at 100% for success state', () => {
-    const progress = Math.min(
-      Math.round((1048576000 / 1048576000) * 100),
-      100,
-    );
+    const progress = Math.min(Math.round((1048576000 / 1048576000) * 100), 100);
     const p: UploadProgress = {
       name: 'done.zip',
       progress,
@@ -155,6 +157,32 @@ describe('uploadProgress state', () => {
     };
     expect(p.status).toBe('error');
     expect(p.errorMessage).toBeTruthy();
+  });
+
+  it('tracks retry count and failed parts', () => {
+    const p: UploadProgress = {
+      name: 'retry-file.zip',
+      progress: 60,
+      status: 'error',
+      errorMessage: '分片 2 失败',
+      retryCount: 2,
+      failedParts: [2, 3],
+    };
+    expect(p.status).toBe('error');
+    expect(p.retryCount).toBe(2);
+    expect(p.failedParts).toEqual([2, 3]);
+  });
+
+  it('tracks paused timestamp', () => {
+    const now = Date.now();
+    const p: UploadProgress = {
+      name: 'paused.mp4',
+      progress: 50,
+      status: 'paused',
+      pausedAt: now,
+    };
+    expect(p.pausedAt).toBe(now);
+    expect(new Date(p.pausedAt!).toLocaleTimeString('zh-CN')).toBeTruthy();
   });
 });
 
@@ -221,8 +249,16 @@ describe('batch upload queue handling', () => {
 
   it('tracks multiple files in upload queue', () => {
     const queue: UploadQueueItem[] = [
-      { file: { name: 'a.txt', size: 1000 } as File, status: 'pending', progress: 0 },
-      { file: { name: 'b.txt', size: 2000 } as File, status: 'pending', progress: 0 },
+      {
+        file: { name: 'a.txt', size: 1000 } as File,
+        status: 'pending',
+        progress: 0,
+      },
+      {
+        file: { name: 'b.txt', size: 2000 } as File,
+        status: 'pending',
+        progress: 0,
+      },
     ];
     expect(queue.length).toBe(2);
     expect(queue[0].file.name).toBe('a.txt');
@@ -230,7 +266,11 @@ describe('batch upload queue handling', () => {
 
   it('updates queue item when upload starts', () => {
     const queue: UploadQueueItem[] = [];
-    queue.push({ file: { name: 'test.txt', size: 500 } as File, status: 'pending', progress: 0 });
+    queue.push({
+      file: { name: 'test.txt', size: 500 } as File,
+      status: 'pending',
+      progress: 0,
+    });
 
     queue[0].status = 'uploading';
     queue[0].progress = 10;
@@ -252,8 +292,9 @@ describe('batch upload queue handling', () => {
 
 describe('stop upload button behavior', () => {
   it('shows stop icon (StopCircle) during uploading status', () => {
-    const stopIconVisible = (status: 'uploading' | 'paused' | 'error' | 'success'): boolean =>
-      status === 'uploading';
+    const stopIconVisible = (
+      status: 'uploading' | 'paused' | 'error' | 'success',
+    ): boolean => status === 'uploading';
 
     expect(stopIconVisible('uploading')).toBe(true);
     expect(stopIconVisible('paused')).toBe(false);
@@ -302,7 +343,9 @@ describe('drag and drop visual feedback', () => {
     const calculateDragClass = (dragOver: boolean): string =>
       dragOver ? 'border-primary bg-primary/5 dark:bg-primary/10' : '';
 
-    expect(calculateDragClass(true)).toBe('border-primary bg-primary/5 dark:bg-primary/10');
+    expect(calculateDragClass(true)).toBe(
+      'border-primary bg-primary/5 dark:bg-primary/10',
+    );
     expect(calculateDragClass(false)).toBe('');
   });
 
@@ -327,8 +370,7 @@ describe('drag and drop visual feedback', () => {
 
 describe('upload progress bar width', () => {
   it('calculates progress bar width from percentage', () => {
-    const progressWidth = (progress: number): string =>
-      `${progress}%`;
+    const progressWidth = (progress: number): string => `${progress}%`;
 
     expect(progressWidth(0)).toBe('0%');
     expect(progressWidth(50)).toBe('50%');
@@ -336,16 +378,18 @@ describe('upload progress bar width', () => {
   });
 
   it('applies success state green bar', () => {
-    const successBarClass = (status: 'uploading' | 'paused' | 'error' | 'success'): string =>
-      status === 'success' ? 'bg-green-500' : 'bg-blue-500';
+    const successBarClass = (
+      status: 'uploading' | 'paused' | 'error' | 'success',
+    ): string => (status === 'success' ? 'bg-green-500' : 'bg-blue-500');
 
     expect(successBarClass('success')).toBe('bg-green-500');
     expect(successBarClass('uploading')).toBe('bg-blue-500');
   });
 
   it('applies error state red bar', () => {
-    const errorBarClass = (status: 'uploading' | 'paused' | 'error' | 'success'): string =>
-      status === 'error' ? 'bg-red-500' : 'bg-blue-500';
+    const errorBarClass = (
+      status: 'uploading' | 'paused' | 'error' | 'success',
+    ): string => (status === 'error' ? 'bg-red-500' : 'bg-blue-500');
 
     expect(errorBarClass('error')).toBe('bg-red-500');
     expect(errorBarClass('paused')).toBe('bg-blue-500');
@@ -401,7 +445,10 @@ describe('upload speed calculation', () => {
   });
 
   it('calculates average speed over upload duration', () => {
-    const calculateAvgSpeed = (totalBytes: number, startTime: number): number => {
+    const calculateAvgSpeed = (
+      totalBytes: number,
+      startTime: number,
+    ): number => {
       const elapsed = (Date.now() - startTime) / 1000;
       return elapsed > 0 ? totalBytes / elapsed : 0;
     };
@@ -443,10 +490,8 @@ describe('multipart progress aggregation', () => {
   });
 
   it('calculates multipart progress percentage', () => {
-    const calculateProgress = (
-      totalBytes: number,
-      fileTotal: number,
-    ): number => Math.min(Math.round((totalBytes / fileTotal) * 100), 100);
+    const calculateProgress = (totalBytes: number, fileTotal: number): number =>
+      Math.min(Math.round((totalBytes / fileTotal) * 100), 100);
 
     expect(calculateProgress(0, 1000)).toBe(0);
     expect(calculateProgress(500, 1000)).toBe(50);
@@ -509,8 +554,7 @@ describe('file validation', () => {
   });
 
   it('validates file name is not empty', () => {
-    const isValidName = (name: string): boolean =>
-      name.trim().length > 0;
+    const isValidName = (name: string): boolean => name.trim().length > 0;
 
     expect(isValidName('')).toBe(false);
     expect(isValidName('  ')).toBe(false);

@@ -195,6 +195,23 @@ interface StorageInfo {
   description?: string;
 }
 
+interface UploadProgress {
+  name: string;
+  progress: number;
+  currentPart?: number;
+  totalParts?: number;
+  speed?: number;
+  loaded?: number;
+  total?: number;
+  status: 'uploading' | 'paused' | 'error' | 'success';
+  errorMessage?: string;
+  startTime?: number;
+  pausedAt?: number;
+  retryCount?: number;
+  failedParts?: number[];
+  abortController?: AbortController;
+}
+
 type ConfigField = {
   key: string;
   label: string;
@@ -5884,6 +5901,7 @@ function FileBrowser({
       speed: 0,
       loaded: 0,
       total: file.size,
+      status: 'uploading',
     });
     let lastLoaded = 0;
     let lastTs = Date.now();
@@ -5901,13 +5919,15 @@ function FileBrowser({
               : 0;
           lastLoaded = event.loaded;
           lastTs = now;
-          setUploadProgress({
+          setUploadProgress((prev) => ({
             name: file.name,
             progress: percent,
             speed,
             loaded: event.loaded,
             total: event.total,
-          });
+            status: prev?.status || 'uploading',
+            pausedAt: prev?.pausedAt,
+          }));
         }
       };
 
@@ -6034,7 +6054,7 @@ function FileBrowser({
     const startTime = Date.now();
     const partProgress: Record<number, number> = {};
 
-    const updateProgress = () => {
+    const updateProgress = (prevStatus?: UploadProgress['status']) => {
       const currentBytes =
         totalBytesUploaded +
         Object.values(partProgress).reduce((a, b) => a + b, 0);
@@ -6042,7 +6062,7 @@ function FileBrowser({
       const speed = elapsed > 0 ? currentBytes / elapsed : 0;
       const progress = Math.round((currentBytes / file.size) * 100);
 
-      setUploadProgress({
+      setUploadProgress((prev) => ({
         name: file.name,
         progress: Math.min(progress, 100),
         currentPart: completedParts.length,
@@ -6050,7 +6070,13 @@ function FileBrowser({
         speed,
         loaded: currentBytes,
         total: file.size,
-      });
+        status: prevStatus || prev?.status || 'uploading',
+        pausedAt:
+          prev?.pausedAt ||
+          (prevStatus === 'paused' ? Date.now() : prev?.pausedAt),
+        retryCount: prev?.retryCount,
+        failedParts: prev?.failedParts,
+      }));
     };
 
     updateProgress();
@@ -7008,6 +7034,32 @@ function FileBrowser({
                     )}
                 </div>
               )}
+              {uploadProgress.status === 'paused' && (
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-xs text-zinc-400 tabular-nums">
+                    {uploadProgress.loaded !== undefined &&
+                      uploadProgress.total !== undefined && (
+                        <>
+                          {formatBytes(uploadProgress.loaded)} /{' '}
+                          {formatBytes(uploadProgress.total)}
+                        </>
+                      )}
+                  </span>
+                  {uploadProgress.pausedAt && (
+                    <span className="text-xs text-zinc-400 tabular-nums">
+                      暂停于{' '}
+                      {new Date(uploadProgress.pausedAt).toLocaleTimeString(
+                        'zh-CN',
+                        {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        },
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
               {uploadProgress.status === 'error' &&
                 uploadProgress.errorMessage && (
                   <div className="text-xs text-red-500 mt-1">
@@ -7017,6 +7069,12 @@ function FileBrowser({
                         重试次数: {uploadProgress.retryCount}
                       </span>
                     )}
+                    {uploadProgress.failedParts &&
+                      uploadProgress.failedParts.length > 0 && (
+                        <span className="block">
+                          失败分片: {uploadProgress.failedParts.join(', ')}
+                        </span>
+                      )}
                   </div>
                 )}
             </div>
