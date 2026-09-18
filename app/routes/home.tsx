@@ -8541,6 +8541,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 </span>
                 <button
                   onClick={handleLogout}
+                  className="icon-btn h-7 w-7 md:hidden"
+                  title="登出"
+                  aria-label="登出"
+                >
+                  <LogOut />
+                </button>
+                <button
+                  onClick={handleLogout}
                   className="btn btn-sm btn-ghost hidden sm:inline-flex"
                   title="登出"
                 >
@@ -8549,14 +8557,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => setShowLogin(true)}
-                className="btn btn-sm btn-ghost hidden sm:inline-flex"
-                title="登录"
-              >
-                <LogIn />
-                登录
-              </button>
+              <>
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="icon-btn h-7 w-7 md:hidden"
+                  title="登录"
+                  aria-label="登录"
+                >
+                  <LogIn />
+                </button>
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="btn btn-sm btn-ghost hidden sm:inline-flex"
+                  title="登录"
+                >
+                  <LogIn />
+                  登录
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -8566,7 +8584,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {/* Sidebar Overlay for mobile */}
         {showSidebar && (
           <div
-            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+            className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden transition-opacity duration-300"
             onClick={() => setShowSidebar(false)}
             aria-hidden="true"
           />
@@ -8634,10 +8652,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
             ) : storages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 mb-2">
-                  <FolderPlus className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-50 dark:from-zinc-800 dark:to-zinc-900 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50 mb-3">
+                  <FolderPlus className="h-7 w-7 text-zinc-500 dark:text-zinc-400" />
                 </div>
-                <div className="mb-4">
+                <div className="mb-3">
                   <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">暂无存储</p>
                   {isAdmin && (
                     <button
@@ -8645,9 +8663,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                         setEditingStorage(null);
                         setShowStorageForm(true);
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-blue-400"
+                      className="group inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-blue-400"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-4 w-4 transition-transform group-hover:scale-110" />
                       添加存储
                     </button>
                   )}
@@ -8740,13 +8758,27 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <div className="h-full flex flex-col">
             {selectedStorage ? (
               selectedStorage.type === 'mysql' ? (
-                <div className="p-4">
-                  <a
-                    href={`/mysql/${selectedStorage.id}`}
-                    className="text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    前往 MySQL 浏览器: {selectedStorage.name}
-                  </a>
+                <div className="flex items-center justify-center h-full">
+                  <div className="flex flex-col items-center gap-4 text-center p-6">
+                    <div className="p-3 rounded-full bg-blue-50 dark:bg-blue-500/10">
+                      <Play className="h-6 w-6 text-blue-500" />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <h3 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">
+                        {selectedStorage.name}
+                      </h3>
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        MySQL 浏览器已准备就绪
+                      </p>
+                    </div>
+                    <a
+                      href={`/mysql/${selectedStorage.id}`}
+                      className="group inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 font-medium"
+                    >
+                      <Play className="h-5 w-5 transition-transform group-hover:scale-110" />
+                      前往 MySQL 浏览器
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <FileBrowser
