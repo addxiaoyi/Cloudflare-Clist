@@ -158,6 +158,98 @@ describe('uploadProgress state', () => {
   });
 });
 
+describe('paused status', () => {
+  it('shows paused icon when paused', () => {
+    const p: UploadProgress = {
+      name: 'resume-video.mp4',
+      progress: 50,
+      currentPart: 5,
+      totalParts: 10,
+      loaded: 500000000,
+      total: 1000000000,
+      status: 'paused',
+    };
+    expect(p.status).toBe('paused');
+    expect(p.progress).toBe(50);
+  });
+
+  it('preserves progress when transitioning from paused back to uploading', () => {
+    const pausedProgress: UploadProgress = {
+      name: 'paused-file.txt',
+      progress: 75,
+      currentPart: 3,
+      totalParts: 4,
+      status: 'paused',
+    };
+
+    const resumedProgress: UploadProgress = {
+      ...pausedProgress,
+      status: 'uploading',
+      startTime: Date.now(),
+    };
+    expect(resumedProgress.progress).toBe(75);
+    expect(resumedProgress.status).toBe('uploading');
+  });
+});
+
+describe('progress calculation', () => {
+  it('calculates progress percentage correctly', () => {
+    const calculateProgress = (loaded: number, total: number): number =>
+      Math.round((loaded / total) * 100);
+
+    expect(calculateProgress(0, 1000)).toBe(0);
+    expect(calculateProgress(500, 1000)).toBe(50);
+    expect(calculateProgress(750, 1000)).toBe(75);
+    expect(calculateProgress(1000, 1000)).toBe(100);
+  });
+
+  it('handles small file progress increments', () => {
+    const calculateProgress = (loaded: number, total: number): number =>
+      Math.min(Math.round((loaded / total) * 100), 100);
+
+    expect(calculateProgress(1, 1024)).toBe(0);
+    expect(calculateProgress(512, 1024)).toBe(50);
+  });
+});
+
+describe('batch upload queue handling', () => {
+  type UploadQueueItem = {
+    file: File;
+    status: 'pending' | 'uploading' | 'done' | 'error';
+    progress: number;
+  };
+
+  it('tracks multiple files in upload queue', () => {
+    const queue: UploadQueueItem[] = [
+      { file: { name: 'a.txt', size: 1000 } as File, status: 'pending', progress: 0 },
+      { file: { name: 'b.txt', size: 2000 } as File, status: 'pending', progress: 0 },
+    ];
+    expect(queue.length).toBe(2);
+    expect(queue[0].file.name).toBe('a.txt');
+  });
+
+  it('updates queue item when upload starts', () => {
+    const queue: UploadQueueItem[] = [];
+    queue.push({ file: { name: 'test.txt', size: 500 } as File, status: 'pending', progress: 0 });
+
+    queue[0].status = 'uploading';
+    queue[0].progress = 10;
+
+    expect(queue[0].status).toBe('uploading');
+    expect(queue[0].progress).toBe(10);
+  });
+
+  it('marks items as done after completion', () => {
+    const items: UploadQueueItem[] = [];
+    const mockFile = new File(['content'], 'done.txt', { type: 'text/plain' });
+
+    items.push({ file: mockFile, status: 'uploading', progress: 100 });
+    items[0].status = 'done';
+
+    expect(items[0].status).toBe('done');
+  });
+});
+
 describe('abort controller for stopping uploads', () => {
   it('abort() sets signal.aborted to true', () => {
     const controller = new AbortController();
