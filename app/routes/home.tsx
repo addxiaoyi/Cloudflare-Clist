@@ -27,6 +27,7 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
+  ChevronLeft,
   ArrowLeft,
   ArrowRightLeft,
   RefreshCw,
@@ -8526,7 +8527,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </button>
             <button
               onClick={() => setShowSettings(true)}
-              className="icon-btn h-8 w-8 sm:h-9 sm:w-9 hidden sm:flex"
+              className="icon-btn h-8 w-8 sm:h-9 sm:w-9"
               title="设置"
               aria-label="设置"
             >
@@ -8581,9 +8582,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           style={{ top: '0' }}
         >
           <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
-            <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider whitespace-nowrap">
-              存储列表
-            </span>
+            <div className="flex flex-col">
+              <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider whitespace-nowrap">
+                存储列表
+              </span>
+              <span className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
+                {storages.length} 个存储
+              </span>
+            </div>
             <div className="flex items-center gap-1">
               {isAdmin && (
                 <button
@@ -8591,7 +8597,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     setEditingStorage(null);
                     setShowStorageForm(true);
                   }}
-                  className="icon-btn h-7 w-7 text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10"
+                  className="icon-btn h-7 w-7 text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-500/10 transition-colors"
                   title="添加存储"
                   aria-label="添加存储"
                 >
@@ -8600,19 +8606,19 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               )}
               <button
                 onClick={() => setShowSidebar(false)}
-                className="icon-btn h-7 w-7 md:hidden"
+                className="icon-btn h-7 w-7 md:hidden rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 title="收起侧边栏"
                 aria-label="收起侧边栏"
               >
-                <PanelLeft />
+                <X />
               </button>
               <button
-                onClick={() => setSidebarCollapsed(true)}
-                className="icon-btn h-7 w-7 hidden md:inline-flex"
-                title="收起侧边栏"
-                aria-label="收起侧边栏"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="icon-btn h-7 w-7 hidden md:inline-flex rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
               >
-                <PanelLeft />
+                {sidebarCollapsed ? <ChevronRight /> : <ChevronLeft />}
               </button>
             </div>
           </div>
@@ -8651,10 +8657,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               storages.map((s) => (
                 <div
                   key={s.id}
-                  className={`group flex items-center justify-between mx-1 my-0.5 rounded-lg pl-3 pr-1.5 py-2 cursor-pointer transition-colors ${
+                  className={`group flex items-center justify-between mx-1 my-0.5 rounded-xl pl-3 pr-1.5 py-2.5 cursor-pointer transition-all duration-150 ${
                     selectedStorage?.id === s.id
                       ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
-                      : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/60'
+                      : 'hover:bg-zinc-100 hover:shadow-sm dark:hover:bg-zinc-800/60'
                   }`}
                   onClick={() => setSelectedStorage(s)}
                   onTouchStart={() => setSelectedStorage(s)}
@@ -8751,17 +8757,22 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 />
               )
             ) : (
-              <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-400 dark:text-zinc-600 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800">
-                    <Folder className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+              <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-400 dark:text-zinc-600 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 select-none">
+                <div className="flex flex-col items-center gap-4 px-6 text-center">
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-zinc-100 to-zinc-50 dark:from-zinc-800 dark:to-zinc-900 shadow-sm border border-zinc-200/50 dark:border-zinc-700/50">
+                    <Folder className="h-8 w-8 text-zinc-500 dark:text-zinc-400" />
                   </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
+                  <div className="flex flex-col items-center gap-2">
+                    <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
                       欢迎使用 Starx
                     </h2>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center max-w-xs leading-relaxed">
-                      请从左侧选择或添加存储空间，开始浏览和管理您的文件。
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-xs leading-relaxed">
+                      添加存储空间，开始浏览和管理您的文件
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center gap-2 pt-2">
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                      支持 S3、MinIO、云存储等多种存储类型
                     </p>
                   </div>
                 </div>
@@ -8771,10 +8782,10 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                       setEditingStorage(null);
                       setShowStorageForm(true);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400"
+                    className="group flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400 dark:bg-blue-600 dark:hover:bg-blue-500"
                   >
-                    <Plus className="h-4 w-4" />
-                    添加存储
+                    <Plus className="h-5 w-5 transition-transform group-hover:scale-110" />
+                    <span className="font-medium">添加存储</span>
                   </button>
                 )}
               </div>
@@ -8785,7 +8796,17 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
       {/* Footer */}
       <footer className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2">
-        <div className="flex items-center justify-center gap-3 text-xs text-zinc-500 dark:text-zinc-500"></div>
+        <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            {storages.length > 0 && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                <Folder className="h-3 w-3" />
+                {storages.length} 个存储
+              </span>
+            )}
+          </span>
+          <span className="opacity-60">云存储聚合工具</span>
+        </div>
       </footer>
 
       {/* Modals */}
