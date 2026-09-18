@@ -7214,6 +7214,9 @@ function FileBrowser({
     visibleObjects.length > 0 &&
     visibleObjects.every((obj) => selectedKeys.has(obj.key));
 
+  const hasSearch = normalizedQuery.length > 0;
+  const searchResultCount = visibleObjects.length;
+
   // 键盘流：j/k 选行 h 上级 g 根目录 r 刷新 / 搜索 Esc 取消选中 Space 选中 Delete 删除 Ctrl+A 全选
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -7353,8 +7356,23 @@ function FileBrowser({
           ))}
           {/* Selection info */}
           {selectedKeys.size > 0 && (
-            <span className="ml-2 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0">
-              已选 {selectedKeys.size} 项
+            <>
+              <span className="ml-2 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0">
+                已选 {selectedKeys.size} 项
+              </span>
+              <button
+                onClick={() => setSelectedKeys(new Set())}
+                className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+                title="清除选择"
+                aria-label="清除选择"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </>
+          )}
+          {hasSearch && (
+            <span className="ml-2 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400 shrink-0">
+              找到 {searchResultCount} 个结果
             </span>
           )}
         </div>
@@ -7550,6 +7568,9 @@ function FileBrowser({
           >
             <AlertCircle />
           </button>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5 pointer-events-none ml-1">
+            ?
+          </kbd>
           {isAdmin && (
             <>
               <button
