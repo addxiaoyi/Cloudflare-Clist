@@ -8312,6 +8312,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   );
   const [isDark, setIsDark] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
@@ -8495,19 +8496,29 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors flex flex-col">
       {/* Header */}
       <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
-        <div className="px-4 py-2.5 flex items-center justify-between gap-4">
+        <div className="px-4 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 shrink-0">
-            <Logo />
+            <button
+              onClick={() => setShowSidebar(true)}
+              className="icon-btn h-9 w-9 md:hidden"
+              title="打开存储列表"
+              aria-label="打开存储列表"
+            >
+              <PanelLeft />
+            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Logo />
+            </div>
           </div>
           <div className="flex-1 text-center min-w-0">
             <span className="text-sm text-zinc-500 dark:text-zinc-400 truncate block">
               {siteTitle}
             </span>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
             <button
               onClick={toggleTheme}
-              className="icon-btn h-8 w-8"
+              className="icon-btn h-8 w-8 sm:h-9 sm:w-9"
               title={isDark ? '切换到亮色' : '切换到暗色'}
               aria-label="切换主题"
             >
@@ -8515,7 +8526,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </button>
             <button
               onClick={() => setShowSettings(true)}
-              className="icon-btn h-8 w-8"
+              className="icon-btn h-8 w-8 sm:h-9 sm:w-9 hidden sm:flex"
               title="设置"
               aria-label="设置"
             >
@@ -8523,13 +8534,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </button>
             {isAdmin ? (
               <>
-                <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-1 text-xs font-medium text-green-600 dark:text-green-400">
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-1 text-xs font-medium text-green-600 dark:text-green-400">
                   <ShieldCheck className="h-3.5 w-3.5" />
                   管理员
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="btn btn-sm btn-ghost"
+                  className="btn btn-sm btn-ghost hidden sm:inline-flex"
                   title="登出"
                 >
                   <LogOut />
@@ -8539,7 +8550,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             ) : (
               <button
                 onClick={() => setShowLogin(true)}
-                className="btn btn-sm btn-ghost"
+                className="btn btn-sm btn-ghost hidden sm:inline-flex"
                 title="登录"
               >
                 <LogIn />
@@ -8551,9 +8562,23 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Sidebar */}
+        {/* Sidebar Overlay for mobile */}
+        {showSidebar && (
+          <div
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+            onClick={() => setShowSidebar(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Sidebar - responsive: mobile overlay, desktop fixed */}
         <aside
-          className={`${sidebarCollapsed ? 'w-0' : 'w-64'} border-r border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900/50 flex flex-col transition-all duration-300 overflow-hidden relative`}
+          className={`${
+            showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          } ${
+            sidebarCollapsed && !showSidebar ? 'md:w-0' : 'md:w-64'
+          } border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 flex flex-col transition-all duration-300 overflow-hidden absolute inset-y-0 left-0 z-40 w-64 md:relative md:shrink-0`}
+          style={{ top: '0' }}
         >
           <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
             <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider whitespace-nowrap">
@@ -8574,8 +8599,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 </button>
               )}
               <button
+                onClick={() => setShowSidebar(false)}
+                className="icon-btn h-7 w-7 md:hidden"
+                title="收起侧边栏"
+                aria-label="收起侧边栏"
+              >
+                <PanelLeft />
+              </button>
+              <button
                 onClick={() => setSidebarCollapsed(true)}
-                className="icon-btn h-7 w-7"
+                className="icon-btn h-7 w-7 hidden md:inline-flex"
                 title="收起侧边栏"
                 aria-label="收起侧边栏"
               >
@@ -8684,11 +8717,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         </aside>
 
-        {/* Sidebar Expand Button - only show when collapsed */}
+        {/* Sidebar Expand Button - only show when collapsed on desktop */}
         {sidebarCollapsed && (
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid h-10 w-5 place-items-center rounded-r-md bg-white dark:bg-zinc-800 border border-l-0 border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-sm hover:text-blue-500 transition-colors"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid h-10 w-5 place-items-center rounded-r-md bg-white dark:bg-zinc-800 border border-l-0 border-zinc-200 dark:border-zinc-700 text-zinc-500 shadow-sm hover:text-blue-500 transition-colors hidden md:inline-flex"
             title="展开侧边栏"
             aria-label="展开侧边栏"
           >
@@ -8698,53 +8731,55 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
         {/* Main */}
         <main className="flex-1 bg-zinc-50 dark:bg-zinc-900 min-w-0 overflow-hidden">
-          {selectedStorage ? (
-            selectedStorage.type === 'mysql' ? (
-              <div className="p-4">
-                <a
-                  href={`/mysql/${selectedStorage.id}`}
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  前往 MySQL 浏览器: {selectedStorage.name}
-                </a>
-              </div>
+          <div className="h-full flex flex-col">
+            {selectedStorage ? (
+              selectedStorage.type === 'mysql' ? (
+                <div className="p-4">
+                  <a
+                    href={`/mysql/${selectedStorage.id}`}
+                    className="text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    前往 MySQL 浏览器: {selectedStorage.name}
+                  </a>
+                </div>
+              ) : (
+                <FileBrowser
+                  storage={selectedStorage}
+                  isAdmin={isAdmin}
+                  isDark={isDark}
+                  chunkSizeMB={chunkSizeMB}
+                />
+              )
             ) : (
-              <FileBrowser
-                storage={selectedStorage}
-                isAdmin={isAdmin}
-                isDark={isDark}
-                chunkSizeMB={chunkSizeMB}
-              />
-            )
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-400 dark:text-zinc-600 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-              <div className="flex flex-col items-center gap-3">
-                <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800">
-                  <Folder className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+              <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-400 dark:text-zinc-600 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800">
+                    <Folder className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
+                      欢迎使用 Starx
+                    </h2>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center max-w-xs leading-relaxed">
+                      请从左侧选择或添加存储空间，开始浏览和管理您的文件。
+                    </p>
+                  </div>
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                  <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
-                    欢迎使用 Starx
-                  </h2>
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center max-w-xs leading-relaxed">
-                    请从左侧选择或添加存储空间，开始浏览和管理您的文件。
-                  </p>
-                </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setEditingStorage(null);
+                      setShowStorageForm(true);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400"
+                  >
+                    <Plus className="h-4 w-4" />
+                    添加存储
+                  </button>
+                )}
               </div>
-              {isAdmin && (
-                <button
-                  onClick={() => {
-                    setEditingStorage(null);
-                    setShowStorageForm(true);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400"
-                >
-                  <Plus className="h-4 w-4" />
-                  添加存储
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </main>
       </div>
 
