@@ -711,6 +711,7 @@ export class QuarkClient {
     uploadId: string,
     partNumber: number,
     chunk: ArrayBuffer | Uint8Array,
+    signal?: AbortSignal,
   ): Promise<{ etag: string; partNumber: number }> {
     const chunkData =
       chunk instanceof ArrayBuffer ? new Uint8Array(chunk) : chunk;
@@ -733,6 +734,7 @@ export class QuarkClient {
         'Content-Length': String(chunkData.length),
       },
       body: chunkData,
+      signal,
     });
 
     if (!res.ok) {
@@ -812,6 +814,7 @@ export class QuarkClient {
     body: ArrayBuffer | Uint8Array,
     options: {
       chunkSize?: number;
+      signal?: AbortSignal;
       onProgress?: (
         uploaded: number,
         total: number,
@@ -842,9 +845,19 @@ export class QuarkClient {
 
     const parts: { partNumber: number; etag: string }[] = [];
     let uploadedBytes = 0;
+    let cancelled = false;
+
+    const checkSignal = () => {
+      if (options.signal?.aborted) {
+        cancelled = true;
+        throw new Error('Upload cancelled by user');
+      }
+    };
 
     try {
       for (let i = 0; i < totalParts; i++) {
+        checkSignal();
+
         const partNumber = i + 1;
         const startOffset = i * CHUNK_SIZE;
         const endOffset = Math.min(startOffset + CHUNK_SIZE, fileSize);
@@ -858,7 +871,12 @@ export class QuarkClient {
         }
 
         try {
-          const result = await this.uploadPart(uploadId, partNumber, chunk);
+          const result = await this.uploadPart(
+            uploadId,
+            partNumber,
+            chunk,
+            options.signal,
+          );
           parts.push(result);
           uploadedBytes = endOffset;
 
@@ -885,6 +903,16 @@ export class QuarkClient {
       } catch (abortErr) {
         console.warn('[Quark] Failed to abort upload after error:', abortErr);
       }
+      throw err;
+    }
+  }
+
+  async cancelUpload(uploadId: string): Promise<void> {
+    console.log(`[Quark] Cancelling upload: ${uploadId}`);
+    try {
+      await this.abortMultipartUpload(uploadId);
+    } catch (err) {
+      console.warn('[Quark] Failed to cancel upload:', err);
       throw err;
     }
   }

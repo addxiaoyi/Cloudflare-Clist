@@ -168,4 +168,73 @@ describe('Quark Upload With Resume (Multipart)', () => {
     // Should not call upload endpoints for empty file
     expect(mockFetch).not.toHaveBeenCalled();
   }, 10000);
+
+  it('should stop upload when AbortSignal is aborted', async () => {
+    // Mock findFidByPath
+    vi.spyOn(client as any, 'findFidByPath').mockResolvedValue(0);
+
+    // Mock init multipart upload
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({ code: '0', data: { upload_id: 'test-upload-id' } }),
+    );
+
+    // Create an abort controller
+    const controller = new AbortController();
+
+    // Mock fetch to simulate network delay and check if abort works
+    mockFetch.mockImplementation(async (url: any, options: any) => {
+      // If this is a multipart upload_part, delay and check signal
+      if (url.toString().includes('upload_part')) {
+        return new Promise((resolve, reject) => {
+          const checkAbort = () => {
+            if (options.signal?.aborted) {
+              reject(
+                new DOMException('Upload cancelled by user', 'AbortError'),
+              );
+            } else {
+              setTimeout(checkAbort, 5);
+            }
+          };
+          checkAbort();
+
+          // Resolve after abort or timeout
+          setTimeout(() => {
+            resolve(
+              createMockResponse({
+                code: '0',
+                data: { etag: 'test-etag', part_number: 1 },
+              }),
+            );
+          }, 100);
+        });
+      }
+      // For other requests (like init, complete), resolve immediately
+      return createMockResponse({ code: '0' });
+    });
+
+    const buffer = new Uint8Array(15 * 1024 * 1024);
+
+    const uploadPromise = client.uploadWithResume('abort-test.bin', buffer, {
+      chunkSize: 10 * 1024 * 1024,
+      signal: controller.signal,
+    });
+
+    // Abort after a short delay (before upload completes)
+    setTimeout(() => controller.abort(), 10);
+
+    await expect(uploadPromise).rejects.toThrow('Upload cancelled by user');
+  }, 10000);
+
+  it('should cancel upload using cancelUpload method', async () => {
+    // Mock findFidByPath
+    vi.spyOn(client as any, 'findFidByPath').mockResolvedValue(0);
+
+    // Mock abort upload
+    mockFetch.mockResolvedValueOnce(createMockResponse({ code: '0' }));
+
+    const uploadId = 'test-cancel-upload-id';
+    await client.cancelUpload(uploadId);
+
+    expect(mockFetch).toHaveBeenCalled();
+  });
 });
