@@ -1,0 +1,16 @@
+@layer components {
+  .aeroshards-container {
+    width: 100%;
+    height: 100%;
+    display: block;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .aeroshards-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: pointer;
+  }
+}
