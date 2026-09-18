@@ -5234,6 +5234,190 @@ const SortableRow = ({
   );
 };
 
+const SortableGalleryItem = ({
+  obj,
+  index,
+  isAdmin,
+  canDownload,
+  selectedKeys,
+  cursor,
+  toggleSelect,
+  toggleFavorite,
+  isFavorite,
+  handlePreview,
+  downloadFile,
+  startShare,
+  startRename,
+  startMove,
+  deleteFolder,
+  calcFolderSize,
+  calcSizeKey,
+  navigateTo,
+  storageId,
+}: {
+  obj: S3Object;
+  index: number;
+  isAdmin: boolean;
+  canDownload: boolean;
+  selectedKeys: Set<string>;
+  cursor: number;
+  toggleSelect: (key: string) => void;
+  toggleFavorite: (obj: S3Object) => void;
+  isFavorite: (key: string) => boolean;
+  handlePreview: (obj: S3Object) => void;
+  downloadFile: (key: string) => void;
+  startShare: (obj: S3Object) => void;
+  startRename: (obj: S3Object) => void;
+  startMove: (obj: S3Object) => void;
+  deleteFolder: (key: string, name: string) => void;
+  calcFolderSize: (key: string, name: string) => void;
+  calcSizeKey: string | null;
+  navigateTo: (path: string) => void;
+  storageId: string;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: obj.key,
+    data: { current: { obj, storageId } },
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div
+      {...attributes}
+      {...listeners}
+      ref={setNodeRef}
+      style={style}
+    >
+      <SortableGalleryItemInner
+        obj={obj}
+        index={index}
+        isAdmin={isAdmin}
+        canDownload={canDownload}
+        selectedKeys={selectedKeys}
+        cursor={cursor}
+        toggleSelect={toggleSelect}
+        toggleFavorite={toggleFavorite}
+        isFavorite={isFavorite}
+        handlePreview={handlePreview}
+        downloadFile={downloadFile}
+        startShare={startShare}
+        startRename={startRename}
+        startMove={startMove}
+        deleteFolder={deleteFolder}
+        calcFolderSize={calcFolderSize}
+        calcSizeKey={calcSizeKey}
+        navigateTo={navigateTo}
+        storageId={storageId}
+      />
+    </div>
+  );
+};
+
+const SortableGalleryItemInner = ({
+  obj,
+  index,
+  isAdmin,
+  canDownload,
+  selectedKeys,
+  cursor,
+  toggleSelect,
+  toggleFavorite,
+  isFavorite,
+  handlePreview,
+  downloadFile,
+  startShare,
+  startRename,
+  startMove,
+  deleteFolder,
+  calcFolderSize,
+  calcSizeKey,
+  navigateTo,
+  storageId,
+}: {
+  obj: S3Object;
+  index: number;
+  isAdmin: boolean;
+  canDownload: boolean;
+  selectedKeys: Set<string>;
+  cursor: number;
+  toggleSelect: (key: string) => void;
+  toggleFavorite: (obj: S3Object) => void;
+  isFavorite: (key: string) => boolean;
+  handlePreview: (obj: S3Object) => void;
+  downloadFile: (key: string) => void;
+  startShare: (obj: S3Object) => void;
+  startRename: (obj: S3Object) => void;
+  startMove: (obj: S3Object) => void;
+  deleteFolder: (key: string, name: string) => void;
+  calcFolderSize: (key: string, name: string) => void;
+  calcSizeKey: string | null;
+  navigateTo: (path: string) => void;
+  storageId: string;
+}) => {
+  const isImg = !obj.isDirectory && getFileType(obj.name) === 'image';
+  const Ic = obj.isDirectory
+    ? null
+    : fileTypeIcon(getFileType(obj.name));
+
+  return (
+    <div
+      key={obj.key}
+      onClick={() =>
+        obj.isDirectory
+          ? navigateTo(obj.key)
+          : isPreviewable(obj.name)
+            ? handlePreview(obj)
+            : downloadFile(obj.key)
+      }
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        if (obj.isDirectory) {
+          navigateTo(obj.key);
+        } else if (isPreviewable(obj.name)) {
+          handlePreview(obj);
+        }
+      }}
+      className={`group relative cursor-pointer rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg transition-all ${selectedKeys.has(obj.key) ? 'ring-2 ring-blue-500/50' : ''} ${cursor === index ? 'ring-2 ring-blue-500' : ''}`}
+    >
+      <div className="aspect-square flex items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
+        {isImg ? (
+          <img
+            src={apiFileUrl(storageId, obj.key)}
+            alt={obj.name}
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+          />
+        ) : obj.isDirectory ? (
+          <Folder className="h-8 w-8 text-blue-500 opacity-70 group-hover:opacity-100 transition" />
+        ) : Ic ? (
+          <Ic className="h-8 w-8 text-zinc-400" />
+        ) : null}
+      </div>
+      <div className="px-2.5 py-1.5 bg-white dark:bg-zinc-900">
+        <div className="truncate text-xs text-zinc-700 dark:text-zinc-200 font-medium">
+          {obj.name}
+        </div>
+        <div className="truncate text-[10px] text-zinc-400">
+          {obj.isDirectory ? '文件夹' : formatBytes(obj.size)}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function FileBrowser({
   storage,
   isAdmin,
@@ -5359,6 +5543,9 @@ function FileBrowser({
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const handleDragStart = (event: { active: { id: string }; data?: { current?: { obj?: S3Object } } }) => {
     const obj = event.data?.current?.obj;
@@ -6963,7 +7150,7 @@ function FileBrowser({
     visibleObjects.length > 0 &&
     visibleObjects.every((obj) => selectedKeys.has(obj.key));
 
-  // 键盘流：j/k 选行 h 上级 g 根目录 r 刷新 / 搜索 Esc 取消选中（输入框聚焦时不拦截）
+  // 键盘流：j/k 选行 h 上级 g 根目录 r 刷新 / 搜索 Esc 取消选中 Space 选中 Delete 删除 Ctrl+A 全选
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -6990,6 +7177,22 @@ function FileBrowser({
           if (obj.isDirectory) navigateTo(obj.key);
           else if (isPreviewable(obj.name)) handlePreview(obj);
           else downloadFile(obj.key);
+        }
+      } else if (k === ' ') {
+        const obj = visibleObjects[cursor];
+        if (obj) {
+          e.preventDefault();
+          toggleSelect(obj.key);
+        }
+      } else if (k === 'delete' || k === 'backspace') {
+        if (selectedKeys.size > 0) {
+          e.preventDefault();
+          handleBatchDelete();
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        if (k === 'a') {
+          e.preventDefault();
+          toggleSelectAll();
         }
       } else if (k === 'h') {
         e.preventDefault();
@@ -7764,66 +7967,107 @@ function FileBrowser({
             </div>
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center gap-2 h-32 text-zinc-500 text-sm">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            加载中…
+          <div className="flex flex-col items-center justify-center gap-3 h-32 text-zinc-500">
+            <div className="relative w-10 h-10">
+              <div className="absolute inset-0 rounded-full border-2 border-blue-200 dark:border-blue-900" />
+              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-500 animate-spin" />
+              <div className="absolute inset-1 rounded-full border-2 border-transparent border-b-blue-400 animate-spin animate-reverse" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">正在加载文件...</p>
+              <div className="mt-2 flex justify-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:0ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:300ms]" />
+              </div>
+            </div>
           </div>
         ) : error ? (
-          <div className="flex items-center justify-center gap-2 h-32 text-red-500 dark:text-red-400 text-sm">
-            <AlertCircle className="h-4 w-4" />
-            {error}
+          <div className="flex flex-col items-center justify-center gap-4 p-4 h-32 text-zinc-400 dark:text-zinc-600">
+            <AlertCircle className="h-6 w-6" />
+            <div className="text-center">
+              <p className="text-sm font-medium mb-2">加载失败</p>
+              <button
+                onClick={() => setError('')}
+                className="text-xs text-blue-600 dark:text-blue-400 underline hover:no-underline"
+              >
+                重试
+              </button>
+            </div>
           </div>
         ) : objects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 gap-2 text-zinc-400 dark:text-zinc-600">
-            <Folder className="h-8 w-8" />
-            <span className="text-sm">空目录</span>
+          <div className="flex flex-col items-center justify-center gap-4 p-4 h-32 text-zinc-400 dark:text-zinc-600">
+            <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full">
+              <Folder className="h-6 w-6 text-blue-500" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">空目录</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-3">
+                这里暂无文件，可以在此上传文件或创建目录
+              </p>
+              <div className="flex items-center gap-2 justify-center">
+                {canUpload && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
+                  >
+                    <Upload className="h-3 w-3" />
+                    <span>上传文件</span>
+                  </button>
+                )}
+                {viewMode === 'gallery' && (
+                  <span className="text-xs text-zinc-400 dark:text-zinc-600">
+                    快捷键: Space 选中 | Delete 删除 | Ctrl+A 全选
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         ) : viewMode === 'gallery' ? (
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
           <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {visibleObjects.map((obj, i) => {
-              const isImg =
-                !obj.isDirectory && getFileType(obj.name) === 'image';
-              const Ic = obj.isDirectory
-                ? null
-                : fileTypeIcon(getFileType(obj.name));
-              return (
-                <div
+            <SortableContext items={visibleObjects.map((o) => o.key)} strategy={verticalListSortingStrategy}>
+              {visibleObjects.map((obj, i) => (
+                <SortableGalleryItem
                   key={obj.key}
-                  onClick={() =>
-                    obj.isDirectory
-                      ? navigateTo(obj.key)
-                      : isPreviewable(obj.name)
-                        ? handlePreview(obj)
-                        : downloadFile(obj.key)
-                  }
-                  className={`group relative cursor-pointer rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition ${selectedKeys.has(obj.key) ? 'ring-2 ring-blue-500' : ''} ${cursor === i ? 'ring-2 ring-blue-500' : ''}`}
-                >
-                  <div className="aspect-square flex items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
-                    {isImg ? (
-                      <img
-                        src={apiFileUrl(storage.id, obj.key)}
-                        alt={obj.name}
-                        loading="lazy"
-                        className="w-full h-full object-cover group-hover:scale-105 transition"
-                      />
-                    ) : obj.isDirectory ? (
-                      <Folder className="h-10 w-10 text-blue-500" />
-                    ) : Ic ? (
-                      <Ic className="h-10 w-10 text-zinc-400" />
-                    ) : null}
-                  </div>
-                  <div className="px-2 py-1.5">
-                    <div className="truncate text-xs text-zinc-700 dark:text-zinc-200">
-                      {obj.name}
-                    </div>
-                    <div className="truncate text-[10px] text-zinc-400">
-                      {obj.isDirectory ? '文件夹' : formatBytes(obj.size)}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  obj={obj}
+                  index={i}
+                  isAdmin={isAdmin}
+                  canDownload={canDownload}
+                  selectedKeys={selectedKeys}
+                  cursor={cursor}
+                  toggleSelect={toggleSelect}
+                  toggleFavorite={toggleFavorite}
+                  isFavorite={isFavorite}
+                  handlePreview={handlePreview}
+                  downloadFile={downloadFile}
+                  startShare={startShare}
+                  startRename={startRename}
+                  startMove={startMove}
+                  deleteFolder={deleteFolder}
+                  calcFolderSize={calcFolderSize}
+                  calcSizeKey={calcSizeKey}
+                  navigateTo={navigateTo}
+                  storageId={storage.id}
+                />
+              ))}
+            </SortableContext>
           </div>
+          <DragOverlay>
+            {activeDragItem ? (
+              <div className="w-32 h-32 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl flex flex-col items-center justify-center gap-2 p-3">
+                {activeDragItem.isDirectory ? (
+                  <Folder className="h-10 w-10 text-blue-500" />
+                ) : (
+                  <span className="text-zinc-400">{getFileIcon(activeDragItem.name)}</span>
+                )}
+                <span className="text-zinc-700 dark:text-zinc-200 text-xs font-medium truncate w-full text-center">
+                  {activeDragItem.name}
+                </span>
+              </div>
+            ) : null}
+          </DragOverlay>
+          </DndContext>
         ) : (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
           <table className="w-full text-sm">
