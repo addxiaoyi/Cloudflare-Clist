@@ -61,7 +61,32 @@ import {
   Pause,
   Resume,
   StopCircle,
+  GripVertical,
 } from '~/components/icons';
+
+// dnd-kit imports
+import {
+  DndContext,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  type SortableAttributes,
+  type SortableSyntheticListeners,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 export function meta({ data }: Route.MetaArgs) {
   const title = data?.siteTitle || 'Starx';
@@ -4914,6 +4939,301 @@ function ChangelogModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+const SortableRow = ({
+  obj,
+  index,
+  isAdmin,
+  canDownload,
+  selectedKeys,
+  cursor,
+  toggleSelect,
+  toggleFavorite,
+  isFavorite,
+  handlePreview,
+  downloadFile,
+  startShare,
+  startRename,
+  startMove,
+  deleteFolder,
+  calcFolderSize,
+  calcSizeKey,
+  navigateTo,
+}: {
+  obj: S3Object;
+  index: number;
+  isAdmin: boolean;
+  canDownload: boolean;
+  selectedKeys: Set<string>;
+  cursor: number;
+  toggleSelect: (key: string) => void;
+  toggleFavorite: (obj: S3Object) => void;
+  isFavorite: (key: string) => boolean;
+  handlePreview: (obj: S3Object) => void;
+  downloadFile: (key: string) => void;
+  startShare: (obj: S3Object) => void;
+  startRename: (obj: S3Object) => void;
+  startMove: (obj: S3Object) => void;
+  deleteFolder: (key: string, name: string) => void;
+  calcFolderSize: (key: string, name: string) => void;
+  calcSizeKey: string | null;
+  navigateTo: (path: string) => void;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: obj.key,
+    data: { current: { obj } },
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 ${
+        selectedKeys.has(obj.key)
+          ? 'bg-blue-50 dark:bg-blue-900/20'
+          : ''
+      } ${cursor === index ? 'outline outline-2 -outline-offset-2 outline-blue-500' : ''}`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+      }}
+    >
+      {isAdmin && (
+        <td className="py-2 px-3">
+          <input
+            type="checkbox"
+            checked={selectedKeys.has(obj.key)}
+            onChange={(e) => {
+              e.stopPropagation();
+              toggleSelect(obj.key);
+            }}
+            className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
+          />
+        </td>
+      )}
+      <td className="py-2 px-4">
+        {obj.isDirectory ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigateTo(obj.key);
+            }}
+            className="flex items-center gap-2 font-medium text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+            <span className="truncate">{obj.name}</span>
+          </button>
+        ) : isPreviewable(obj.name) ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePreview(obj);
+            }}
+            className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
+          >
+            {getFileIcon(obj.name)}
+            <span className="truncate">{obj.name}</span>
+          </button>
+        ) : (
+          <span className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
+            <span className="text-zinc-400 dark:text-zinc-500">
+              {getFileIcon(obj.name)}
+            </span>
+            <span className="truncate">{obj.name}</span>
+          </span>
+        )}
+      </td>
+      <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
+        {obj.isDirectory ? '-' : formatBytes(obj.size)}
+      </td>
+      <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
+        {formatDate(obj.lastModified)}
+      </td>
+      <td className="py-1.5 px-3 text-right">
+        {obj.isDirectory ? (
+          <div className="flex items-center justify-end gap-0.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(obj);
+              }}
+              className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
+              title={isFavorite(obj.key) ? '取消收藏' : '收藏'}
+              aria-label="收藏"
+            >
+              <Star />
+            </button>
+            {canDownload && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  calcFolderSize(obj.key, obj.name);
+                }}
+                disabled={calcSizeKey === obj.key}
+                className="icon-btn h-7 w-7"
+                title="统计大小"
+                aria-label="统计大小"
+              >
+                <Calculator />
+              </button>
+            )}
+            {isAdmin && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startShare(obj);
+                  }}
+                  className="icon-btn h-7 w-7"
+                  title="分享"
+                  aria-label="分享"
+                >
+                  <Share2 />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startRename(obj);
+                  }}
+                  className="icon-btn h-7 w-7"
+                  title="重命名"
+                  aria-label="重命名"
+                >
+                  <Pencil />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startMove(obj);
+                  }}
+                  className="icon-btn h-7 w-7"
+                  title="移动"
+                  aria-label="移动"
+                >
+                  <ArrowRightLeft />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteFolder(obj.key, obj.name);
+                  }}
+                  className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                  title="删除文件夹"
+                  aria-label="删除文件夹"
+                >
+                  <Trash2 />
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-0.5">
+            {canDownload && isPreviewable(obj.name) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePreview(obj);
+                }}
+                className="icon-btn h-7 w-7"
+                title="预览"
+                aria-label="预览"
+              >
+                <Play />
+              </button>
+            )}
+            {canDownload && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadFile(obj.key);
+                }}
+                className="icon-btn h-7 w-7"
+                title="下载"
+                aria-label="下载"
+              >
+                <Download />
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(obj);
+              }}
+              className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
+              title={isFavorite(obj.key) ? '取消收藏' : '收藏'}
+              aria-label="收藏"
+            >
+              <Star />
+            </button>
+            {isAdmin && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startShare(obj);
+                  }}
+                  className="icon-btn h-7 w-7"
+                  title="分享"
+                  aria-label="分享"
+                >
+                  <Share2 />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startRename(obj);
+                  }}
+                  className="icon-btn h-7 w-7"
+                  title="重命名"
+                  aria-label="重命名"
+                >
+                  <Pencil />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startMove(obj);
+                  }}
+                  className="icon-btn h-7 w-7"
+                  title="移动"
+                  aria-label="移动"
+                >
+                  <ArrowRightLeft />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteFile(obj.key);
+                  }}
+                  className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
+                  title="删除"
+                  aria-label="删除"
+                >
+                  <Trash2 />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+};
+
 function FileBrowser({
   storage,
   isAdmin,
@@ -5032,6 +5352,101 @@ function FileBrowser({
   const [shareId, setShareId] = useState<number | null>(null);
   const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // dnd-kit sortable state
+  const [activeDragItem, setActiveDragItem] = useState<S3Object | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragStart = (event: { active: { id: string }; data?: { current?: { obj?: S3Object } } }) => {
+    const obj = event.data?.current?.obj;
+    if (obj) setActiveDragItem(obj);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    if (activeId !== overId) {
+      setCursor(visibleObjects.findIndex(o => o.key === overId));
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveDragItem(null);
+    setCursor(-1);
+    
+    if (!over) return;
+    
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    
+    if (activeId === overId) return;
+    
+    const activeObj = objects.find((o) => o.key === activeId);
+    const overObj = objects.find((o) => o.key === overId);
+    
+    if (!activeObj || !overObj) return;
+    
+    const activePath = activeObj.key.split('/').slice(0, -1).join('/');
+    const overPath = overObj.key.split('/').slice(0, -1).join('/');
+    
+    if (activeObj.isDirectory && overObj.isDirectory) {
+      if (activePath !== overPath) {
+        await moveDirectory(activeObj, overObj);
+      }
+    } else if (!activeObj.isDirectory) {
+      const destPath = overObj.isDirectory ? overObj.key + '/' : overPath + '/';
+      await moveFileToFile(activeObj, destPath);
+    }
+  };
+
+  const moveDirectory = async (source: S3Object, dest: S3Object) => {
+    const newPath = dest.key + '/' + source.name;
+    const res = await fetch(apiFileUrl(storage.id, source.key), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destPath: newPath, action: 'move' }),
+    });
+    if (res.ok) {
+      toast('目录已移动', 'success');
+      loadFiles();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast(data.error || '移动失败', 'error');
+    }
+  };
+
+  const moveFileToFile = async (source: S3Object, destPath: string) => {
+    await handleMoveFile(source, { key: destPath, name: destPath.split('/').pop() || destPath, isDirectory: false, size: 0, lastModified: new Date().toISOString() });
+  };
+
+  const handleMoveFile = async (source: S3Object, dest: S3Object) => {
+    if (source.key === dest.key) return;
+    setMoving(true);
+    try {
+      const res = await fetch(apiFileUrl(storage.id, source.key), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destPath: dest.isDirectory ? dest.key : dest.key.split('/').slice(0, -1).join('/') + '/' }),
+      });
+      if (res.ok) {
+        toast('已移动文件', 'success');
+        loadFiles();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast(data.error || '移动失败', 'error');
+      }
+    } catch {
+      toast('网络错误', 'error');
+    } finally {
+      setMoving(false);
+    }
+  };
 
   useEffect(() => {
     setPath('');
@@ -7410,6 +7825,7 @@ function FileBrowser({
             })}
           </div>
         ) : (
+          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
           <table className="w-full text-sm">
             <thead className="text-xs text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur">
               <tr>
@@ -7451,204 +7867,59 @@ function FileBrowser({
               </tr>
             </thead>
             <tbody>
-              {visibleObjects.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={isAdmin ? 5 : 4}
-                    className="py-8 text-center text-zinc-400 dark:text-zinc-600"
-                  >
-                    没有匹配的文件
-                  </td>
-                </tr>
-              ) : (
-                visibleObjects.map((obj, i) => (
-                  <tr
-                    key={obj.key}
-                    className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 ${
-                      selectedKeys.has(obj.key)
-                        ? 'bg-blue-50 dark:bg-blue-900/20'
-                        : ''
-                    } ${cursor === i ? 'outline outline-2 -outline-offset-2 outline-blue-500' : ''}`}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setContextMenu({ x: e.clientX, y: e.clientY, obj });
-                    }}
-                  >
-                    {isAdmin && (
-                      <td className="py-2 px-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedKeys.has(obj.key)}
-                          onChange={() => toggleSelect(obj.key)}
-                          className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
-                        />
-                      </td>
-                    )}
-                    <td className="py-2 px-4">
-                      {obj.isDirectory ? (
-                        <button
-                          onClick={() => navigateTo(obj.key)}
-                          className="flex items-center gap-2 font-medium text-zinc-700 dark:text-zinc-200 hover:text-blue-600 dark:hover:text-blue-400"
-                        >
-                          <Folder className="h-4 w-4 shrink-0 text-blue-500" />
-                          <span className="truncate">{obj.name}</span>
-                        </button>
-                      ) : isPreviewable(obj.name) ? (
-                        <button
-                          onClick={() => handlePreview(obj)}
-                          className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400"
-                        >
-                          {getFileIcon(obj.name)}
-                          <span className="truncate">{obj.name}</span>
-                        </button>
-                      ) : (
-                        <span className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
-                          <span className="text-zinc-400 dark:text-zinc-500">
-                            {getFileIcon(obj.name)}
-                          </span>
-                          <span className="truncate">{obj.name}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
-                      {obj.isDirectory ? '-' : formatBytes(obj.size)}
-                    </td>
-                    <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
-                      {formatDate(obj.lastModified)}
-                    </td>
-                    <td className="py-1.5 px-3 text-right">
-                      {obj.isDirectory ? (
-                        <div className="flex items-center justify-end gap-0.5">
-                          <button
-                            onClick={() => toggleFavorite(obj)}
-                            className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
-                            title={isFavorite(obj.key) ? '取消收藏' : '收藏'}
-                            aria-label="收藏"
-                          >
-                            <Star />
-                          </button>
-                          {canDownload && (
-                            <button
-                              onClick={() => calcFolderSize(obj.key, obj.name)}
-                              disabled={calcSizeKey === obj.key}
-                              className="icon-btn h-7 w-7"
-                              title="统计大小"
-                              aria-label="统计大小"
-                            >
-                              <Calculator />
-                            </button>
-                          )}
-                          {isAdmin && (
-                            <>
-                              <button
-                                onClick={() => startShare(obj)}
-                                className="icon-btn h-7 w-7"
-                                title="分享"
-                                aria-label="分享"
-                              >
-                                <Share2 />
-                              </button>
-                              <button
-                                onClick={() => startRename(obj)}
-                                className="icon-btn h-7 w-7"
-                                title="重命名"
-                                aria-label="重命名"
-                              >
-                                <Pencil />
-                              </button>
-                              <button
-                                onClick={() => startMove(obj)}
-                                className="icon-btn h-7 w-7"
-                                title="移动"
-                                aria-label="移动"
-                              >
-                                <ArrowRightLeft />
-                              </button>
-                              <button
-                                onClick={() => deleteFolder(obj.key, obj.name)}
-                                className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
-                                title="删除文件夹"
-                                aria-label="删除文件夹"
-                              >
-                                <Trash2 />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-0.5">
-                          {canDownload && isPreviewable(obj.name) && (
-                            <button
-                              onClick={() => handlePreview(obj)}
-                              className="icon-btn h-7 w-7"
-                              title="预览"
-                              aria-label="预览"
-                            >
-                              <Play />
-                            </button>
-                          )}
-                          {canDownload && (
-                            <button
-                              onClick={() => downloadFile(obj.key)}
-                              className="icon-btn h-7 w-7"
-                              title="下载"
-                              aria-label="下载"
-                            >
-                              <Download />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => toggleFavorite(obj)}
-                            className={`icon-btn h-7 w-7 ${isFavorite(obj.key) ? 'text-yellow-500' : ''}`}
-                            title={isFavorite(obj.key) ? '取消收藏' : '收藏'}
-                            aria-label="收藏"
-                          >
-                            <Star />
-                          </button>
-                          {isAdmin && (
-                            <>
-                              <button
-                                onClick={() => startShare(obj)}
-                                className="icon-btn h-7 w-7"
-                                title="分享"
-                                aria-label="分享"
-                              >
-                                <Share2 />
-                              </button>
-                              <button
-                                onClick={() => startRename(obj)}
-                                className="icon-btn h-7 w-7"
-                                title="重命名"
-                                aria-label="重命名"
-                              >
-                                <Pencil />
-                              </button>
-                              <button
-                                onClick={() => startMove(obj)}
-                                className="icon-btn h-7 w-7"
-                                title="移动"
-                                aria-label="移动"
-                              >
-                                <ArrowRightLeft />
-                              </button>
-                              <button
-                                onClick={() => deleteFile(obj.key)}
-                                className="icon-btn h-7 w-7 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10"
-                                title="删除"
-                                aria-label="删除"
-                              >
-                                <Trash2 />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
+              <SortableContext items={visibleObjects.map((o) => o.key)} strategy={verticalListSortingStrategy}>
+                {visibleObjects.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isAdmin ? 5 : 4}
+                      className="py-8 text-center text-zinc-400 dark:text-zinc-600"
+                    >
+                      没有匹配的文件
                     </td>
                   </tr>
-                ))
-              )}
+                ) : (
+                  visibleObjects.map((obj, i) => (
+                    <SortableRow
+                      key={obj.key}
+                      obj={obj}
+                      index={i}
+                      isAdmin={isAdmin}
+                      canDownload={canDownload}
+                      selectedKeys={selectedKeys}
+                      cursor={cursor}
+                      toggleSelect={toggleSelect}
+                      toggleFavorite={toggleFavorite}
+                      isFavorite={isFavorite}
+                      handlePreview={handlePreview}
+                      downloadFile={downloadFile}
+                      startShare={startShare}
+                      startRename={startRename}
+                      startMove={startMove}
+                      deleteFolder={deleteFolder}
+                      calcFolderSize={calcFolderSize}
+                      calcSizeKey={calcSizeKey}
+                      navigateTo={navigateTo}
+                    />
+                  ))
+                )}
+              </SortableContext>
             </tbody>
+            <DragOverlay>
+              {activeDragItem ? (
+                <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg px-3 py-2 flex items-center gap-2 text-sm">
+                  {activeDragItem.isDirectory ? (
+                    <Folder className="h-4 w-4 text-blue-500" />
+                  ) : (
+                    <span className="text-zinc-400">{getFileIcon(activeDragItem.name)}</span>
+                  )}
+                  <span className="text-zinc-700 dark:text-zinc-200 truncate max-w-[200px]">
+                    {activeDragItem.name}
+                  </span>
+                </div>
+              ) : null}
+            </DragOverlay>
           </table>
+          </DndContext>
         )}
       </div>
 
