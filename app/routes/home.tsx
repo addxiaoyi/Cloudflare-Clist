@@ -5000,15 +5000,23 @@ const SortableRow = ({
 
   return (
     <tr
-      ref={setNodeRef}
-      style={style}
+      ref={(node) => {
+        setNodeRef(node);
+        if (node && rowRefs.current.set(obj.key, node)) {
+          return;
+        }
+      }}
       {...attributes}
       {...listeners}
-      className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 ${
+      style={{
+        ...style,
+        borderLeft: cursor === index ? '3px solid #3b82f6' : undefined,
+      }}
+      className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 transition-colors ${
         selectedKeys.has(obj.key)
-          ? 'bg-blue-50 dark:bg-blue-900/20'
+          ? 'bg-blue-50/70 dark:bg-blue-900/20'
           : ''
-      } ${cursor === index ? 'outline outline-2 -outline-offset-2 outline-blue-500' : ''}`}
+      } ${cursor === index ? 'bg-blue-50/50 dark:bg-blue-900/15' : ''}`}
       onContextMenu={(e) => {
         e.preventDefault();
       }}
@@ -5299,7 +5307,12 @@ const SortableGalleryItem = ({
     <div
       {...attributes}
       {...listeners}
-      ref={setNodeRef}
+      ref={(node) => {
+        setNodeRef(node);
+        if (node && galleryRowRefs.current.set(obj.key, node)) {
+          return;
+        }
+      }}
       style={style}
     >
       <SortableGalleryItemInner
@@ -5396,7 +5409,7 @@ const SortableGalleryItemInner = ({
           handlePreview(obj);
         }
       }}
-      className={`group relative cursor-pointer rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg transition-all ${selectedKeys.has(obj.key) ? 'ring-2 ring-blue-500/50' : ''} ${cursor === index ? 'ring-2 ring-blue-500' : ''}`}
+      className={`group relative cursor-pointer rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg transition-all ${selectedKeys.has(obj.key) ? 'bg-blue-50/70 dark:bg-blue-900/20 ring-2 ring-blue-500/50' : ''} ${cursor === index ? 'ring-2 ring-blue-500' : ''}`}
     >
       <div className="aspect-square flex items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
         {isImg ? (
@@ -5421,6 +5434,11 @@ const SortableGalleryItemInner = ({
         </div>
       </div>
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+        {selectedKeys.has(obj.key) && (
+          <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center">
+            <Check className="h-3 w-3 text-white" />
+          </div>
+        )}
         <button
           onClick={(e) => handleQuickAction(e, () => toggleSelect(obj.key))}
           className="h-6 w-6 rounded-full bg-white/80 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
@@ -5576,6 +5594,8 @@ function FileBrowser({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  const galleryRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const handleDragStart = (event: { active: { id: string }; data?: { current?: { obj?: S3Object } } }) => {
     const obj = event.data?.current?.obj;
@@ -6103,7 +6123,12 @@ function FileBrowser({
       if (failed > 0) {
         toast(`删除完成，${failed} 个项目删除失败`, 'error');
       } else {
-        toast('已删除所选项目', 'success');
+        const total = folders.length + files.length;
+        if (folders.length > 0) {
+          toast(`已删除 ${total} 个项目（${folders.length} 文件夹 + ${files.length} 文件）`, 'success');
+        } else {
+          toast(`已删除 ${files.length} 个文件`, 'success');
+        }
       }
 
       setSelectedKeys(new Set());
@@ -6148,7 +6173,10 @@ function FileBrowser({
         }
       }
       if (failed > 0) toast(`复制完成，${failed} 个项目失败`, 'error');
-      else toast('已复制所选项目', 'success');
+      else {
+        const count = selectedKeys.size;
+        toast(`已复制 ${count} 个项目到 ${batchCopyDest}`, 'success');
+      }
       setBatchCopyOpen(false);
       setSelectedKeys(new Set());
       loadFiles();
@@ -6178,7 +6206,10 @@ function FileBrowser({
         }
       }
       if (failed > 0) toast(`移动完成，${failed} 个项目失败`, 'error');
-      else toast('已移动所选项目', 'success');
+      else {
+        const count = selectedKeys.size;
+        toast(`已移动 ${count} 个项目到 ${batchMoveDest}`, 'success');
+      }
       setBatchMoveOpen(false);
       setSelectedKeys(new Set());
       loadFiles();
@@ -6256,7 +6287,7 @@ function FileBrowser({
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
-        toast('打包完成，已开始下载', 'success');
+        toast(`打包完成，已下载 ${collected.length} 个文件`, 'success');
       } catch {
         toast('打包失败', 'error');
       }
@@ -6269,6 +6300,9 @@ function FileBrowser({
       const key = f.key;
       setTimeout(() => triggerDownload(key), delay);
       delay += 400;
+    }
+    if (files.length > 0) {
+      toast(`正在下载 ${files.length} 个文件…`, 'info');
     }
   };
 
@@ -7197,8 +7231,15 @@ function FileBrowser({
         setCursor((c) => {
           const n = visibleObjects.length;
           if (n === 0) return -1;
-          if (k === 'j') return c >= n - 1 ? 0 : c + 1;
-          return c <= 0 ? n - 1 : c - 1;
+          const next = k === 'j' ? (c >= n - 1 ? 0 : c + 1) : (c <= 0 ? n - 1 : c - 1);
+          requestAnimationFrame(() => {
+            const obj = visibleObjects[next];
+            if (obj) {
+              const el = rowRefs.current.get(obj.key) || galleryRowRefs.current.get(obj.key);
+              el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+          });
+          return next;
         });
       } else if (k === 'enter') {
         const obj = visibleObjects[cursor];
@@ -8041,31 +8082,37 @@ function FileBrowser({
             </div>
           </div>
         ) : objects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 p-4 h-32 text-zinc-400 dark:text-zinc-600">
+          <div className="flex flex-col items-center justify-center gap-6 p-6 h-64 text-zinc-400 dark:text-zinc-600">
             <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full">
-              <Folder className="h-6 w-6 text-blue-500" />
+              <Folder className="h-8 w-8 text-blue-500" />
             </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mb-1">空目录</p>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-3">
-                这里暂无文件，可以在此上传文件或创建目录
+            <div className="text-center space-y-2">
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">空目录</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-xs mx-auto">
+                这里暂无文件<br/>
+                可以在此上传文件或创建目录
               </p>
-              <div className="flex items-center gap-2 justify-center">
-                {canUpload && (
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
-                  >
-                    <Upload className="h-3 w-3" />
-                    <span>上传文件</span>
-                  </button>
-                )}
-                {viewMode === 'gallery' && (
-                  <span className="text-xs text-zinc-400 dark:text-zinc-600">
-                    快捷键: Space 选中 | Delete 删除 | Ctrl+A 全选
-                  </span>
-                )}
-              </div>
+            </div>
+            <div className="flex items-center gap-2 justify-center">
+              {canUpload && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
+                >
+                  <Upload className="h-3 w-3" />
+                  <span>上传文件</span>
+                </button>
+              )}
+              <button
+                onClick={() => setShowNewFolderInput(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
+              >
+                <FolderPlus className="h-3 w-3" />
+                <span>新建文件夹</span>
+              </button>
+            </div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-500">
+              快捷键: <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">n</kbd> 新建文件夹 | <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">/</kbd> 搜索
             </div>
           </div>
         ) : viewMode === 'gallery' ? (
