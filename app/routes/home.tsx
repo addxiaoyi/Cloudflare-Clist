@@ -58,6 +58,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  Check,
   Pause,
   Resume,
   StopCircle,
@@ -5372,6 +5373,11 @@ const SortableGalleryItemInner = ({
     ? null
     : fileTypeIcon(getFileType(obj.name));
 
+  const handleQuickAction = (e: React.MouseEvent, action: () => void) => {
+    e.stopPropagation();
+    action();
+  };
+
   return (
     <div
       key={obj.key}
@@ -5413,6 +5419,29 @@ const SortableGalleryItemInner = ({
         <div className="truncate text-[10px] text-zinc-400">
           {obj.isDirectory ? '文件夹' : formatBytes(obj.size)}
         </div>
+      </div>
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+        <button
+          onClick={(e) => handleQuickAction(e, () => toggleSelect(obj.key))}
+          className="h-6 w-6 rounded-full bg-white/80 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
+          title="选中"
+        >
+          <Check className="h-3 w-3 text-blue-600" />
+        </button>
+        <button
+          onClick={(e) => handleQuickAction(e, () => startShare(obj))}
+          className="h-6 w-6 rounded-full bg-white/80 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center hover:bg-green-100 dark:hover:bg-green-900/30 transition"
+          title="分享"
+        >
+          <Share2 className="h-3 w-3 text-green-600" />
+        </button>
+        <button
+          onClick={(e) => handleQuickAction(e, () => downloadFile(obj.key))}
+          className="h-6 w-6 rounded-full bg-white/80 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
+          title="下载"
+        >
+          <Download className="h-3 w-3 text-blue-600" />
+        </button>
       </div>
     </div>
   );
@@ -5461,6 +5490,7 @@ function FileBrowser({
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const [previewFile, setPreviewFile] = useState<S3Object | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [showOfflineDownload, setShowOfflineDownload] = useState(false);
@@ -7206,9 +7236,16 @@ function FileBrowser({
       } else if (k === '/') {
         e.preventDefault();
         searchInputRef.current?.focus();
+      } else if (k === 'n' && isAdmin) {
+        e.preventDefault();
+        setShowNewFolderInput(true);
       } else if (k === 'escape') {
-        setCursor(-1);
-        setSelectedKeys(new Set());
+        if (showHelp) {
+          setShowHelp(false);
+        } else {
+          setCursor(-1);
+          setSelectedKeys(new Set());
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -7463,6 +7500,14 @@ function FileBrowser({
             aria-label="刷新"
           >
             <RefreshCw />
+          </button>
+          <button
+            onClick={() => setShowHelp(true)}
+            className="icon-btn h-8 w-8"
+            title="快捷键"
+            aria-label="快捷键"
+          >
+            <AlertCircle />
           </button>
           {isAdmin && (
             <>
@@ -8055,15 +8100,18 @@ function FileBrowser({
           </div>
           <DragOverlay>
             {activeDragItem ? (
-              <div className="w-32 h-32 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl flex flex-col items-center justify-center gap-2 p-3">
+              <div className="w-36 h-40 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xl shadow-2xl flex flex-col items-center justify-center gap-2 p-4 transform scale-110">
                 {activeDragItem.isDirectory ? (
-                  <Folder className="h-10 w-10 text-blue-500" />
+                  <Folder className="h-12 w-12 text-blue-500" />
                 ) : (
-                  <span className="text-zinc-400">{getFileIcon(activeDragItem.name)}</span>
+                  <span className="text-zinc-400">{getFileIcon(activeDragItem.name, "h-12 w-12")}</span>
                 )}
                 <span className="text-zinc-700 dark:text-zinc-200 text-xs font-medium truncate w-full text-center">
                   {activeDragItem.name}
                 </span>
+                <div className="text-[10px] text-zinc-400">
+                  {activeDragItem.isDirectory ? '文件夹' : formatBytes(activeDragItem.size || 0)}
+                </div>
               </div>
             ) : null}
           </DragOverlay>
@@ -9437,6 +9485,106 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             setStatsStorage(null);
           }}
         />
+      )}
+      {showHelp && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
+              <h2 className="text-lg font-semibold">键盘快捷键</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="icon-btn h-8 w-8"
+              >
+                <X />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(80vh-60px)]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">导航</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">J / K</kbd>
+                      <span className="text-zinc-500">向下 / 向上移动光标</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Enter</kbd>
+                      <span className="text-zinc-500">打开 / 预览 / 下载</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">H</kbd>
+                      <span className="text-zinc-500">返回上级目录</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">G</kbd>
+                      <span className="text-zinc-500">回到根目录</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">选择操作</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Space</kbd>
+                      <span className="text-zinc-500">切换选中</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Ctrl+A</kbd>
+                      <span className="text-zinc-500">全选当前列表</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Delete</kbd>
+                      <span className="text-zinc-500">删除选中项</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Esc</kbd>
+                      <span className="text-zinc-500">取消选中 / 关闭弹窗</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">文件管理</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">N</kbd>
+                      <span className="text-zinc-500">新建文件夹 (管理员)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">R</kbd>
+                      <span className="text-zinc-500">刷新文件列表</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">/</kbd>
+                      <span className="text-zinc-500">聚焦搜索框</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">拖拽排序</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Drag</kbd>
+                      <span className="text-zinc-500">拖拽文件/文件夹排序</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Tab</kbd>
+                      <span className="text-zinc-500">切换列表/画廊视图</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500">
+                <p>提示：在输入框中按 Esc 可退出编辑模式</p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
