@@ -28,6 +28,9 @@ struct Uniforms {
   bgColor: vec4f,
   shardColor: vec4f,
   accentColor: vec4f,
+  pointerPos: vec2f,
+  pointerStrength: f32,
+  scale: f32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -47,13 +50,36 @@ fn fragmentMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let uv = pos.xy / uniforms.resolution;
   
   let time = uniforms.time * 0.5;
-  let pattern = sin(uv.x * 20.0 + time) * sin(uv.y * 20.0 - time);
+  
+  // Create base pattern with time-based animation
+  let pattern = sin(uv.x * 20.0 * uniforms.scale + time) * 
+                sin(uv.y * 20.0 * uniforms.scale - time);
   let gradient = smoothstep(0.0, 1.0, pattern * 0.5 + 0.5);
   
-  let mixed = mix(uniforms.bgColor.rgb, uniforms.shardColor.rgb, gradient * 0.3);
-  let accentMix = mix(mixed, uniforms.accentColor.rgb, sin(time + uv.x * 10.0) * 0.1 + 0.1);
+  // Calculate distance from pointer center for hover effect
+  let pointerUv = uniforms.pointerPos / uniforms.resolution;
+  let dist = distance(uv, pointerUv);
+  let pointerRadius = 0.15 * uniforms.pointerStrength;
+  let pointerEffect = smoothstep(pointerRadius, 0.0, dist) * uniforms.pointerStrength;
   
-  return vec4f(accentMix, 1.0);
+  // Apply pointer repulsion effect
+  let pointerDir = normalize(uv - pointerUv);
+  let pointerNorm = 1.0 - smoothstep(0.0, pointerRadius, dist);
+  let repulsion = pointerNorm * 0.3 * uniforms.pointerStrength;
+  
+  let mixed = mix(uniforms.bgColor.rgb, uniforms.shardColor.rgb, gradient * 0.3);
+  
+  // Add accent color based on distance from pointer and time
+  let accentFactor = sin(time + uv.x * 10.0) * 0.1 + 0.1 + repulsion * 0.5;
+  let accentMix = mix(mixed, uniforms.accentColor.rgb, accentFactor);
+  
+  // Combine with pointer effect for glowing highlight
+  let finalColor = mix(accentMix, uniforms.accentColor.rgb * 0.8, pointerEffect);
+  
+  // Add subtle glow around pointer
+  let glow = pointerEffect * 0.5 * uniforms.pointerStrength;
+  
+  return vec4f(finalColor + glow, 1.0);
 }
 `;
 
@@ -105,6 +131,7 @@ export function AeroShards({
   depth = 1,
   speed = 1,
   spin = 1,
+  interaction = 'repel',
   density = 1.5,
   shardSize = 1.1,
   stretch = 1,
@@ -132,14 +159,16 @@ export function AeroShards({
   const animationRef = useRef<number | null>(null);
   const pausedRef = useRef(paused);
   const speedRef = useRef(speed);
+  const scaleRef = useRef(scale);
+  const interactionStrengthRef = useRef(interactionStrength);
+  const pointerPosRef = useRef({ x: 0, y: 0 });
+  const pointerActiveRef = useRef(false);
 
   // Keep refs in sync with props
-  useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
-  useEffect(() => {
-    speedRef.current = speed;
-  }, [speed]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => { scaleRef.current = scale; }, [scale]);
+  useEffect(() => { interactionStrengthRef.current = interactionStrength; }, [interactionStrength]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -165,10 +194,13 @@ export function AeroShards({
         const effectInst = effect(gpuInstance, SHADER, {
           set: {
             time: 0,
-            resolution: [window.innerWidth, window.innerHeight],
+            resolution: [container.clientWidth, container.clientHeight],
             bgColor: [...hexToRgb(backgroundColor), 1],
             shardColor: [...hexToRgb(shardColor), 1],
             accentColor: [...hexToRgb(accentColor), 1],
+            pointerPos: [container.clientWidth / 2, container.clientHeight / 2],
+            pointerStrength: 0,
+            scale: scale,
           },
         });
 
@@ -191,6 +223,8 @@ export function AeroShards({
 
           if (!isPaused && gpuInst && effectInstRef && surfaceInstRef) {
             const timeValue = currentTime / 1000;
+            const containerEl = containerRef.current;
+            const pointerActive = pointerActiveRef.current;
 
             effectInstRef.set({
               time: timeValue * currentSpeed,
@@ -198,6 +232,9 @@ export function AeroShards({
               bgColor: [...hexToRgb(backgroundColor), 1],
               shardColor: [...hexToRgb(shardColor), 1],
               accentColor: [...hexToRgb(accentColor), 1],
+              pointerPos: [pointerPosRef.current.x, pointerPosRef.current.y],
+              pointerStrength: pointerActive ? interactionStrengthRef.current : 0,
+              scale: scaleRef.current,
             });
 
             frame(gpuInst, (f) => f.pass(surfaceInstRef, effectInstRef));
@@ -207,6 +244,7 @@ export function AeroShards({
         };
 
         animationRef.current = requestAnimationFrame(animate);
+
       } catch (err) {
         console.error('WebGPU initialization failed:', err);
         if (onError) {
@@ -226,7 +264,7 @@ export function AeroShards({
         gpuRef.current = null;
       }
     };
-  }, [backgroundColor, shardColor, accentColor, onError]);
+  }, [backgroundColor, shardColor, accentColor, scale, onError]);
 
   useEffect(() => {
     const effectInstRef = effectInstanceRef.current;
@@ -235,17 +273,28 @@ export function AeroShards({
         bgColor: [...hexToRgb(backgroundColor), 1],
         shardColor: [...hexToRgb(shardColor), 1],
         accentColor: [...hexToRgb(accentColor), 1],
+        scale,
       });
     }
-  }, [backgroundColor, shardColor, accentColor]);
+  }, [backgroundColor, shardColor, accentColor, scale]);
 
-  const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const container = containerRef.current;
     if (!container) return;
 
     const rect = container.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    pointerPosRef.current = { x, y };
+  };
+
+  const handleMouseEnter = () => {
+    pointerActiveRef.current = true;
+  };
+
+  const handleMouseLeave = () => {
+    pointerActiveRef.current = false;
   };
 
   return (
@@ -257,9 +306,12 @@ export function AeroShards({
         height: '100%',
         position: 'relative',
         overflow: 'hidden',
+        cursor: 'none',
         ...style,
       }}
-      onPointerMove={handlePointerMove}
+      onMouseMove={handlePointerMove}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <canvas ref={canvasRef} className="aeroshards-canvas" />
     </div>
