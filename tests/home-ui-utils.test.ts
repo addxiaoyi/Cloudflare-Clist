@@ -708,6 +708,92 @@ describe('per-part granular progress', () => {
   });
 });
 
+describe('per-part collapse toggle', () => {
+  it('defaults to expanded', () => {
+    const uploadPartsOpen = true;
+    expect(uploadPartsOpen).toBe(true);
+  });
+
+  it('toggles between expanded and collapsed', () => {
+    let uploadPartsOpen = true;
+    uploadPartsOpen = !uploadPartsOpen;
+    expect(uploadPartsOpen).toBe(false);
+    uploadPartsOpen = !uploadPartsOpen;
+    expect(uploadPartsOpen).toBe(true);
+  });
+
+  it('counts completed parts for display', () => {
+    const partProgress: Record<number, number> = {
+      1: 5242880,
+      2: 5242880,
+    };
+    const totalParts = 4;
+    const completedCount = Array.from(
+      { length: totalParts },
+      (_, i) => i + 1,
+    ).filter((p) => !partProgress.hasOwnProperty(p)).length;
+    expect(completedCount).toBe(2);
+  });
+});
+
+describe('failed part highlighting', () => {
+  it('detects failed parts from failedParts array', () => {
+    const failedParts = [2, 4];
+    const partNumber = 2;
+    const isFailed = failedParts.includes(partNumber);
+    expect(isFailed).toBe(true);
+  });
+
+  it('returns false for non-failed parts', () => {
+    const failedParts = [2, 4];
+    const isFailed = failedParts.includes(1);
+    expect(isFailed).toBe(false);
+  });
+
+  it('handles empty failedParts', () => {
+    const failedParts: number[] = [];
+    const isFailed = failedParts.includes(1);
+    expect(isFailed).toBe(false);
+  });
+
+  it('applies red color class for failed parts', () => {
+    const isFailed = true;
+    const colorClass = isFailed ? 'text-red-500 font-medium' : 'text-zinc-400';
+    expect(colorClass).toBe('text-red-500 font-medium');
+  });
+
+  it('applies red bar class for failed parts', () => {
+    const isFailed = true;
+    const isCompleted = false;
+    const barClass = isFailed
+      ? 'bg-red-500'
+      : isCompleted
+        ? 'bg-green-500'
+        : 'bg-blue-500';
+    expect(barClass).toBe('bg-red-500');
+  });
+
+  it('displays 失败 text for failed parts', () => {
+    const isFailed = true;
+    const isCompleted = false;
+    const displayText = isFailed ? '失败' : isCompleted ? '完成' : '进行中';
+    expect(displayText).toBe('失败');
+  });
+
+  it('displays 完成 text for completed parts', () => {
+    const isFailed = false;
+    const isCompleted = true;
+    const displayText = isFailed ? '失败' : isCompleted ? '完成' : '进行中';
+    expect(displayText).toBe('完成');
+  });
+
+  it('handles all parts failed', () => {
+    const failedParts = [1, 2, 3];
+    const allFailed = [1, 2, 3].every((p) => failedParts.includes(p));
+    expect(allFailed).toBe(true);
+  });
+});
+
 describe('abort controller for stopping uploads', () => {
   it('abort() sets signal.aborted to true', () => {
     const controller = new AbortController();

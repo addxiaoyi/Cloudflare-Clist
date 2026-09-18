@@ -24,6 +24,8 @@ import {
   LogIn,
   LogOut,
   ShieldCheck,
+  ChevronDown,
+  ChevronUp,
   ChevronRight,
   ArrowLeft,
   ArrowRightLeft,
@@ -4938,16 +4940,18 @@ function FileBrowser({
     progress: number;
     currentPart?: number;
     totalParts?: number;
-    speed?: number; // bytes per second
+    speed?: number;
     loaded?: number;
     total?: number;
     status: 'uploading' | 'paused' | 'error' | 'success';
     errorMessage?: string;
     startTime?: number;
-    pausedAt?: number; // timestamp when paused
-    retryCount?: number; // number of retries attempted
-    failedParts?: number[]; // list of failed part numbers
+    pausedAt?: number;
+    retryCount?: number;
+    failedParts?: number[];
     abortController?: AbortController;
+    partProgress?: Record<number, number>;
+    partSizes?: Record<number, number>;
   } | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const [previewFile, setPreviewFile] = useState<S3Object | null>(null);
@@ -4962,6 +4966,7 @@ function FileBrowser({
   const [readme, setReadme] = useState<string | null>(null);
   const [readmeOpen, setReadmeOpen] = useState(true);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadPartsOpen, setUploadPartsOpen] = useState(true);
   const [globalSearch, setGlobalSearch] = useState(false);
   const [globalResults, setGlobalResults] = useState<S3Object[]>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
@@ -7125,39 +7130,92 @@ function FileBrowser({
             uploadProgress.partProgress &&
             uploadProgress.partSizes &&
             uploadProgress.totalParts && (
-              <div className="mt-2 space-y-1">
-                {Array.from(
-                  { length: uploadProgress.totalParts },
-                  (_, i) => i + 1,
-                ).map((partNumber) => {
-                  const loaded = uploadProgress.partProgress?.[partNumber] || 0;
-                  const size = uploadProgress.partSizes?.[partNumber] || 0;
-                  const isCompleted =
-                    !uploadProgress.partProgress?.hasOwnProperty(partNumber);
-                  const progress =
-                    size > 0 ? Math.round((loaded / size) * 100) : 0;
+              <div className="mt-2">
+                <button
+                  onClick={() => setUploadPartsOpen((o) => !o)}
+                  className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+                >
+                  {uploadPartsOpen ? (
+                    <ChevronUp className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
+                  <span>分片进度</span>
+                  <span className="text-zinc-300 dark:text-zinc-600">
+                    (
+                    {
+                      Array.from(
+                        { length: uploadProgress.totalParts },
+                        (_, i) => i + 1,
+                      ).filter(
+                        (p) => !uploadProgress.partProgress?.hasOwnProperty(p),
+                      ).length
+                    }
+                    /{uploadProgress.totalParts} 完成)
+                  </span>
+                </button>
+                {uploadPartsOpen && (
+                  <div className="mt-1 space-y-1">
+                    {Array.from(
+                      { length: uploadProgress.totalParts },
+                      (_, i) => i + 1,
+                    ).map((partNumber) => {
+                      const loaded =
+                        uploadProgress.partProgress?.[partNumber] || 0;
+                      const size = uploadProgress.partSizes?.[partNumber] || 0;
+                      const isCompleted =
+                        !uploadProgress.partProgress?.hasOwnProperty(
+                          partNumber,
+                        );
+                      const isFailed =
+                        uploadProgress.failedParts?.includes(partNumber);
+                      const progress =
+                        size > 0 ? Math.round((loaded / size) * 100) : 0;
 
-                  return (
-                    <div key={partNumber} className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-400 w-12 tabular-nums">
-                        分片 {partNumber}
-                      </span>
-                      <div className="flex-1 h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                      return (
                         <div
-                          className={`h-full transition-all duration-150 ease-out rounded-full ${
-                            isCompleted ? 'bg-green-500' : 'bg-blue-500'
-                          }`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-zinc-400 w-16 text-right tabular-nums">
-                        {isCompleted
-                          ? '完成'
-                          : `${progress}% (${formatBytes(loaded)}/${formatBytes(size)})`}
-                      </span>
-                    </div>
-                  );
-                })}
+                          key={partNumber}
+                          className="flex items-center gap-2"
+                        >
+                          <span
+                            className={`text-xs w-12 tabular-nums ${
+                              isFailed
+                                ? 'text-red-500 font-medium'
+                                : 'text-zinc-400'
+                            }`}
+                          >
+                            分片 {partNumber}
+                          </span>
+                          <div className="flex-1 h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-150 ease-out rounded-full ${
+                                isFailed
+                                  ? 'bg-red-500'
+                                  : isCompleted
+                                    ? 'bg-green-500'
+                                    : 'bg-blue-500'
+                              }`}
+                              style={{
+                                width: `${Math.min(progress, 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <span
+                            className={`text-xs w-16 text-right tabular-nums ${
+                              isFailed ? 'text-red-500' : 'text-zinc-400'
+                            }`}
+                          >
+                            {isFailed
+                              ? '失败'
+                              : isCompleted
+                                ? '完成'
+                                : `${progress}% (${formatBytes(loaded)}/${formatBytes(size)})`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           {uploadProgress.status === 'success' && (
