@@ -648,27 +648,247 @@ export class QuarkClient {
       'Quark multipart upload not supported via direct API, use proxy upload',
     );
   }
-  async uploadPart(
-    _key: string,
-    _uploadId: string,
-    _partNumber: number,
-    _body: ReadableStream | ArrayBuffer,
-    _contentLength?: number,
+  async initMultipartUpload(
+    key: string,
+    targetPath: string = key,
   ): Promise<string> {
-    throw new Error(
-      'Quark multipart upload not supported via direct API, use proxy upload',
+    const target = this.getFullPath(targetPath);
+    const parentPath = target.split('/').slice(0, -1).join('/');
+    const parentId = await this.findFidByPath(parentPath || '');
+    if (parentId < 0) {
+      throw new Error('Quark: parent folder not found');
+    }
+
+    const fileName = target.split('/').pop() || '';
+    const formatType = fileName.includes('.')
+      ? fileName.split('.').pop()?.toLowerCase() || 'bin'
+      : 'bin';
+
+    console.log('[Quark] Initializing multipart upload:', {
+      key,
+      fileName,
+      formatType,
+      parentId,
+    });
+
+    const res = await this.request(
+      '/1/clouddrive/file/upload/pre',
+      'POST',
+      undefined,
+      JSON.stringify({
+        pdir_fid: parentId,
+        file_name: fileName,
+        size: 0,
+        format_type: formatType,
+        chunk_mode: true,
+      }),
     );
+
+    if (!res || (res.code && res.code !== '0' && res.code !== 0)) {
+      throw new Error(
+        `Quark: failed to initialize multipart upload, ${JSON.stringify(res)}`,
+      );
+    }
+
+    const data = res.data || res;
+    const uploadId = data.upload_id || data.task_id || data.session_id;
+
+    if (!uploadId) {
+      console.error(
+        '[Quark] Full init response:',
+        JSON.stringify(res, null, 2),
+      );
+      throw new Error(
+        'Quark: failed to initialize multipart upload, no upload_id in response',
+      );
+    }
+
+    console.log('[Quark] Multipart upload initialized, uploadId:', uploadId);
+    return uploadId;
+  }
+
+  async uploadPart(
+    uploadId: string,
+    partNumber: number,
+    chunk: ArrayBuffer | Uint8Array,
+  ): Promise<{ etag: string; partNumber: number }> {
+    const chunkData =
+      chunk instanceof ArrayBuffer ? new Uint8Array(chunk) : chunk;
+
+    console.log(
+      `[Quark] Uploading part ${partNumber}, size: ${chunkData.length} bytes`,
+    );
+
+    const url = new URL(`${API_BASE}/1/clouddrive/file/upload_part`);
+    url.searchParams.set('upload_id', uploadId);
+    url.searchParams.set('part_number', String(partNumber));
+    url.searchParams.set('pr', 'ucpro');
+    url.searchParams.set('fr', 'pc');
+
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: {
+        ...this.headers(),
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': String(chunkData.length),
+      },
+      body: chunkData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Quark upload part error: ${res.status} ${text.substring(0, 200)}`,
+      );
+    }
+
+    const data = await res.json();
+    if (data.code && data.code !== '0' && data.code !== 0) {
+      throw new Error(
+        `Quark upload part error: ${data.code} ${data.message || ''}`,
+      );
+    }
+
+    const etag = data.etag || data.md5 || `part-${partNumber}`;
+    console.log(`[Quark] Part ${partNumber} uploaded, etag: ${etag}`);
+
+    return { etag, partNumber };
   }
   async completeMultipartUpload(
-    _key: string,
-    _uploadId: string,
-    _parts: { partNumber: number; etag: string }[],
+    uploadId: string,
+    parts: { partNumber: number; etag: string }[],
+    fileKey: string,
+    fileSize: number,
   ): Promise<void> {
-    return;
+    console.log(
+      `[Quark] Completing multipart upload, ${parts.length} parts, total size: ${fileSize} bytes`,
+    );
+
+    const sortedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
+
+    const res = await this.request(
+      '/1/clouddrive/file/upload/finish',
+      'POST',
+      undefined,
+      JSON.stringify({
+        upload_id: uploadId,
+        parts: sortedParts.map((p) => ({
+          part_number: p.partNumber,
+          etag: p.etag,
+        })),
+      }),
+    );
+
+    if (res.code !== 0 && res.code !== '0') {
+      throw new Error(
+        `Quark: failed to complete multipart upload, ${JSON.stringify(res)}`,
+      );
+    }
+
+    console.log('[Quark] Multipart upload completed successfully');
   }
-  async abortMultipartUpload(_key: string, _uploadId: string): Promise<void> {
-    return;
+
+  async abortMultipartUpload(uploadId: string): Promise<void> {
+    console.log(`[Quark] Aborting multipart upload: ${uploadId}`);
+
+    const res = await this.request(
+      '/1/clouddrive/file/upload/abort',
+      'POST',
+      undefined,
+      JSON.stringify({
+        upload_id: uploadId,
+      }),
+    );
+
+    if (res.code !== 0 && res.code !== '0') {
+      console.warn('[Quark] Failed to abort multipart upload:', res);
+    }
+
+    console.log('[Quark] Multipart upload aborted');
   }
+
+  async uploadWithResume(
+    key: string,
+    body: ArrayBuffer | Uint8Array,
+    options: {
+      chunkSize?: number;
+      onProgress?: (
+        uploaded: number,
+        total: number,
+        partNumber: number,
+      ) => void;
+    } = {},
+  ): Promise<void> {
+    const CHUNK_SIZE = options.chunkSize || 10 * 1024 * 1024; // 10MB default
+    const fileSize = body instanceof Uint8Array ? body.length : body.byteLength;
+
+    console.log(
+      `[Quark] Starting multipart upload: key=${key}, size=${fileSize} bytes, chunkSize=${CHUNK_SIZE} bytes`,
+    );
+
+    if (fileSize === 0) {
+      console.warn('[Quark] Empty file, skipping upload');
+      return;
+    }
+
+    const totalParts = Math.ceil(fileSize / CHUNK_SIZE);
+    console.log(`[Quark] Total parts to upload: ${totalParts}`);
+
+    // Initialize multipart upload
+    const uploadId = await this.initMultipartUpload(key);
+    if (!uploadId) {
+      throw new Error('Failed to initialize multipart upload');
+    }
+
+    const parts: { partNumber: number; etag: string }[] = [];
+    let uploadedBytes = 0;
+
+    try {
+      for (let i = 0; i < totalParts; i++) {
+        const partNumber = i + 1;
+        const startOffset = i * CHUNK_SIZE;
+        const endOffset = Math.min(startOffset + CHUNK_SIZE, fileSize);
+        const chunkSize = endOffset - startOffset;
+
+        let chunk: Uint8Array;
+        if (body instanceof Uint8Array) {
+          chunk = body.subarray(startOffset, endOffset);
+        } else {
+          chunk = new Uint8Array(body.slice(startOffset, endOffset));
+        }
+
+        try {
+          const result = await this.uploadPart(uploadId, partNumber, chunk);
+          parts.push(result);
+          uploadedBytes = endOffset;
+
+          // Report progress
+          options.onProgress?.(uploadedBytes, fileSize, partNumber);
+
+          console.log(
+            `[Quark] Part ${partNumber}/${totalParts} uploaded, ${uploadedBytes}/${fileSize} bytes (${Math.round((uploadedBytes / fileSize) * 100)}%)`,
+          );
+        } catch (err) {
+          console.error(`[Quark] Failed to upload part ${partNumber}:`, err);
+          throw err;
+        }
+      }
+
+      // Complete the upload
+      await this.completeMultipartUpload(uploadId, parts, key, fileSize);
+      console.log(`[Quark] File uploaded successfully: ${key}`);
+    } catch (err) {
+      console.error('[Quark] Upload failed, aborting multipart upload:', err);
+      // Try to abort the upload on failure
+      try {
+        await this.abortMultipartUpload(uploadId);
+      } catch (abortErr) {
+        console.warn('[Quark] Failed to abort upload after error:', abortErr);
+      }
+      throw err;
+    }
+  }
+
   async getSignedUploadPartUrl(
     _key: string,
     _uploadId: string,
