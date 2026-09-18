@@ -51,6 +51,13 @@ import {
   EyeClosed,
   QrCode,
   Smartphone,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Pause,
+  Resume,
+  StopCircle,
 } from '~/components/icons';
 
 export function meta({ data }: Route.MetaArgs) {
@@ -1214,6 +1221,17 @@ function formatSpeed(bytesPerSecond: number): string {
   return (
     parseFloat((bytesPerSecond / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   );
+}
+
+function formatTimeLeft(
+  bytesPerSecond: number,
+  bytesRemaining: number,
+): string {
+  if (bytesPerSecond === 0 || bytesRemaining <= 0) return '计算中...';
+  const seconds = Math.ceil(bytesRemaining / bytesPerSecond);
+  if (seconds < 60) return `${seconds}秒`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
+  return `${Math.floor(seconds / 3600)}小时${Math.floor((seconds % 3600) / 60)}分`;
 }
 
 function formatDate(dateStr: string): string {
@@ -4904,7 +4922,12 @@ function FileBrowser({
     speed?: number; // bytes per second
     loaded?: number;
     total?: number;
+    status: 'uploading' | 'paused' | 'error' | 'success';
+    errorMessage?: string;
+    startTime?: number;
+    abortController?: AbortController;
   } | null>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const [previewFile, setPreviewFile] = useState<S3Object | null>(null);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -6916,37 +6939,109 @@ function FileBrowser({
       {uploadProgress && (
         <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40">
           <div className="flex items-center gap-3">
-            <span className="text-xs text-zinc-600 dark:text-zinc-300 truncate flex-1">
-              正在上传: {uploadProgress.name}
-              {uploadProgress.totalParts && (
-                <span className="text-zinc-400 dark:text-zinc-500 ml-1 tabular-nums">
-                  ({uploadProgress.currentPart}/{uploadProgress.totalParts}{' '}
-                  分片)
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-600 dark:text-zinc-300 truncate font-medium">
+                  {uploadProgress.status === 'uploading' && '正在上传'}
+                  {uploadProgress.status === 'paused' && '已暂停'}
+                  {uploadProgress.status === 'error' && '上传失败'}
+                  {uploadProgress.status === 'success' && '上传完成'}
+                  {uploadProgress.name && (
+                    <span className="text-zinc-400 dark:text-zinc-500 ml-1">
+                      - {uploadProgress.name}
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-            {uploadProgress.speed !== undefined && uploadProgress.speed > 0 && (
-              <span className="text-xs text-blue-500 shrink-0 tabular-nums">
-                {formatSpeed(uploadProgress.speed)}
-              </span>
-            )}
-            <span className="text-xs text-zinc-500 w-12 text-right tabular-nums">
-              {uploadProgress.progress}%
-            </span>
-          </div>
-          <div className="mt-1.5 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-500 transition-all duration-150 rounded-full"
-              style={{ width: `${uploadProgress.progress}%` }}
-            />
-          </div>
-          {uploadProgress.loaded !== undefined &&
-            uploadProgress.total !== undefined && (
-              <div className="mt-1 text-xs text-zinc-400 dark:text-zinc-500 tabular-nums">
-                {formatBytes(uploadProgress.loaded)} /{' '}
-                {formatBytes(uploadProgress.total)}
+                <div className="flex items-center gap-2">
+                  {uploadProgress.status === 'uploading' && (
+                    <span className="text-xs text-zinc-500 w-12 text-right tabular-nums font-mono">
+                      {uploadProgress.progress}%
+                    </span>
+                  )}
+                  {uploadProgress.status === 'success' && (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  )}
+                  {uploadProgress.status === 'error' && (
+                    <XCircle className="h-4 w-4 text-red-500" />
+                  )}
+                  {uploadProgress.status === 'paused' && (
+                    <Pause className="h-4 w-4 text-yellow-500" />
+                  )}
+                </div>
               </div>
-            )}
+              {uploadProgress.status === 'uploading' && (
+                <div className="flex items-center gap-3 mt-1">
+                  {uploadProgress.totalParts && (
+                    <span className="text-xs text-zinc-400 tabular-nums">
+                      分片 {uploadProgress.currentPart}/
+                      {uploadProgress.totalParts}
+                    </span>
+                  )}
+                  {uploadProgress.speed !== undefined &&
+                    uploadProgress.speed > 0 && (
+                      <span className="text-xs text-blue-500 tabular-nums font-mono">
+                        {formatSpeed(uploadProgress.speed)}
+                      </span>
+                    )}
+                  {uploadProgress.loaded !== undefined &&
+                    uploadProgress.total !== undefined &&
+                    uploadProgress.speed !== undefined &&
+                    uploadProgress.speed > 0 && (
+                      <span className="text-xs text-zinc-400 tabular-nums">
+                        剩余{' '}
+                        {formatTimeLeft(
+                          uploadProgress.speed,
+                          uploadProgress.total - uploadProgress.loaded,
+                        )}
+                      </span>
+                    )}
+                  {uploadProgress.loaded !== undefined &&
+                    uploadProgress.total !== undefined && (
+                      <span className="text-xs text-zinc-400 tabular-nums">
+                        {formatBytes(uploadProgress.loaded)} /{' '}
+                        {formatBytes(uploadProgress.total)}
+                      </span>
+                    )}
+                </div>
+              )}
+              {uploadProgress.status === 'error' &&
+                uploadProgress.errorMessage && (
+                  <div className="text-xs text-red-500 mt-1">
+                    {uploadProgress.errorMessage}
+                  </div>
+                )}
+            </div>
+            {uploadProgress.status === 'uploading' &&
+              uploadAbortControllerRef.current && (
+                <button
+                  onClick={() => {
+                    uploadAbortControllerRef.current?.abort();
+                    uploadAbortControllerRef.current = null;
+                  }}
+                  className="shrink-0 p-1.5 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded transition"
+                  title="停止上传"
+                >
+                  <StopCircle className="h-4 w-4 text-red-500" />
+                </button>
+              )}
+          </div>
+          {uploadProgress.status === 'uploading' && (
+            <div className="mt-2 h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all duration-150 ease-out rounded-full"
+                style={{ width: `${uploadProgress.progress}%` }}
+              />
+            </div>
+          )}
+          {uploadProgress.status === 'success' && (
+            <div className="mt-2 h-1.5 bg-green-500 rounded-full" />
+          )}
+          {uploadProgress.status === 'error' && (
+            <div className="mt-2 h-1.5 bg-red-500 rounded-full" />
+          )}
+          {uploadProgress.status === 'paused' && (
+            <div className="mt-2 h-1.5 bg-yellow-500 rounded-full" />
+          )}
         </div>
       )}
 
@@ -6978,7 +7073,7 @@ function FileBrowser({
 
       {/* Content */}
       <div
-        className="flex-1 overflow-auto relative"
+        className={`flex-1 overflow-auto relative transition-all duration-200 ${dragOver ? 'ring-2 ring-blue-500 ring-inset' : ''}`}
         onDragOver={(e) => {
           if (!canUpload) return;
           e.preventDefault();
@@ -6994,10 +7089,18 @@ function FileBrowser({
         }}
       >
         {dragOver && (
-          <div className="absolute inset-2 z-20 bg-blue-500/10 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center pointer-events-none">
-            <span className="text-blue-600 dark:text-blue-300 font-medium text-lg">
-              松开以上传到当前目录
-            </span>
+          <div className="absolute inset-2 z-20 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center pointer-events-none backdrop-blur-sm">
+            <div className="text-center p-6">
+              <div className="flex justify-center mb-4">
+                <Upload className="h-12 w-12 text-blue-500 animate-bounce" />
+              </div>
+              <span className="text-blue-600 dark:text-blue-300 font-semibold text-xl block">
+                松开以上传到当前目录
+              </span>
+              <span className="text-blue-500 dark:text-blue-400 text-sm mt-2 block">
+                支持拖入多个文件或文件夹
+              </span>
+            </div>
           </div>
         )}
         {globalMode ? (
