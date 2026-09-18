@@ -6722,8 +6722,16 @@ function FileBrowser({
                 <div className="absolute right-0 top-9 z-50 min-w-[220px] max-h-80 overflow-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg py-1">
                   {favorites.filter((f) => f.storageId === storage.id)
                     .length === 0 ? (
-                    <div className="px-3 py-4 text-center text-xs text-zinc-400">
-                      暂无收藏（右键或操作列 ☆ 收藏常用目录/文件）
+                    <div className="px-3 py-4 text-center">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Star className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                          暂无收藏
+                        </p>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-600 max-w-[180px]">
+                          右键或操作列 ☆ 收藏常用目录/文件
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     favorites
@@ -8573,8 +8581,25 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
           <div className="overflow-y-auto flex-1 py-1">
             {storages.length === 0 ? (
-              <div className="p-4 text-center text-zinc-400 dark:text-zinc-600 text-xs whitespace-nowrap">
-                暂无存储
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 mb-2">
+                  <FolderPlus className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+                </div>
+                <div className="mb-4">
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">暂无存储</p>
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setEditingStorage(null);
+                        setShowStorageForm(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-blue-400"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      添加存储
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               storages.map((s) => (
@@ -8679,9 +8704,32 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               />
             )
           ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-400 dark:text-zinc-600">
-              <Logo showText={false} className="h-12 w-12" />
-              <span className="text-sm">选择左侧存储以浏览文件</span>
+            <div className="flex flex-col items-center justify-center h-full gap-6 text-zinc-400 dark:text-zinc-600 bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+              <div className="flex flex-col items-center gap-3">
+                <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <Folder className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <h2 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
+                    欢迎使用 Starx
+                  </h2>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center max-w-xs leading-relaxed">
+                    请从左侧选择或添加存储空间，开始浏览和管理您的文件。
+                  </p>
+                </div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setEditingStorage(null);
+                    setShowStorageForm(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-blue-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  添加存储
+                </button>
+              )}
             </div>
           )}
         </main>
