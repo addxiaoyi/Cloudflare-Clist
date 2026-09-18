@@ -116,6 +116,8 @@ describe('uploadProgress state', () => {
     total?: number;
     status: 'uploading' | 'paused' | 'error' | 'success';
     errorMessage?: string;
+    partProgress?: Record<number, number>;
+    partSizes?: Record<number, number>;
   };
 
   it('tracks uploading state with speed and size', () => {
@@ -559,6 +561,150 @@ describe('file validation', () => {
     expect(isValidName('')).toBe(false);
     expect(isValidName('  ')).toBe(false);
     expect(isValidName('test.txt')).toBe(true);
+  });
+});
+
+describe('per-part granular progress', () => {
+  it('tracks individual part progress correctly', () => {
+    const partProgress: Record<number, number> = {
+      1: 5242880,
+      2: 3145728,
+      3: 1048576,
+    };
+    const partSizes: Record<number, number> = {
+      1: 5242880,
+      2: 5242880,
+      3: 5242880,
+    };
+
+    // Part 1 is complete (loaded === size)
+    expect(partProgress[1]).toBe(partSizes[1]);
+    // Part 2 is 60% done
+    expect(Math.round((partProgress[2] / partSizes[2]) * 100)).toBe(60);
+    // Part 3 is 20% done
+    expect(Math.round((partProgress[3] / partSizes[3]) * 100)).toBe(20);
+  });
+
+  it('calculates per-part progress percentage', () => {
+    const calculatePartProgress = (loaded: number, size: number): number => {
+      if (size === 0) return 0;
+      return Math.round((loaded / size) * 100);
+    };
+
+    expect(calculatePartProgress(5242880, 5242880)).toBe(100);
+    expect(calculatePartProgress(0, 5242880)).toBe(0);
+    expect(calculatePartProgress(2621440, 5242880)).toBe(50);
+  });
+
+  it('detects completed parts correctly', () => {
+    const partProgress: Record<number, number> = {
+      1: 5242880,
+      2: 5242880,
+    };
+    const totalParts = 4;
+
+    // Part 1 and 2 are completed (present in partProgress)
+    const completedParts = Array.from(
+      { length: totalParts },
+      (_, i) => i + 1,
+    ).filter((p) => partProgress.hasOwnProperty(p));
+
+    expect(completedParts).toEqual([1, 2]);
+  });
+
+  it('tracks incomplete parts correctly', () => {
+    const partProgress: Record<number, number> = {
+      1: 5242880,
+    };
+    const totalParts = 3;
+
+    // Only Part 1 is uploaded (present in partProgress)
+    const uploadedParts = Array.from(
+      { length: totalParts },
+      (_, i) => i + 1,
+    ).filter((p) => partProgress.hasOwnProperty(p));
+
+    expect(uploadedParts).toEqual([1]);
+  });
+
+  it('handles empty part progress', () => {
+    const partProgress: Record<number, number> = {};
+    const totalParts = 2;
+
+    // No parts uploaded
+    const uploadedParts = Array.from(
+      { length: totalParts },
+      (_, i) => i + 1,
+    ).filter((p) => partProgress.hasOwnProperty(p));
+
+    expect(uploadedParts).toEqual([]);
+  });
+
+  it('handles part progress for single-part upload', () => {
+    const partProgress: Record<number, number> = {};
+    const partSizes: Record<number, number> = { 1: 1048576 };
+
+    // Single part upload started
+    partProgress[1] = 524288;
+
+    const loaded = Object.values(partProgress).reduce((a, b) => a + b, 0);
+    expect(loaded).toBe(524288);
+    expect(Math.round((loaded / partSizes[1]) * 100)).toBe(50);
+  });
+
+  it('tracks all parts with different sizes', () => {
+    const partSizes: Record<number, number> = {
+      1: 5 * 1024 * 1024,
+      2: 10 * 1024 * 1024,
+      3: 3 * 1024 * 1024,
+    };
+    const partProgress: Record<number, number> = {
+      1: 5 * 1024 * 1024,
+      2: 5 * 1024 * 1024,
+      3: 0,
+    };
+
+    // Part 1 complete, Part 2 50%, Part 3 0%
+    expect(Math.round((partProgress[1] / partSizes[1]) * 100)).toBe(100);
+    expect(Math.round((partProgress[2] / partSizes[2]) * 100)).toBe(50);
+    expect(Math.round((partProgress[3] / partSizes[3]) * 100)).toBe(0);
+  });
+
+  it('aggregates total loaded from part progress', () => {
+    const totalBytesUploaded = 100000;
+    const partProgress: Record<number, number> = {
+      1: 5000000,
+      2: 3000000,
+    };
+    const partSizes: Record<number, number> = {
+      1: 5000000,
+      2: 5000000,
+      3: 5000000,
+    };
+
+    const currentBytes =
+      totalBytesUploaded +
+      Object.values(partProgress).reduce((a, b) => a + b, 0);
+
+    expect(currentBytes).toBe(8100000);
+  });
+
+  it('computes per-part progress display text', () => {
+    const formatPartProgress = (
+      loaded: number,
+      size: number,
+      isCompleted: boolean,
+    ): string => {
+      if (isCompleted) return '完成';
+      if (size === 0) return '0%';
+      const progress = Math.round((loaded / size) * 100);
+      return `${progress}% (${formatBytes(loaded)}/${formatBytes(size)})`;
+    };
+
+    expect(formatPartProgress(5242880, 5242880, true)).toBe('完成');
+    expect(formatPartProgress(2621440, 5242880, false)).toBe(
+      '50% (2.5 MB/5 MB)',
+    );
   });
 });
 

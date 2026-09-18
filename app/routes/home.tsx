@@ -210,6 +210,8 @@ interface UploadProgress {
   retryCount?: number;
   failedParts?: number[];
   abortController?: AbortController;
+  partProgress?: Record<number, number>;
+  partSizes?: Record<number, number>;
 }
 
 type ConfigField = {
@@ -6053,6 +6055,7 @@ function FileBrowser({
     let totalBytesUploaded = startPart * chunkSize;
     const startTime = Date.now();
     const partProgress: Record<number, number> = {};
+    const partSizes: Record<number, number> = {};
 
     const updateProgress = (prevStatus?: UploadProgress['status']) => {
       const currentBytes =
@@ -6076,6 +6079,8 @@ function FileBrowser({
           (prevStatus === 'paused' ? Date.now() : prev?.pausedAt),
         retryCount: prev?.retryCount,
         failedParts: prev?.failedParts,
+        partProgress: { ...partProgress },
+        partSizes: { ...partSizes },
       }));
     };
 
@@ -6114,6 +6119,9 @@ function FileBrowser({
         partNumber,
         start: (partNumber - 1) * chunkSize,
         end: Math.min(partNumber * chunkSize, file.size),
+        size:
+          Math.min(partNumber * chunkSize, file.size) -
+          (partNumber - 1) * chunkSize,
       }));
 
       // Upload part - tries direct S3 first, falls back to Workers proxy
@@ -6121,8 +6129,10 @@ function FileBrowser({
         partNumber: number;
         start: number;
         end: number;
+        size: number;
       }): Promise<{ partNumber: number; etag: string }> => {
         const chunk = file.slice(item.start, item.end);
+        partSizes[item.partNumber] = item.size;
 
         // Try direct S3 upload first
         if (useDirectUpload && signedUrls[item.partNumber]) {
@@ -7111,6 +7121,45 @@ function FileBrowser({
               />
             </div>
           )}
+          {uploadProgress.status === 'uploading' &&
+            uploadProgress.partProgress &&
+            uploadProgress.partSizes &&
+            uploadProgress.totalParts && (
+              <div className="mt-2 space-y-1">
+                {Array.from(
+                  { length: uploadProgress.totalParts },
+                  (_, i) => i + 1,
+                ).map((partNumber) => {
+                  const loaded = uploadProgress.partProgress?.[partNumber] || 0;
+                  const size = uploadProgress.partSizes?.[partNumber] || 0;
+                  const isCompleted =
+                    !uploadProgress.partProgress?.hasOwnProperty(partNumber);
+                  const progress =
+                    size > 0 ? Math.round((loaded / size) * 100) : 0;
+
+                  return (
+                    <div key={partNumber} className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-400 w-12 tabular-nums">
+                        分片 {partNumber}
+                      </span>
+                      <div className="flex-1 h-1 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-150 ease-out rounded-full ${
+                            isCompleted ? 'bg-green-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${Math.min(progress, 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-zinc-400 w-16 text-right tabular-nums">
+                        {isCompleted
+                          ? '完成'
+                          : `${progress}% (${formatBytes(loaded)}/${formatBytes(size)})`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           {uploadProgress.status === 'success' && (
             <div className="mt-2 h-1.5 bg-green-500 rounded-full" />
           )}
