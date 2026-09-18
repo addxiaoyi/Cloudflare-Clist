@@ -8312,6 +8312,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   );
   const [isDark, setIsDark] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -8435,6 +8436,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   );
 
   const refreshStorages = async () => {
+    setIsLoading(true);
     try {
       const res = await fetch('/api/storages');
       if (res.ok) {
@@ -8447,6 +8449,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       }
     } catch {
       /* ignore */
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -8580,7 +8584,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             </div>
           </div>
           <div className="overflow-y-auto flex-1 py-1">
-            {storages.length === 0 ? (
+            {isLoading ? (
+              <div className="px-2 py-1 space-y-1.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="h-5 w-5 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+                    <div className="h-4 flex-1 rounded bg-zinc-200 dark:bg-zinc-800 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : storages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                 <div className="p-3 rounded-full bg-zinc-100 dark:bg-zinc-800 mb-2">
                   <FolderPlus className="h-6 w-6 text-zinc-500 dark:text-zinc-400" />
