@@ -7282,6 +7282,13 @@ function FileBrowser({
 
   const hasSearch = normalizedQuery.length > 0;
   const searchResultCount = visibleObjects.length;
+  const selectedTotalSize = useMemo(() => {
+    if (selectedKeys.size === 0) return 0;
+    return objects.reduce(
+      (sum, obj) => sum + (selectedKeys.has(obj.key) ? obj.size || 0 : 0),
+      0,
+    );
+  }, [selectedKeys, objects]);
 
   // 键盘流：j/k 选行 h 上级 g 根目录 r 刷新 / 搜索 Esc 取消选中 Space 选中 Delete 删除 Ctrl+A 全选
   useEffect(() => {
@@ -7429,6 +7436,14 @@ function FileBrowser({
             <>
               <span className="ml-2 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400 shrink-0">
                 已选 {selectedKeys.size} 项
+                {selectedTotalSize > 0 && (
+                  <span className="mx-1 text-blue-400">·</span>
+                )}
+                {selectedTotalSize > 0 && (
+                  <span className="font-normal">
+                    {formatBytes(selectedTotalSize)}
+                  </span>
+                )}
               </span>
               <button
                 onClick={() => setSelectedKeys(new Set())}
@@ -7478,20 +7493,26 @@ function FileBrowser({
               setGlobalResults([]);
             }}
             className={`icon-btn h-8 w-8 ${globalSearch ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10' : ''}`}
-            title={globalSearch ? '全局搜索中（点击切回当前目录）' : '全局搜索'}
+            title="全局搜索 (g)"
             aria-label="全局搜索"
           >
             <Globe />
+            <kbd className="absolute -bottom-0.5 right-0 text-[8px] text-zinc-400 pointer-events-none hidden sm:inline">
+              g
+            </kbd>
           </button>
           <button
             onClick={() =>
               setViewMode((v) => (v === 'list' ? 'gallery' : 'list'))
             }
             className={`icon-btn h-8 w-8 ${viewMode === 'gallery' ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10' : ''}`}
-            title={viewMode === 'list' ? '网格视图' : '列表视图'}
+            title="切换视图 (Tab)"
             aria-label="切换视图"
           >
             {viewMode === 'list' ? <LayoutGrid /> : <List />}
+            <kbd className="absolute -bottom-0.5 right-0 text-[8px] text-zinc-400 pointer-events-none hidden sm:inline">
+              Tab
+            </kbd>
           </button>
           <div className="relative">
             <button
@@ -7613,23 +7634,29 @@ function FileBrowser({
               </button>
             </>
           )}
-          {path && (
+          {path ? (
             <button
               onClick={goUp}
               className="btn btn-sm btn-ghost"
-              title="返回上级目录"
+              title="返回上级目录 (←/h)"
             >
               <ArrowLeft />
               上级
+              <kbd className="ml-1 text-[10px] text-zinc-400 pointer-events-none hidden sm:inline">
+                h
+              </kbd>
             </button>
-          )}
+          ) : null}
           <button
             onClick={loadFiles}
             className="icon-btn h-8 w-8"
-            title="刷新"
+            title="刷新 (r)"
             aria-label="刷新"
           >
             <RefreshCw />
+            <kbd className="absolute -bottom-0.5 -right-0.5 text-[8px] text-zinc-400 pointer-events-none hidden sm:inline">
+              r
+            </kbd>
           </button>
           <button
             onClick={() => setShowHelp(true)}
@@ -7647,10 +7674,13 @@ function FileBrowser({
               <button
                 onClick={() => setShowNewFolderInput(true)}
                 className="btn btn-sm btn-ghost"
-                title="新建文件夹"
+                title="新建文件夹 (n)"
               >
                 <FolderPlus />
                 文件夹
+                <kbd className="ml-1 text-[10px] text-zinc-400 pointer-events-none hidden sm:inline">
+                  n
+                </kbd>
               </button>
               <button
                 onClick={() => setShowOfflineDownload(true)}
@@ -7665,6 +7695,7 @@ function FileBrowser({
           {canUpload && (
             <label
               className={`btn btn-sm btn-primary cursor-pointer ${uploadProgress ? 'pointer-events-none opacity-50' : ''}`}
+              title="上传文件 (u)"
             >
               {uploadProgress ? (
                 '上传中…'
@@ -7794,17 +7825,25 @@ function FileBrowser({
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-600 dark:text-zinc-300 truncate font-medium">
-                  {uploadProgress.status === 'uploading' && '正在上传'}
-                  {uploadProgress.status === 'paused' && '已暂停'}
-                  {uploadProgress.status === 'error' && '上传失败'}
-                  {uploadProgress.status === 'success' && '上传完成'}
-                  {uploadProgress.name && (
-                    <span className="text-zinc-400 dark:text-zinc-500 ml-1">
-                      - {uploadProgress.name}
+                <div className="flex items-center gap-2 min-w-0">
+                  {uploadProgress.status === 'uploading' && (
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
                     </span>
                   )}
-                </span>
+                  <span className="text-xs text-zinc-600 dark:text-zinc-300 truncate font-medium">
+                    {uploadProgress.status === 'uploading' && '正在上传'}
+                    {uploadProgress.status === 'paused' && '已暂停'}
+                    {uploadProgress.status === 'error' && '上传失败'}
+                    {uploadProgress.status === 'success' && '上传完成'}
+                    {uploadProgress.name && (
+                      <span className="text-zinc-400 dark:text-zinc-500 ml-1">
+                        - {uploadProgress.name}
+                      </span>
+                    )}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   {uploadProgress.status === 'uploading' && (
                     <span className="text-xs text-zinc-500 w-12 text-right tabular-nums font-mono">
@@ -7819,6 +7858,16 @@ function FileBrowser({
                   )}
                   {uploadProgress.status === 'paused' && (
                     <Pause className="h-4 w-4 text-yellow-500" />
+                  )}
+                  {(uploadProgress.status === 'success' ||
+                    uploadProgress.status === 'error') && (
+                    <button
+                      onClick={() => setUploadProgress(null)}
+                      className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded transition text-zinc-400"
+                      title="关闭"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -8335,22 +8384,33 @@ function FileBrowser({
                     onClick={() => handleSort('name')}
                   >
                     名称
-                    {sortKey === 'name' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
+                    {sortKey === 'name' && (
+                      <ChevronUp
+                        className={`inline h-3 w-3 ml-0.5 text-zinc-400 transition-transform duration-200 ${sortOrder === 'asc' ? '' : 'rotate-180'}`}
+                      />
+                    )}
                   </th>
                   <th
                     className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-28 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300 hidden md:table-header-cell"
                     onClick={() => handleSort('size')}
                   >
                     大小
-                    {sortKey === 'size' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
+                    {sortKey === 'size' && (
+                      <ChevronUp
+                        className={`inline h-3 w-3 ml-0.5 text-zinc-400 transition-transform duration-200 ${sortOrder === 'asc' ? '' : 'rotate-180'}`}
+                      />
+                    )}
                   </th>
                   <th
                     className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-44 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300 hidden lg:table-header-cell"
                     onClick={() => handleSort('modified')}
                   >
                     修改时间
-                    {sortKey === 'modified' &&
-                      (sortOrder === 'asc' ? ' ▲' : ' ▼')}
+                    {sortKey === 'modified' && (
+                      <ChevronUp
+                        className={`inline h-3 w-3 ml-0.5 text-zinc-400 transition-transform duration-200 ${sortOrder === 'asc' ? '' : 'rotate-180'}`}
+                      />
+                    )}
                   </th>
                   <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-36 hidden md:table-header-cell">
                     操作
@@ -8432,11 +8492,14 @@ function FileBrowser({
           storageId={storage.id}
           fileKey={previewFile.key}
           fileName={previewFile.name}
+          fileSize={previewFile.size}
+          fileModified={previewFile.modified}
           onClose={() => setPreviewFile(null)}
           onPrev={handlePrevPreview}
           onNext={handleNextPreview}
           hasPrev={currentPreviewIndex > 0}
           hasNext={currentPreviewIndex < previewableFiles.length - 1}
+          currentPreviewIndex={currentPreviewIndex}
           canEdit={canUpload}
           onFileChanged={loadFiles}
         />
@@ -8919,18 +8982,25 @@ function FileBrowser({
             label,
             onClick,
             danger,
+            shortcut,
           }: {
             icon: React.ReactNode;
             label: string;
             onClick: () => void;
             danger?: boolean;
+            shortcut?: string;
           }) => (
             <button
               onClick={onClick}
               className={`flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700 ${danger ? 'text-red-600 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-200'}`}
             >
               {icon}
-              <span>{label}</span>
+              <span className="flex-1 truncate">{label}</span>
+              {shortcut && (
+                <kbd className="text-[10px] text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-600 rounded px-1 py-0.5 pointer-events-none">
+                  {shortcut}
+                </kbd>
+              )}
             </button>
           );
           return (
@@ -8954,6 +9024,7 @@ function FileBrowser({
                   <Item
                     icon={<Folder className="h-4 w-4 text-blue-500" />}
                     label="打开"
+                    shortcut="↵"
                     onClick={() => {
                       navigateTo(obj.key);
                       close();
@@ -8963,6 +9034,7 @@ function FileBrowser({
                   <Item
                     icon={<Play className="h-4 w-4" />}
                     label="预览"
+                    shortcut="P"
                     onClick={() => {
                       handlePreview(obj);
                       close();
@@ -8973,6 +9045,7 @@ function FileBrowser({
                   <Item
                     icon={<Download className="h-4 w-4" />}
                     label="下载"
+                    shortcut="D"
                     onClick={() => {
                       downloadFile(obj.key);
                       close();
@@ -8996,6 +9069,7 @@ function FileBrowser({
                     />
                   }
                   label={isFavorite(obj.key) ? '取消收藏' : '收藏'}
+                  shortcut="F"
                   onClick={() => {
                     toggleFavorite(obj);
                     close();
@@ -9007,6 +9081,7 @@ function FileBrowser({
                     <Item
                       icon={<Share2 className="h-4 w-4" />}
                       label="分享"
+                      shortcut="S"
                       onClick={() => {
                         startShare(obj);
                         close();
@@ -9015,6 +9090,7 @@ function FileBrowser({
                     <Item
                       icon={<Pencil className="h-4 w-4" />}
                       label="重命名"
+                      shortcut="R"
                       onClick={() => {
                         startRename(obj);
                         close();
@@ -9023,6 +9099,7 @@ function FileBrowser({
                     <Item
                       icon={<ArrowRightLeft className="h-4 w-4" />}
                       label="移动"
+                      shortcut="M"
                       onClick={() => {
                         startMove(obj);
                         close();
@@ -9032,6 +9109,7 @@ function FileBrowser({
                       icon={<Trash2 className="h-4 w-4" />}
                       label="删除"
                       danger
+                      shortcut="Del"
                       onClick={() => {
                         if (obj.isDirectory) {
                           deleteFolder(obj.key, obj.name);

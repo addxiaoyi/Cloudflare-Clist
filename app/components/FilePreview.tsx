@@ -22,10 +22,20 @@ import {
   Check,
 } from '~/components/icons';
 
+function formatBytesPreview(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
 interface FilePreviewProps {
   storageId: number;
   fileKey: string;
   fileName: string;
+  fileSize?: number;
+  fileModified?: string;
   shareToken?: string;
   password?: string;
   onClose: () => void;
@@ -33,6 +43,8 @@ interface FilePreviewProps {
   onNext?: () => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  currentPreviewIndex?: number;
+  totalPreviewableCount?: number;
   canEdit?: boolean;
   onFileChanged?: () => void;
 }
@@ -43,6 +55,8 @@ export function FilePreview({
   storageId,
   fileKey,
   fileName,
+  fileSize,
+  fileModified,
   shareToken,
   password,
   onClose,
@@ -50,6 +64,8 @@ export function FilePreview({
   onNext,
   hasPrev,
   hasNext,
+  currentPreviewIndex,
+  totalPreviewableCount,
   canEdit,
   onFileChanged,
 }: FilePreviewProps) {
@@ -58,6 +74,7 @@ export function FilePreview({
   const [mediaInfo, setMediaInfo] = useState<MediaInfo | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [autoPlay, setAutoPlay] = useState(false);
+  const totalPreviewable = totalPreviewableCount ?? 0;
   useEffect(() => {
     setMediaInfo(null);
   }, [fileKey]);
@@ -124,13 +141,34 @@ export function FilePreview({
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-3 bg-black/50"
+        className="flex items-center justify-between px-4 py-3 bg-black/60 backdrop-blur-sm"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-white font-mono text-sm truncate">
             {fileName}
           </span>
+          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+            {fileSize != null && <span>{formatBytesPreview(fileSize)}</span>}
+            {fileModified && <span className="w-px h-3 bg-zinc-600" />}
+            {fileModified && (
+              <span>
+                {new Date(fileModified).toLocaleDateString('zh-CN', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            )}
+            {hasPrev !== undefined && hasNext !== undefined && (
+              <span className="hidden sm:inline text-zinc-500">
+                {hasPrev ? '←' : '·'} 预览{' '}
+                {hasPrev ? `${currentPreviewIndex}: ` : ''}
+                {hasNext ? ' →' : '·'}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {fileType === 'image' && (
@@ -313,6 +351,53 @@ export function FilePreview({
               </a>
             </div>
           )}
+          {(fileType === 'image' || fileType === 'video') &&
+            (hasPrev || hasNext) && (
+              <div className="absolute bottom-4 flex gap-1.5 justify-center z-10">
+                {hasPrev && (
+                  <button
+                    onClick={onPrev}
+                    className="w-2 h-2 rounded-full bg-white/30 hover:bg-white/60 transition"
+                    aria-label="上一张"
+                  />
+                )}
+                <div className="flex gap-1 items-center">
+                  {(() => {
+                    const currentIndex = currentPreviewIndex ?? 0;
+                    const total = totalPreviewable || currentIndex + 1;
+                    const dots = Math.min(5, total);
+                    const showAll = total <= 5 || !hasNext;
+                    const start = showAll ? 0 : Math.max(0, currentIndex - 2);
+                    const end = showAll ? total : Math.min(total, start + 5);
+                    return Array.from({ length: end - start }, (_, i) => {
+                      const idx = start + i;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            if (idx < currentIndex) onPrev?.();
+                            else if (idx > currentIndex) onNext?.();
+                          }}
+                          className={`w-2 h-2 rounded-full transition ${
+                            idx === currentIndex
+                              ? 'bg-white'
+                              : 'bg-white/40 hover:bg-white/60'
+                          }`}
+                          aria-label={`第 ${idx + 1} 张`}
+                        />
+                      );
+                    });
+                  })()}
+                </div>
+                {hasNext && (
+                  <button
+                    onClick={onNext}
+                    className="w-2 h-2 rounded-full bg-white/30 hover:bg-white/60 transition"
+                    aria-label="下一张"
+                  />
+                )}
+              </div>
+            )}
         </div>
       </div>
     </div>
@@ -1178,12 +1263,45 @@ function ImageViewer({
   onInfo?: (info: MediaInfo) => void;
 }) {
   const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(true);
   const [imgError, setImgError] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
 
   const zoomIn = () => setScale((s) => Math.min(s + 0.25, 3));
   const zoomOut = () => setScale((s) => Math.max(s - 0.25, 0.5));
-  const resetZoom = () => setScale(1);
+  const resetZoom = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const pointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (scale <= 1) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    dragStartRef.current = {
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    };
+  };
+
+  const pointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setPosition({
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y,
+    });
+  };
+
+  const pointerUp = () => setIsDragging(false);
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const delta = e.deltaY * -0.001;
+    setScale((s) => Math.max(Math.min(s + delta, 3), 0.5));
+  };
 
   return (
     <div className="flex flex-col items-center max-h-full">
@@ -1219,7 +1337,17 @@ function ImageViewer({
       </div>
 
       {/* Image */}
-      <div className="overflow-auto max-w-full max-h-[calc(100vh-200px)]">
+      <div
+        className="relative overflow-auto max-w-full max-h-[calc(100vh-200px)]"
+        onWheel={handleWheel}
+        onPointerDown={pointerDown}
+        onPointerMove={pointerMove}
+        onPointerUp={pointerUp}
+        onPointerCancel={pointerUp}
+        style={{
+          cursor: isDragging ? 'grabbing' : scale > 1 ? 'grab' : 'default',
+        }}
+      >
         {loading && (
           <div className="flex items-center justify-center w-64 h-64">
             <span className="text-zinc-400 font-mono">加载中...</span>
@@ -1234,12 +1362,14 @@ function ImageViewer({
           </div>
         )}
         <img
+          ref={imgRef}
           src={url}
           alt={fileName}
-          className="transition-transform"
           style={{
-            transform: `scale(${scale})`,
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+            transformOrigin: '0 0',
             display: loading || imgError ? 'none' : 'block',
+            userSelect: 'none',
           }}
           onLoad={(e) => {
             setLoading(false);
@@ -1895,14 +2025,6 @@ function PDFViewer({ url }: { url: string }) {
       />
     </div>
   );
-}
-
-function formatBytesPreview(bytes: number): string {
-  if (!bytes) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function PreviewLoading() {
