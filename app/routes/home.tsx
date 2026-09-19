@@ -5013,12 +5013,19 @@ const SortableRow = ({
         borderLeft: cursor === index ? '3px solid #3b82f6' : undefined,
       }}
       className={`border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40 transition-colors ${
-        selectedKeys.has(obj.key)
-          ? 'bg-blue-50/70 dark:bg-blue-900/20'
+        selectedKeys.has(obj.key) ? 'bg-blue-50/70 dark:bg-blue-900/20' : ''
+      } ${cursor === index ? 'bg-blue-50/50 dark:bg-blue-900/15' : ''} ${
+        dragOverId === obj.key
+          ? 'bg-blue-100/70 dark:bg-blue-900/25 border-l-4 border-l-blue-500'
           : ''
-      } ${cursor === index ? 'bg-blue-50/50 dark:bg-blue-900/15' : ''}`}
+      }`}
       onContextMenu={(e) => {
         e.preventDefault();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          toggleSelect(obj.key, e.shiftKey);
+        }
       }}
     >
       {isAdmin && (
@@ -5028,7 +5035,7 @@ const SortableRow = ({
             checked={selectedKeys.has(obj.key)}
             onChange={(e) => {
               e.stopPropagation();
-              toggleSelect(obj.key);
+              toggleSelect(obj.key, e.shiftKey);
             }}
             className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
           />
@@ -5066,13 +5073,13 @@ const SortableRow = ({
           </span>
         )}
       </td>
-      <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
+      <td className="py-2 px-4 text-right text-zinc-500 tabular-nums hidden md:table-cell">
         {obj.isDirectory ? '-' : formatBytes(obj.size)}
       </td>
-      <td className="py-2 px-4 text-right text-zinc-500 tabular-nums">
+      <td className="py-2 px-4 text-right text-zinc-500 tabular-nums hidden lg:table-cell">
         {formatDate(obj.lastModified)}
       </td>
-      <td className="py-1.5 px-3 text-right">
+      <td className="py-1.5 px-3 text-right hidden md:table-cell">
         {obj.isDirectory ? (
           <div className="flex items-center justify-end gap-0.5">
             <button
@@ -5270,7 +5277,7 @@ const SortableGalleryItem = ({
   canDownload: boolean;
   selectedKeys: Set<string>;
   cursor: number;
-  toggleSelect: (key: string) => void;
+  toggleSelect: (key: string, shiftKey?: boolean) => void;
   toggleFavorite: (obj: S3Object) => void;
   isFavorite: (key: string) => boolean;
   handlePreview: (obj: S3Object) => void;
@@ -5367,7 +5374,7 @@ const SortableGalleryItemInner = ({
   canDownload: boolean;
   selectedKeys: Set<string>;
   cursor: number;
-  toggleSelect: (key: string) => void;
+  toggleSelect: (key: string, shiftKey?: boolean) => void;
   toggleFavorite: (obj: S3Object) => void;
   isFavorite: (key: string) => boolean;
   handlePreview: (obj: S3Object) => void;
@@ -5382,11 +5389,13 @@ const SortableGalleryItemInner = ({
   storageId: string;
 }) => {
   const isImg = !obj.isDirectory && getFileType(obj.name) === 'image';
-  const Ic = obj.isDirectory
-    ? null
-    : fileTypeIcon(getFileType(obj.name));
+  const Ic = obj.isDirectory ? null : fileTypeIcon(getFileType(obj.name));
 
-  const handleQuickAction = (e: React.MouseEvent, action: () => void) => {
+  const handleQuickAction = (
+    e: React.MouseEvent,
+    action: () => void,
+    shiftKey?: boolean,
+  ) => {
     e.stopPropagation();
     action();
   };
@@ -5409,7 +5418,7 @@ const SortableGalleryItemInner = ({
           handlePreview(obj);
         }
       }}
-      className={`group relative cursor-pointer rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg transition-all ${selectedKeys.has(obj.key) ? 'bg-blue-50/70 dark:bg-blue-900/20 ring-2 ring-blue-500/50' : ''} ${cursor === index ? 'ring-2 ring-blue-500' : ''}`}
+      className={`group relative cursor-pointer rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg transition-all ${selectedKeys.has(obj.key) ? 'bg-blue-50/70 dark:bg-blue-900/20 ring-2 ring-blue-500/50' : ''} ${cursor === index ? 'ring-2 ring-blue-500' : ''} ${dragOverId === obj.key ? 'ring-4 ring-blue-500/30 bg-blue-50/50 dark:bg-blue-900/15' : ''}`}
     >
       <div className="aspect-square flex items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 overflow-hidden">
         {isImg ? (
@@ -5440,7 +5449,9 @@ const SortableGalleryItemInner = ({
           </div>
         )}
         <button
-          onClick={(e) => handleQuickAction(e, () => toggleSelect(obj.key))}
+          onClick={(e) =>
+            handleQuickAction(e, () => toggleSelect(obj.key, e.shiftKey))
+          }
           className="h-6 w-6 rounded-full bg-white/80 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
           title="选中"
         >
@@ -5516,6 +5527,7 @@ function FileBrowser({
   const [offlineFilename, setOfflineFilename] = useState('');
   const [offlineDownloading, setOfflineDownloading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [lastSelectedKey, setLastSelectedKey] = useState<string | null>(null);
   const [readme, setReadme] = useState<string | null>(null);
   const [readmeOpen, setReadmeOpen] = useState(true);
   const [dragOver, setDragOver] = useState(false);
@@ -5587,9 +5599,12 @@ function FileBrowser({
 
   // dnd-kit sortable state
   const [activeDragItem, setActiveDragItem] = useState<S3Object | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -5597,7 +5612,10 @@ function FileBrowser({
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   const galleryRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const handleDragStart = (event: { active: { id: string }; data?: { current?: { obj?: S3Object } } }) => {
+  const handleDragStart = (event: {
+    active: { id: string };
+    data?: { current?: { obj?: S3Object } };
+  }) => {
     const obj = event.data?.current?.obj;
     if (obj) setActiveDragItem(obj);
   };
@@ -5608,30 +5626,32 @@ function FileBrowser({
     const activeId = active.id as string;
     const overId = over.id as string;
     if (activeId !== overId) {
-      setCursor(visibleObjects.findIndex(o => o.key === overId));
+      setCursor(visibleObjects.findIndex((o) => o.key === overId));
+      setDragOverId(overId);
     }
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveDragItem(null);
+    setDragOverId(null);
     setCursor(-1);
-    
+
     if (!over) return;
-    
+
     const activeId = active.id as string;
     const overId = over.id as string;
-    
+
     if (activeId === overId) return;
-    
+
     const activeObj = objects.find((o) => o.key === activeId);
     const overObj = objects.find((o) => o.key === overId);
-    
+
     if (!activeObj || !overObj) return;
-    
+
     const activePath = activeObj.key.split('/').slice(0, -1).join('/');
     const overPath = overObj.key.split('/').slice(0, -1).join('/');
-    
+
     if (activeObj.isDirectory && overObj.isDirectory) {
       if (activePath !== overPath) {
         await moveDirectory(activeObj, overObj);
@@ -5659,7 +5679,13 @@ function FileBrowser({
   };
 
   const moveFileToFile = async (source: S3Object, destPath: string) => {
-    await handleMoveFile(source, { key: destPath, name: destPath.split('/').pop() || destPath, isDirectory: false, size: 0, lastModified: new Date().toISOString() });
+    await handleMoveFile(source, {
+      key: destPath,
+      name: destPath.split('/').pop() || destPath,
+      isDirectory: false,
+      size: 0,
+      lastModified: new Date().toISOString(),
+    });
   };
 
   const handleMoveFile = async (source: S3Object, dest: S3Object) => {
@@ -5669,7 +5695,11 @@ function FileBrowser({
       const res = await fetch(apiFileUrl(storage.id, source.key), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destPath: dest.isDirectory ? dest.key : dest.key.split('/').slice(0, -1).join('/') + '/' }),
+        body: JSON.stringify({
+          destPath: dest.isDirectory
+            ? dest.key
+            : dest.key.split('/').slice(0, -1).join('/') + '/',
+        }),
       });
       if (res.ok) {
         toast('已移动文件', 'success');
@@ -5747,6 +5777,9 @@ function FileBrowser({
 
   const navigateTo = (newPath: string) => {
     setPath(newPath.replace(/^\//, '').replace(/\/$/, ''));
+    setCursor(-1);
+    setSelectedKeys(new Set());
+    setLastSelectedKey(null);
   };
 
   const goUp = () => {
@@ -6040,16 +6073,40 @@ function FileBrowser({
     }
   };
 
-  const toggleSelect = (key: string) => {
+  const toggleSelect = (key: string, shiftKey: boolean = false) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
+
+      // Shift+click range selection
+      if (shiftKey && lastSelectedKey) {
+        const currentIndex = visibleObjects.findIndex((o) => o.key === key);
+        const lastIndex = visibleObjects.findIndex(
+          (o) => o.key === lastSelectedKey,
+        );
+
+        if (currentIndex !== -1 && lastIndex !== -1) {
+          const start = Math.min(currentIndex, lastIndex);
+          const end = Math.max(currentIndex, lastIndex);
+
+          // Select all items in range
+          for (let i = start; i <= end; i++) {
+            next.add(visibleObjects[i].key);
+          }
+        }
       } else {
-        next.add(key);
+        // Toggle single item
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
       }
+
       return next;
     });
+
+    // Update last selected key
+    setLastSelectedKey(key);
   };
 
   const toggleSelectAll = () => {
@@ -6125,7 +6182,10 @@ function FileBrowser({
       } else {
         const total = folders.length + files.length;
         if (folders.length > 0) {
-          toast(`已删除 ${total} 个项目（${folders.length} 文件夹 + ${files.length} 文件）`, 'success');
+          toast(
+            `已删除 ${total} 个项目（${folders.length} 文件夹 + ${files.length} 文件）`,
+            'success',
+          );
         } else {
           toast(`已删除 ${files.length} 个文件`, 'success');
         }
@@ -7234,11 +7294,14 @@ function FileBrowser({
         setCursor((c) => {
           const n = visibleObjects.length;
           if (n === 0) return -1;
-          const next = k === 'j' ? (c >= n - 1 ? 0 : c + 1) : (c <= 0 ? n - 1 : c - 1);
+          const next =
+            k === 'j' ? (c >= n - 1 ? 0 : c + 1) : c <= 0 ? n - 1 : c - 1;
           requestAnimationFrame(() => {
             const obj = visibleObjects[next];
             if (obj) {
-              const el = rowRefs.current.get(obj.key) || galleryRowRefs.current.get(obj.key);
+              const el =
+                rowRefs.current.get(obj.key) ||
+                galleryRowRefs.current.get(obj.key);
               el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
           });
@@ -7256,7 +7319,7 @@ function FileBrowser({
         const obj = visibleObjects[cursor];
         if (obj) {
           e.preventDefault();
-          toggleSelect(obj.key);
+          toggleSelect(obj.key, e.shiftKey);
         }
       } else if (k === 'delete' || k === 'backspace') {
         if (selectedKeys.size > 0) {
@@ -7289,6 +7352,7 @@ function FileBrowser({
         } else {
           setCursor(-1);
           setSelectedKeys(new Set());
+          setLastSelectedKey(null);
         }
       }
     };
@@ -7362,11 +7426,12 @@ function FileBrowser({
               </span>
               <button
                 onClick={() => setSelectedKeys(new Set())}
-                className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
-                title="清除选择"
+                className="ml-1 inline-flex items-center gap-1 rounded-full bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+                title="清除选择 (Esc)"
                 aria-label="清除选择"
               >
                 <X className="h-3 w-3" />
+                <kbd className="text-[10px]">Esc</kbd>
               </button>
             </>
           )}
@@ -8081,7 +8146,9 @@ function FileBrowser({
               <div className="absolute inset-1 rounded-full border-2 border-transparent border-b-blue-400 animate-spin animate-reverse" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">正在加载文件...</p>
+              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                正在加载文件...
+              </p>
               <div className="mt-2 flex justify-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:0ms]" />
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:150ms]" />
@@ -8102,15 +8169,42 @@ function FileBrowser({
               </button>
             </div>
           </div>
+        ) : hasSearch && objects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-6 p-6 h-64 text-zinc-400 dark:text-zinc-600">
+            <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full">
+              <Search className="h-8 w-8 text-blue-500" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                未找到匹配的文件
+              </p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-xs mx-auto">
+                没有找到包含 "{searchQuery}" 的文件
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setGlobalSearch(false);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition"
+            >
+              <X className="h-3 w-3" />
+              <span>清除搜索</span>
+            </button>
+          </div>
         ) : objects.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-6 p-6 h-64 text-zinc-400 dark:text-zinc-600">
             <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-full">
               <Folder className="h-8 w-8 text-blue-500" />
             </div>
             <div className="text-center space-y-2">
-              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">空目录</p>
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                空目录
+              </p>
               <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-xs mx-auto">
-                这里暂无文件<br/>
+                这里暂无文件
+                <br />
                 可以在此上传文件或创建目录
               </p>
             </div>
@@ -8133,152 +8227,193 @@ function FileBrowser({
               </button>
             </div>
             <div className="text-xs text-zinc-500 dark:text-zinc-500">
-              快捷键: <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">n</kbd> 新建文件夹 | <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">/</kbd> 搜索
+              快捷键:{' '}
+              <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">
+                n
+              </kbd>{' '}
+              新建文件夹 |{' '}
+              <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">
+                /
+              </kbd>{' '}
+              搜索 |{' '}
+              <kbd className="mx-0.5 px-1 py-0.5 bg-zinc-200 dark:bg-zinc-700 rounded">
+                Shift+点击
+              </kbd>{' '}
+              范围选择
             </div>
           </div>
         ) : viewMode === 'gallery' ? (
-          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-          <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <SortableContext items={visibleObjects.map((o) => o.key)} strategy={verticalListSortingStrategy}>
-              {visibleObjects.map((obj, i) => (
-                <SortableGalleryItem
-                  key={obj.key}
-                  obj={obj}
-                  index={i}
-                  isAdmin={isAdmin}
-                  canDownload={canDownload}
-                  selectedKeys={selectedKeys}
-                  cursor={cursor}
-                  toggleSelect={toggleSelect}
-                  toggleFavorite={toggleFavorite}
-                  isFavorite={isFavorite}
-                  handlePreview={handlePreview}
-                  downloadFile={downloadFile}
-                  startShare={startShare}
-                  startRename={startRename}
-                  startMove={startMove}
-                  deleteFolder={deleteFolder}
-                  calcFolderSize={calcFolderSize}
-                  calcSizeKey={calcSizeKey}
-                  navigateTo={navigateTo}
-                  storageId={storage.id}
-                />
-              ))}
-            </SortableContext>
-          </div>
-          <DragOverlay>
-            {activeDragItem ? (
-              <div className="w-36 h-40 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xl shadow-2xl flex flex-col items-center justify-center gap-2 p-4 transform scale-110">
-                {activeDragItem.isDirectory ? (
-                  <Folder className="h-12 w-12 text-blue-500" />
-                ) : (
-                  <span className="text-zinc-400">{getFileIcon(activeDragItem.name, "h-12 w-12")}</span>
-                )}
-                <span className="text-zinc-700 dark:text-zinc-200 text-xs font-medium truncate w-full text-center">
-                  {activeDragItem.name}
-                </span>
-                <div className="text-[10px] text-zinc-400">
-                  {activeDragItem.isDirectory ? '文件夹' : formatBytes(activeDragItem.size || 0)}
-                </div>
-              </div>
-            ) : null}
-          </DragOverlay>
-          </DndContext>
-        ) : (
-          <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-          <table className="w-full text-sm">
-            <thead className="text-xs text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur">
-              <tr>
-                {isAdmin && (
-                  <th className="py-2.5 px-3 w-10">
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
-                    />
-                  </th>
-                )}
-                <th
-                  className="text-left py-2.5 px-4 font-medium uppercase tracking-wider cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
-                  onClick={() => handleSort('name')}
-                >
-                  名称
-                  {sortKey === 'name' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
-                </th>
-                <th
-                  className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-28 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
-                  onClick={() => handleSort('size')}
-                >
-                  大小
-                  {sortKey === 'size' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
-                </th>
-                <th
-                  className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-44 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
-                  onClick={() => handleSort('modified')}
-                >
-                  修改时间
-                  {sortKey === 'modified' &&
-                    (sortOrder === 'asc' ? ' ▲' : ' ▼')}
-                </th>
-                <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-36">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <SortableContext items={visibleObjects.map((o) => o.key)} strategy={verticalListSortingStrategy}>
-                {visibleObjects.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={isAdmin ? 5 : 4}
-                      className="py-8 text-center text-zinc-400 dark:text-zinc-600"
-                    >
-                      没有匹配的文件
-                    </td>
-                  </tr>
-                ) : (
-                  visibleObjects.map((obj, i) => (
-                    <SortableRow
-                      key={obj.key}
-                      obj={obj}
-                      index={i}
-                      isAdmin={isAdmin}
-                      canDownload={canDownload}
-                      selectedKeys={selectedKeys}
-                      cursor={cursor}
-                      toggleSelect={toggleSelect}
-                      toggleFavorite={toggleFavorite}
-                      isFavorite={isFavorite}
-                      handlePreview={handlePreview}
-                      downloadFile={downloadFile}
-                      startShare={startShare}
-                      startRename={startRename}
-                      startMove={startMove}
-                      deleteFolder={deleteFolder}
-                      calcFolderSize={calcFolderSize}
-                      calcSizeKey={calcSizeKey}
-                      navigateTo={navigateTo}
-                    />
-                  ))
-                )}
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <SortableContext
+                items={visibleObjects.map((o) => o.key)}
+                strategy={verticalListSortingStrategy}
+              >
+                {visibleObjects.map((obj, i) => (
+                  <SortableGalleryItem
+                    key={obj.key}
+                    obj={obj}
+                    index={i}
+                    isAdmin={isAdmin}
+                    canDownload={canDownload}
+                    selectedKeys={selectedKeys}
+                    cursor={cursor}
+                    toggleSelect={toggleSelect}
+                    toggleFavorite={toggleFavorite}
+                    isFavorite={isFavorite}
+                    handlePreview={handlePreview}
+                    downloadFile={downloadFile}
+                    startShare={startShare}
+                    startRename={startRename}
+                    startMove={startMove}
+                    deleteFolder={deleteFolder}
+                    calcFolderSize={calcFolderSize}
+                    calcSizeKey={calcSizeKey}
+                    navigateTo={navigateTo}
+                    storageId={storage.id}
+                  />
+                ))}
               </SortableContext>
-            </tbody>
-            <DragOverlay>
+            </div>
+            <DragOverlay dropAnimation={undefined}>
               {activeDragItem ? (
-                <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg px-3 py-2 flex items-center gap-2 text-sm">
+                <div className="w-36 h-40 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xl shadow-2xl flex flex-col items-center justify-center gap-2 p-4 transform-gpu translate-z-0">
+                  <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                   {activeDragItem.isDirectory ? (
-                    <Folder className="h-4 w-4 text-blue-500" />
+                    <Folder className="h-12 w-12 text-blue-500" />
                   ) : (
-                    <span className="text-zinc-400">{getFileIcon(activeDragItem.name)}</span>
+                    <span className="text-zinc-400">
+                      {getFileIcon(activeDragItem.name, 'h-12 w-12')}
+                    </span>
                   )}
-                  <span className="text-zinc-700 dark:text-zinc-200 truncate max-w-[200px]">
+                  <span className="text-zinc-700 dark:text-zinc-200 text-xs font-medium truncate w-full text-center">
                     {activeDragItem.name}
                   </span>
+                  <div className="text-[10px] text-zinc-400">
+                    {activeDragItem.isDirectory
+                      ? '文件夹'
+                      : formatBytes(activeDragItem.size || 0)}
+                  </div>
                 </div>
               ) : null}
             </DragOverlay>
-          </table>
+          </DndContext>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <table className="w-full text-sm">
+              <thead className="text-xs text-zinc-500 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur">
+                <tr>
+                  {isAdmin && (
+                    <th className="py-2.5 px-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
+                      />
+                    </th>
+                  )}
+                  <th
+                    className="text-left py-2.5 px-4 font-medium uppercase tracking-wider cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300"
+                    onClick={() => handleSort('name')}
+                  >
+                    名称
+                    {sortKey === 'name' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
+                  </th>
+                  <th
+                    className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-28 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300 hidden md:table-header-cell"
+                    onClick={() => handleSort('size')}
+                  >
+                    大小
+                    {sortKey === 'size' && (sortOrder === 'asc' ? ' ▲' : ' ▼')}
+                  </th>
+                  <th
+                    className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-44 cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-300 hidden lg:table-header-cell"
+                    onClick={() => handleSort('modified')}
+                  >
+                    修改时间
+                    {sortKey === 'modified' &&
+                      (sortOrder === 'asc' ? ' ▲' : ' ▼')}
+                  </th>
+                  <th className="text-right py-2.5 px-4 font-medium uppercase tracking-wider w-36 hidden md:table-header-cell">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <SortableContext
+                  items={visibleObjects.map((o) => o.key)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {visibleObjects.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-8 text-center text-zinc-400 dark:text-zinc-600"
+                      >
+                        没有匹配的文件
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleObjects.map((obj, i) => (
+                      <SortableRow
+                        key={obj.key}
+                        obj={obj}
+                        index={i}
+                        isAdmin={isAdmin}
+                        canDownload={canDownload}
+                        selectedKeys={selectedKeys}
+                        cursor={cursor}
+                        toggleSelect={toggleSelect}
+                        toggleFavorite={toggleFavorite}
+                        isFavorite={isFavorite}
+                        handlePreview={handlePreview}
+                        downloadFile={downloadFile}
+                        startShare={startShare}
+                        startRename={startRename}
+                        startMove={startMove}
+                        deleteFolder={deleteFolder}
+                        calcFolderSize={calcFolderSize}
+                        calcSizeKey={calcSizeKey}
+                        navigateTo={navigateTo}
+                      />
+                    ))
+                  )}
+                </SortableContext>
+              </tbody>
+              <DragOverlay dropAnimation={undefined}>
+                {activeDragItem ? (
+                  <div className="w-36 h-40 bg-white dark:bg-zinc-800 border-2 border-blue-500 rounded-xl shadow-2xl flex flex-col items-center justify-center gap-2 p-4 transform-gpu translate-z-0">
+                    <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    {activeDragItem.isDirectory ? (
+                      <Folder className="h-12 w-12 text-blue-500" />
+                    ) : (
+                      <span className="text-zinc-400">
+                        {getFileIcon(activeDragItem.name, 'h-12 w-12')}
+                      </span>
+                    )}
+                    <span className="text-zinc-700 dark:text-zinc-200 text-xs font-medium truncate w-full text-center">
+                      {activeDragItem.name}
+                    </span>
+                    <div className="text-[10px] text-zinc-400">
+                      {activeDragItem.isDirectory
+                        ? '文件夹'
+                        : formatBytes(activeDragItem.size || 0)}
+                    </div>
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </table>
           </DndContext>
         )}
       </div>
@@ -8818,7 +8953,9 @@ function FileBrowser({
             <div className="max-h-[50vh] overflow-y-auto py-1">
               {flatCmdItems.length === 0 ? (
                 <div className="px-4 py-8 text-center">
-                  <div className="text-xs text-zinc-400 mb-2">找不到匹配的结果</div>
+                  <div className="text-xs text-zinc-400 mb-2">
+                    找不到匹配的结果
+                  </div>
                   <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     尝试使用更简单的关键词，或按 ⌘K 返回主命令
                   </div>
@@ -8856,10 +8993,14 @@ function FileBrowser({
                             : item.fav.name}
                       </span>
                       {item.kind === 'file' && item.obj.isDirectory && (
-                        <span className="text-xs text-zinc-400 ml-auto">文件夹</span>
+                        <span className="text-xs text-zinc-400 ml-auto">
+                          文件夹
+                        </span>
                       )}
                       {item.kind === 'fav' && (
-                        <span className="text-xs text-zinc-400 ml-auto">收藏</span>
+                        <span className="text-xs text-zinc-400 ml-auto">
+                          收藏
+                        </span>
                       )}
                       {item.kind === 'cmd' && (
                         <kbd className="ml-auto text-[10px] text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded px-1.5 py-0.5">
@@ -8872,10 +9013,18 @@ function FileBrowser({
               )}
             </div>
             <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 flex items-center gap-4 text-[11px] text-zinc-400">
-              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">↑↓ 导航</span>
-              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">↵ 执行</span>
-              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">esc 关闭</span>
-              <span className="ml-auto text-blue-600 dark:text-blue-400">⌘K 呼出</span>
+              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">
+                ↑↓ 导航
+              </span>
+              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">
+                ↵ 执行
+              </span>
+              <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">
+                esc 关闭
+              </span>
+              <span className="ml-auto text-blue-600 dark:text-blue-400">
+                ⌘K 呼出
+              </span>
             </div>
           </div>
         </div>
@@ -9301,7 +9450,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   <FolderPlus className="h-7 w-7 text-zinc-500 dark:text-zinc-400" />
                 </div>
                 <div className="mb-3">
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">暂无存储</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-2">
+                    暂无存储
+                  </p>
                   {isAdmin && (
                     <button
                       onClick={() => {
@@ -9452,10 +9603,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 <div className="flex flex-col items-center gap-2 pt-2">
                   <div className="flex items-center gap-2">
                     <div className="px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20">
-                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">支持 S3、MinIO</span>
+                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                        支持 S3、MinIO
+                      </span>
                     </div>
                     <div className="px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20">
-                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">云存储聚合</span>
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                        云存储聚合
+                      </span>
                     </div>
                   </div>
                   <p className="text-xs text-zinc-400 dark:text-zinc-500">
@@ -9575,73 +9730,113 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <div className="p-4 overflow-y-auto max-h-[calc(80vh-60px)]">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">导航</h3>
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    导航
+                  </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">J / K</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        J / K
+                      </kbd>
                       <span className="text-zinc-500">向下 / 向上移动光标</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Enter</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Enter
+                      </kbd>
                       <span className="text-zinc-500">打开 / 预览 / 下载</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">H</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        H
+                      </kbd>
                       <span className="text-zinc-500">返回上级目录</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">G</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        G
+                      </kbd>
                       <span className="text-zinc-500">回到根目录</span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">选择操作</h3>
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    选择操作
+                  </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Space</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Space
+                      </kbd>
                       <span className="text-zinc-500">切换选中</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Ctrl+A</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Shift+Click
+                      </kbd>
+                      <span className="text-zinc-500">范围选择多项</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Ctrl+A
+                      </kbd>
                       <span className="text-zinc-500">全选当前列表</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Delete</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Delete
+                      </kbd>
                       <span className="text-zinc-500">删除选中项</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Esc</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Esc
+                      </kbd>
                       <span className="text-zinc-500">取消选中 / 关闭弹窗</span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">文件管理</h3>
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    文件管理
+                  </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">N</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        N
+                      </kbd>
                       <span className="text-zinc-500">新建文件夹 (管理员)</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">R</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        R
+                      </kbd>
                       <span className="text-zinc-500">刷新文件列表</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">/</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        /
+                      </kbd>
                       <span className="text-zinc-500">聚焦搜索框</span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">拖拽排序</h3>
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    拖拽排序
+                  </h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Drag</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Drag
+                      </kbd>
                       <span className="text-zinc-500">拖拽文件/文件夹排序</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">Tab</kbd>
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Tab
+                      </kbd>
                       <span className="text-zinc-500">切换列表/画廊视图</span>
                     </div>
                   </div>
