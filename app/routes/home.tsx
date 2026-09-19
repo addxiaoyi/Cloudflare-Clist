@@ -8434,6 +8434,148 @@ function FileBrowser({
         />
       )}
 
+      {/* Help Modal */}
+      {showHelp && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
+              <h2 className="text-lg font-semibold">键盘快捷键</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="icon-btn h-8 w-8"
+              >
+                <X />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[calc(80vh-60px)]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    导航
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        J / K
+                      </kbd>
+                      <span className="text-zinc-500">向下 / 向上移动光标</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Enter
+                      </kbd>
+                      <span className="text-zinc-500">打开 / 预览 / 下载</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        H
+                      </kbd>
+                      <span className="text-zinc-500">返回上级目录</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        G
+                      </kbd>
+                      <span className="text-zinc-500">回到根目录</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    选择操作
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Space
+                      </kbd>
+                      <span className="text-zinc-500">切换选中</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Shift+Click
+                      </kbd>
+                      <span className="text-zinc-500">范围选择多项</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Ctrl+A
+                      </kbd>
+                      <span className="text-zinc-500">全选当前列表</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Delete
+                      </kbd>
+                      <span className="text-zinc-500">删除选中项</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Esc
+                      </kbd>
+                      <span className="text-zinc-500">取消选中 / 关闭弹窗</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    文件管理
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        N
+                      </kbd>
+                      <span className="text-zinc-500">新建文件夹 (管理员)</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        R
+                      </kbd>
+                      <span className="text-zinc-500">刷新文件列表</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        /
+                      </kbd>
+                      <span className="text-zinc-500">聚焦搜索框</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
+                    拖拽排序
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Drag
+                      </kbd>
+                      <span className="text-zinc-500">拖拽文件/文件夹排序</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
+                        Tab
+                      </kbd>
+                      <span className="text-zinc-500">切换列表/画廊视图</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500">
+                <p>提示：在输入框中按 Esc 可退出编辑模式</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Rename Modal */}
       {renameTarget && (
         <Modal title="重命名" onClose={() => setRenameTarget(null)}>
@@ -9708,146 +9850,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             setStatsStorage(null);
           }}
         />
-      )}
-      {showHelp && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowHelp(false)}
-        >
-          <div
-            className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
-              <h2 className="text-lg font-semibold">键盘快捷键</h2>
-              <button
-                onClick={() => setShowHelp(false)}
-                className="icon-btn h-8 w-8"
-              >
-                <X />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[calc(80vh-60px)]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
-                    导航
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        J / K
-                      </kbd>
-                      <span className="text-zinc-500">向下 / 向上移动光标</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Enter
-                      </kbd>
-                      <span className="text-zinc-500">打开 / 预览 / 下载</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        H
-                      </kbd>
-                      <span className="text-zinc-500">返回上级目录</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        G
-                      </kbd>
-                      <span className="text-zinc-500">回到根目录</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
-                    选择操作
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Space
-                      </kbd>
-                      <span className="text-zinc-500">切换选中</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Shift+Click
-                      </kbd>
-                      <span className="text-zinc-500">范围选择多项</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Ctrl+A
-                      </kbd>
-                      <span className="text-zinc-500">全选当前列表</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Delete
-                      </kbd>
-                      <span className="text-zinc-500">删除选中项</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Esc
-                      </kbd>
-                      <span className="text-zinc-500">取消选中 / 关闭弹窗</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
-                    文件管理
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        N
-                      </kbd>
-                      <span className="text-zinc-500">新建文件夹 (管理员)</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        R
-                      </kbd>
-                      <span className="text-zinc-500">刷新文件列表</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        /
-                      </kbd>
-                      <span className="text-zinc-500">聚焦搜索框</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <h3 className="font-medium text-sm text-zinc-600 dark:text-zinc-400">
-                    拖拽排序
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Drag
-                      </kbd>
-                      <span className="text-zinc-500">拖拽文件/文件夹排序</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <kbd className="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-xs">
-                        Tab
-                      </kbd>
-                      <span className="text-zinc-500">切换列表/画廊视图</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500">
-                <p>提示：在输入框中按 Esc 可退出编辑模式</p>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
