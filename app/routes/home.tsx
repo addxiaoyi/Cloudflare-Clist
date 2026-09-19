@@ -4960,6 +4960,7 @@ const SortableRow = ({
   calcSizeKey,
   navigateTo,
   dragOverId,
+  rowRefs,
 }: {
   obj: S3Object;
   index: number;
@@ -4980,6 +4981,7 @@ const SortableRow = ({
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
   dragOverId: string | null;
+  rowRefs: React.MutableRefObject<Map<string, HTMLTableRowElement>>;
 }) => {
   const {
     attributes,
@@ -5273,6 +5275,7 @@ const SortableGalleryItem = ({
   navigateTo,
   storageId,
   dragOverId,
+  galleryRowRefs,
 }: {
   obj: S3Object;
   index: number;
@@ -5294,6 +5297,7 @@ const SortableGalleryItem = ({
   navigateTo: (path: string) => void;
   storageId: string;
   dragOverId: string | null;
+  galleryRowRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }) => {
   const {
     attributes,
@@ -8330,8 +8334,9 @@ function FileBrowser({
                     calcFolderSize={calcFolderSize}
                     calcSizeKey={calcSizeKey}
                     navigateTo={navigateTo}
-                    storageId={storage.id}
+                    storageId={String(storage.id)}
                     dragOverId={dragOverId}
+                    galleryRowRefs={galleryRowRefs}
                   />
                 ))}
               </SortableContext>
@@ -8454,6 +8459,7 @@ function FileBrowser({
                         calcSizeKey={calcSizeKey}
                         navigateTo={navigateTo}
                         dragOverId={dragOverId}
+                        rowRefs={rowRefs}
                       />
                     ))
                   )}
