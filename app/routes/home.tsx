@@ -4959,6 +4959,7 @@ const SortableRow = ({
   calcFolderSize,
   calcSizeKey,
   navigateTo,
+  dragOverId,
 }: {
   obj: S3Object;
   index: number;
@@ -4978,6 +4979,7 @@ const SortableRow = ({
   calcFolderSize: (key: string, name: string) => void;
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
+  dragOverId: string | null;
 }) => {
   const {
     attributes,
@@ -5270,6 +5272,7 @@ const SortableGalleryItem = ({
   calcSizeKey,
   navigateTo,
   storageId,
+  dragOverId,
 }: {
   obj: S3Object;
   index: number;
@@ -5290,6 +5293,7 @@ const SortableGalleryItem = ({
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
   storageId: string;
+  dragOverId: string | null;
 }) => {
   const {
     attributes,
@@ -5342,6 +5346,7 @@ const SortableGalleryItem = ({
         calcSizeKey={calcSizeKey}
         navigateTo={navigateTo}
         storageId={storageId}
+        dragOverId={dragOverId}
       />
     </div>
   );
@@ -5387,6 +5392,7 @@ const SortableGalleryItemInner = ({
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
   storageId: string;
+  dragOverId: string | null;
 }) => {
   const isImg = !obj.isDirectory && getFileType(obj.name) === 'image';
   const Ic = obj.isDirectory ? null : fileTypeIcon(getFileType(obj.name));
@@ -8276,6 +8282,7 @@ function FileBrowser({
                     calcSizeKey={calcSizeKey}
                     navigateTo={navigateTo}
                     storageId={storage.id}
+                    dragOverId={dragOverId}
                   />
                 ))}
               </SortableContext>
@@ -8386,6 +8393,7 @@ function FileBrowser({
                         calcFolderSize={calcFolderSize}
                         calcSizeKey={calcSizeKey}
                         navigateTo={navigateTo}
+                        dragOverId={dragOverId}
                       />
                     ))
                   )}
