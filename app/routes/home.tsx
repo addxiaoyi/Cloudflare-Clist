@@ -4961,6 +4961,7 @@ const SortableRow = ({
   navigateTo,
   dragOverId,
   rowRefs,
+  getFileIcon,
 }: {
   obj: S3Object;
   index: number;
@@ -4982,6 +4983,7 @@ const SortableRow = ({
   navigateTo: (path: string) => void;
   dragOverId: string | null;
   rowRefs: React.MutableRefObject<Map<string, HTMLTableRowElement>>;
+  getFileIcon: (fileName: string, className?: string) => React.ReactNode;
 }) => {
   const {
     attributes,
@@ -8460,6 +8462,7 @@ function FileBrowser({
                         navigateTo={navigateTo}
                         dragOverId={dragOverId}
                         rowRefs={rowRefs}
+                        getFileIcon={getFileIcon}
                       />
                     ))
                   )}
