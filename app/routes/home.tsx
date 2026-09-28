@@ -77,6 +77,7 @@ import {
   defaultDropAnimationSideEffects,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -84,8 +85,6 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
   useSortable,
-  type SortableAttributes,
-  type SortableSyntheticListeners,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -5010,7 +5009,7 @@ const SortableRow = ({
     isDragging,
   } = useSortable({
     id: obj.key,
-    data: { current: { obj } },
+    data: { obj },
   });
 
   const style: React.CSSProperties = {
@@ -5326,7 +5325,7 @@ const SortableGalleryItem = ({
     isDragging,
   } = useSortable({
     id: obj.key,
-    data: { current: { obj, storageId } },
+    data: { obj, storageId },
   });
 
   const style: React.CSSProperties = {
@@ -5641,11 +5640,8 @@ function FileBrowser({
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   const galleryRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const handleDragStart = (event: {
-    active: { id: string };
-    data?: { current?: { obj?: S3Object } };
-  }) => {
-    const obj = event.data?.current?.obj;
+  const handleDragStart = (event: DragStartEvent) => {
+    const obj = event.active.data.current?.obj as S3Object | undefined;
     if (obj) setActiveDragItem(obj);
   };
 
@@ -5702,7 +5698,7 @@ function FileBrowser({
       toast('目录已移动', 'success');
       loadFiles();
     } else {
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       toast(data.error || '移动失败', 'error');
     }
   };
@@ -5734,7 +5730,7 @@ function FileBrowser({
         toast('已移动文件', 'success');
         loadFiles();
       } else {
-        const data = await res.json().catch(() => ({}));
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
         toast(data.error || '移动失败', 'error');
       }
     } catch {

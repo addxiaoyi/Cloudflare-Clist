@@ -21,6 +21,23 @@ import {
   makeRangeResponseHeaders,
 } from '~/lib/file-utils';
 
+// 站内分片上传（流式回退路径）仅面向 S3 风格客户端；
+// quark/dropbox 等实现的签名不同且不支持该路径，这里按标准签名收窄类型。
+type MultipartUploadClient = {
+  uploadPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    body: ReadableStream | ArrayBuffer,
+    contentLength?: number,
+  ): Promise<string>;
+  completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: { partNumber: number; etag: string }[],
+  ): Promise<void>;
+};
+
 // ---------------------------------------------------------------------------
 // 安全守卫
 // ---------------------------------------------------------------------------
@@ -685,7 +702,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
         10,
       );
       const etag = await withClientState(client, db, storageId, () =>
-        client.uploadPart(
+        (client as unknown as MultipartUploadClient).uploadPart(
           path,
           uploadId,
           partNumber,
@@ -723,7 +740,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
       const parts = body.parts;
 
       await withClientState(client, db, storageId, () =>
-        client.completeMultipartUpload(path, uploadId, parts),
+        (client as unknown as MultipartUploadClient).completeMultipartUpload(
+          path,
+          uploadId,
+          parts,
+        ),
       );
       await logAudit(db, {
         action: 'file.multipart_complete',

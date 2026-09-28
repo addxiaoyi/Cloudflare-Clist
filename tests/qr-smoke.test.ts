@@ -100,26 +100,26 @@ describe('Alicloud QR Login Smoke', () => {
 
 describe('API Route Structure Smoke', () => {
   test('api.quark-qr exports action and loader', async () => {
-    const mod = await import('../app/routes/api.quark-qr.ts');
+    const mod = await import('../app/routes/api.quark-qr');
     expect(typeof mod.action).toBe('function');
     expect(typeof mod.loader).toBe('function');
   });
 
   test('api.baidu-qr exports action and loader', async () => {
-    const mod = await import('../app/routes/api.baidu-qr.ts');
+    const mod = await import('../app/routes/api.baidu-qr');
     expect(typeof mod.action).toBe('function');
     expect(typeof mod.loader).toBe('function');
   });
 
   test('api.alicloud-qr exports action, loader, and authorize', async () => {
-    const mod = await import('../app/routes/api.alicloud-qr.ts');
+    const mod = await import('../app/routes/api.alicloud-qr');
     expect(typeof mod.action).toBe('function');
     expect(typeof mod.loader).toBe('function');
     expect(typeof mod.authorize).toBe('function');
   });
 
   test('home route exports loader function', async () => {
-    const mod = await import('../app/routes/home.tsx');
+    const mod = await import('../app/routes/home');
     expect(typeof mod.loader).toBe('function');
   });
 });

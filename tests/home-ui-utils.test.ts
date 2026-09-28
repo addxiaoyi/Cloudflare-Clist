@@ -1,5 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+type UploadProgress = {
+  name: string;
+  progress: number;
+  currentPart?: number;
+  totalParts?: number;
+  speed?: number;
+  loaded?: number;
+  total?: number;
+  status: 'uploading' | 'paused' | 'error' | 'success';
+  errorMessage?: string;
+  startTime?: number;
+  pausedAt?: number;
+  retryCount?: number;
+  failedParts?: number[];
+  partProgress?: Record<number, number>;
+  partSizes?: Record<number, number>;
+};
+
 // Import the helper functions from home.tsx
 // Since they are not exported, we define them here for testing
 function formatBytes(bytes: number): string {
@@ -106,20 +124,6 @@ describe('formatTimeLeft', () => {
 });
 
 describe('uploadProgress state', () => {
-  type UploadProgress = {
-    name: string;
-    progress: number;
-    currentPart?: number;
-    totalParts?: number;
-    speed?: number;
-    loaded?: number;
-    total?: number;
-    status: 'uploading' | 'paused' | 'error' | 'success';
-    errorMessage?: string;
-    partProgress?: Record<number, number>;
-    partSizes?: Record<number, number>;
-  };
-
   it('tracks uploading state with speed and size', () => {
     const p: UploadProgress = {
       name: 'video.mp4',

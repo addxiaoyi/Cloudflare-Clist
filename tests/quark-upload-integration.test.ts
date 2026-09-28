@@ -52,8 +52,8 @@ describe('Quark Upload Integration Test', () => {
       ).resolves.not.toThrow();
 
       // 验证文件已列出
-      const files = await client.listFiles('0');
-      const uploadedFile = files.find((f) => f.name === uniqueFileName);
+      const { objects } = await client.listObjects('');
+      const uploadedFile = objects.find((f) => f.name === uniqueFileName);
 
       expect(uploadedFile).toBeDefined();
       if (uploadedFile) {

@@ -8,17 +8,17 @@ import { QuarkClient } from '~/lib/quark-client';
 import { md5Hex, sha1Hex } from '~/lib/md5';
 
 describe('Quark Upload API Flow', () => {
-  let client;
-  let mockFetch;
+  let client: QuarkClient;
+  let mockFetch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     // Mock fetch
     mockFetch = vi.fn();
-    global.fetch = mockFetch;
+    global.fetch = mockFetch as unknown as typeof fetch;
   });
 
   // Helper function to create a proper mock response
-  const createMockResponse = (data, status = 200) => {
+  const createMockResponse = (data: unknown, status = 200) => {
     return {
       ok: status >= 200 && status < 300,
       status,

@@ -308,7 +308,7 @@ export class QuarkClient {
 
   async putObject(
     key: string,
-    body: ArrayBuffer | string,
+    body: ArrayBuffer | Uint8Array | string,
     _contentType?: string,
   ): Promise<void> {
     const targetPath = this.getFullPath(key);
@@ -323,15 +323,15 @@ export class QuarkClient {
     }
 
     const buffer =
-      body instanceof ArrayBuffer || body instanceof Uint8Array
-        ? body instanceof ArrayBuffer
+      body instanceof Uint8Array
+        ? body
+        : body instanceof ArrayBuffer
           ? new Uint8Array(body)
-          : body
-        : new TextEncoder().encode(body);
+          : new TextEncoder().encode(body);
     const fileSize = buffer.length;
 
-    const md5 = md5Hex(buffer.buffer);
-    const sha1 = await sha1Hex(buffer.buffer);
+    const md5 = md5Hex(buffer.buffer as ArrayBuffer);
+    const sha1 = await sha1Hex(buffer.buffer as ArrayBuffer);
     const formatType = fileName.includes('.')
       ? fileName.split('.').pop()?.toLowerCase() || 'bin'
       : 'bin';
@@ -477,7 +477,7 @@ export class QuarkClient {
         'Content-Type': 'application/octet-stream',
         'Content-Length': String(buffer.length),
       },
-      body: buffer,
+      body: buffer as unknown as BodyInit,
     });
 
     if (!res.ok) {
@@ -528,7 +528,7 @@ export class QuarkClient {
         ...this.headers(),
         'Content-Type': 'application/octet-stream',
       },
-      body: chunk,
+      body: chunk as unknown as BodyInit,
     });
 
     if (!res.ok) {
@@ -733,7 +733,7 @@ export class QuarkClient {
         'Content-Type': 'application/octet-stream',
         'Content-Length': String(chunkData.length),
       },
-      body: chunkData,
+      body: chunkData as unknown as BodyInit,
       signal,
     });
 
@@ -744,7 +744,7 @@ export class QuarkClient {
       );
     }
 
-    const data = await res.json();
+    const data: Record<string, any> = await res.json();
     if (data.code && data.code !== '0' && data.code !== 0) {
       throw new Error(
         `Quark upload part error: ${data.code} ${data.message || ''}`,
