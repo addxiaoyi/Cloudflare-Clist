@@ -335,9 +335,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       const fileName = path.split('/').pop() || 'image';
 
       // 公开下载限流：guest/share 按 IP 限速（admin 不限）
+      // HEAD 预检不传输 body，字节配额按 0 计
+      const previewLength =
+        request.method === 'HEAD' ? 0 : Number(contentLength) || 0;
       if (
         userType !== 'admin' &&
-        !allowPublicDownload(meta.ip, Number(contentLength) || 0)
+        !allowPublicDownload(meta.ip, previewLength)
       ) {
         return Response.json(
           { error: '下载过于频繁，请稍后再试' },
@@ -396,13 +399,15 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
       const contentType =
         response.headers.get('content-type') || 'application/octet-stream';
       const contentLength = response.headers.get('content-length');
-
       const fileName = path.split('/').pop() || 'download';
 
       // 公开下载限流：guest/share 按 IP 限速（admin 不限）
+      // HEAD 预检不传输 body，字节配额按 0 计，避免预检误占带宽
+      const effectiveLength =
+        request.method === 'HEAD' ? 0 : Number(contentLength) || 0;
       if (
         userType !== 'admin' &&
-        !allowPublicDownload(meta.ip, Number(contentLength) || 0)
+        !allowPublicDownload(meta.ip, effectiveLength)
       ) {
         return Response.json(
           { error: '下载过于频繁，请稍后再试' },
