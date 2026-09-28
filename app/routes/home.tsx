@@ -1288,6 +1288,13 @@ function formatDate(dateStr: string): string {
   return date.toLocaleString('zh-CN');
 }
 
+// 存储授权类错误（OAuth 令牌过期/被撤销等）需要引导管理员重新授权，而非简单重试
+function isAuthExpiredError(message: string): boolean {
+  return /token|expired|revoked|unauthorized|invalid_grant|授权|令牌/i.test(
+    message,
+  );
+}
+
 function Modal({
   title,
   onClose,
@@ -4956,6 +4963,7 @@ const SortableRow = ({
   startRename,
   startMove,
   deleteFolder,
+  deleteFile,
   calcFolderSize,
   calcSizeKey,
   navigateTo,
@@ -4969,7 +4977,7 @@ const SortableRow = ({
   canDownload: boolean;
   selectedKeys: Set<string>;
   cursor: number;
-  toggleSelect: (key: string) => void;
+  toggleSelect: (key: string, shiftKey?: boolean) => void;
   toggleFavorite: (obj: S3Object) => void;
   isFavorite: (key: string) => boolean;
   handlePreview: (obj: S3Object) => void;
@@ -4978,6 +4986,7 @@ const SortableRow = ({
   startRename: (obj: S3Object) => void;
   startMove: (obj: S3Object) => void;
   deleteFolder: (key: string, name: string) => void;
+  deleteFile: (key: string) => void;
   calcFolderSize: (key: string, name: string) => void;
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
@@ -5041,7 +5050,7 @@ const SortableRow = ({
             checked={selectedKeys.has(obj.key)}
             onChange={(e) => {
               e.stopPropagation();
-              toggleSelect(obj.key, e.shiftKey);
+              toggleSelect(obj.key, (e.nativeEvent as MouseEvent).shiftKey);
             }}
             className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 accent-blue-600"
           />
@@ -5297,7 +5306,7 @@ const SortableGalleryItem = ({
   calcFolderSize: (key: string, name: string) => void;
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
-  storageId: string;
+  storageId: number;
   dragOverId: string | null;
   galleryRowRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }) => {
@@ -5378,6 +5387,7 @@ const SortableGalleryItemInner = ({
   calcSizeKey,
   navigateTo,
   storageId,
+  dragOverId,
 }: {
   obj: S3Object;
   index: number;
@@ -5397,7 +5407,7 @@ const SortableGalleryItemInner = ({
   calcFolderSize: (key: string, name: string) => void;
   calcSizeKey: string | null;
   navigateTo: (path: string) => void;
-  storageId: string;
+  storageId: number;
   dragOverId: string | null;
 }) => {
   const isImg = !obj.isDirectory && getFileType(obj.name) === 'image';
@@ -8218,13 +8228,23 @@ function FileBrowser({
             </div>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center gap-4 p-4 h-32 text-zinc-400 dark:text-zinc-600">
+          <div className="flex flex-col items-center justify-center gap-4 p-6 h-40 text-zinc-400 dark:text-zinc-600">
             <AlertCircle className="h-6 w-6" />
-            <div className="text-center">
-              <p className="text-sm font-medium mb-2">加载失败</p>
+            <div className="text-center max-w-md">
+              <p className="text-sm font-medium mb-2">
+                {isAuthExpiredError(error) ? '存储授权已失效' : '加载失败'}
+              </p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 break-words">
+                {error}
+              </p>
+              {isAuthExpiredError(error) && (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  请管理员在「设置」中编辑该存储，重新点击对应的「授权」按钮后再试。
+                </p>
+              )}
               <button
-                onClick={() => setError('')}
-                className="text-xs text-blue-600 dark:text-blue-400 underline hover:no-underline"
+                onClick={loadFiles}
+                className="mt-3 text-xs text-blue-600 dark:text-blue-400 underline hover:no-underline"
               >
                 重试
               </button>
@@ -8336,7 +8356,7 @@ function FileBrowser({
                     calcFolderSize={calcFolderSize}
                     calcSizeKey={calcSizeKey}
                     navigateTo={navigateTo}
-                    storageId={String(storage.id)}
+                    storageId={storage.id}
                     dragOverId={dragOverId}
                     galleryRowRefs={galleryRowRefs}
                   />
@@ -8457,6 +8477,7 @@ function FileBrowser({
                         startRename={startRename}
                         startMove={startMove}
                         deleteFolder={deleteFolder}
+                        deleteFile={deleteFile}
                         calcFolderSize={calcFolderSize}
                         calcSizeKey={calcSizeKey}
                         navigateTo={navigateTo}
@@ -8502,7 +8523,7 @@ function FileBrowser({
           fileKey={previewFile.key}
           fileName={previewFile.name}
           fileSize={previewFile.size}
-          fileModified={previewFile.modified}
+          fileModified={previewFile.lastModified}
           onClose={() => setPreviewFile(null)}
           onPrev={handlePrevPreview}
           onNext={handleNextPreview}
