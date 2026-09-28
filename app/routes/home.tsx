@@ -2649,15 +2649,16 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
     setPath(parts.join("/"));
   };
 
+  // 用 <a download> 触发下载：window.open 会被浏览器当弹窗拦截（返回 null），
+  // 且不经过 JS 取流，大文件不会占内存
   const downloadFile = (key: string) => {
-    console.log('[DEBUG] downloadFile called', { key, storageId: storage.id });
-    const url = `${apiFileUrl(storage.id, key)}?action=download`;
-    console.log('[DEBUG] opening URL:', url);
-    const result = window.open(url, "_blank");
-    console.log('[DEBUG] window.open result:', result);
-    if (!result) {
-      console.warn('[DEBUG] window.open returned falsy - likely blocked by popup blocker');
-    }
+    const a = document.createElement('a');
+    a.href = `${apiFileUrl(storage.id, key)}?action=download`;
+    a.download = key.split('/').pop() || 'download';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const deleteFile = async (key: string) => {
