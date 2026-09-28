@@ -2650,7 +2650,14 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
   };
 
   const downloadFile = (key: string) => {
-    window.open(`${apiFileUrl(storage.id, key)}?action=download`, "_blank");
+    console.log('[DEBUG] downloadFile called', { key, storageId: storage.id });
+    const url = `${apiFileUrl(storage.id, key)}?action=download`;
+    console.log('[DEBUG] opening URL:', url);
+    const result = window.open(url, "_blank");
+    console.log('[DEBUG] window.open result:', result);
+    if (!result) {
+      console.warn('[DEBUG] window.open returned falsy - likely blocked by popup blocker');
+    }
   };
 
   const deleteFile = async (key: string) => {
