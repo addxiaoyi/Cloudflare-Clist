@@ -224,6 +224,13 @@ interface StorageInfo {
   description?: string;
 }
 
+// 授权健康检测结果：ok=false 时 error 为具体原因（如令牌过期/被撤销）
+interface HealthStatus {
+  ok: boolean;
+  skipped?: boolean;
+  error?: string;
+}
+
 interface UploadProgress {
   name: string;
   progress: number;
@@ -9364,6 +9371,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [health, setHealth] = useState<Record<number, HealthStatus>>({});
+  const [healthChecking, setHealthChecking] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -9542,6 +9551,49 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     }
   };
 
+  // 逐个探活所有存储，标记授权失效的项，方便管理员直接去重新授权
+  const checkStorageHealth = async () => {
+    setHealthChecking(true);
+    try {
+      const res = await fetch('/api/storage-health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        toast(res.status === 401 ? '需要管理员权限' : '检测失败', 'error');
+        return;
+      }
+      const data = (await res.json()) as {
+        results: {
+          id: number;
+          ok: boolean;
+          skipped?: boolean;
+          error?: string;
+        }[];
+      };
+      const next: Record<number, HealthStatus> = {};
+      for (const item of data.results) {
+        next[item.id] = {
+          ok: item.ok,
+          skipped: item.skipped,
+          error: item.error,
+        };
+      }
+      setHealth(next);
+      const failed = data.results.filter((item) => !item.ok).length;
+      if (failed > 0) {
+        toast(`${failed} 个存储授权异常，请重新授权`, 'error');
+      } else {
+        toast('全部存储授权正常', 'success');
+      }
+    } catch {
+      toast('网络错误', 'error');
+    } finally {
+      setHealthChecking(false);
+    }
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors flex flex-col">
       {/* Header */}
@@ -9660,6 +9712,21 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <div className="flex items-center gap-1">
               {isAdmin && (
                 <button
+                  onClick={checkStorageHealth}
+                  disabled={healthChecking}
+                  className="icon-btn h-8 w-8 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="检测各存储授权状态"
+                  aria-label="检测授权状态"
+                >
+                  {healthChecking ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <ShieldCheck />
+                  )}
+                </button>
+              )}
+              {isAdmin && (
+                <button
                   onClick={() => {
                     setEditingStorage(null);
                     setShowStorageForm(true);
@@ -9743,14 +9810,37 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     >
                       {s.name}
                     </div>
-                    <span
-                      className={`mt-0.5 inline-flex items-center gap-1 text-xs ${s.isPublic ? 'text-green-600 dark:text-green-400' : 'text-zinc-400 dark:text-zinc-500'}`}
-                    >
+                    <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                       <span
-                        className={`h-1.5 w-1.5 rounded-full ${s.isPublic ? 'bg-green-500' : 'bg-zinc-400 dark:bg-zinc-600'}`}
-                      />
-                      {s.isPublic ? '公开' : '私有'}
-                    </span>
+                        className={`inline-flex items-center gap-1 text-xs ${s.isPublic ? 'text-green-600 dark:text-green-400' : 'text-zinc-400 dark:text-zinc-500'}`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${s.isPublic ? 'bg-green-500' : 'bg-zinc-400 dark:bg-zinc-600'}`}
+                        />
+                        {s.isPublic ? '公开' : '私有'}
+                      </span>
+                      {health[s.id] &&
+                        !health[s.id].skipped &&
+                        (health[s.id].ok ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                            授权正常
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingStorage(s);
+                              setShowStorageForm(true);
+                            }}
+                            className="inline-flex items-center gap-1 text-xs text-red-600 dark:text-red-400 hover:underline"
+                            title={health[s.id].error}
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                            授权失效，去重新授权
+                          </button>
+                        ))}
+                    </div>
                   </div>
                   {isAdmin && (
                     <div
@@ -9926,8 +10016,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <StorageModal
           storage={editingStorage || undefined}
           onSave={() => {
+            const editedId = editingStorage?.id;
             setShowStorageForm(false);
             setEditingStorage(null);
+            // 重新授权后清掉该存储的旧检测结果，避免残留“授权失效”
+            if (editedId != null) {
+              setHealth((prev) => {
+                if (!(editedId in prev)) return prev;
+                const next = { ...prev };
+                delete next[editedId];
+                return next;
+              });
+            }
             refreshStorages();
           }}
           onCancel={() => {

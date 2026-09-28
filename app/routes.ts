@@ -8,6 +8,7 @@ export default [
     'api/storage-stats/:storageId',
     'routes/api.storage-stats.$storageId.ts',
   ),
+  route('api/storage-health', 'routes/api.storage-health.ts'),
   route('api/changelog', 'routes/api.changelog.ts'),
   route('api/audit', 'routes/api.audit.ts'),
   route('api/shares', 'routes/api.shares.ts'),
