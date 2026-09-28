@@ -90,7 +90,11 @@ function assertSafeFetchUrl(raw: string): URL {
 const DOWNLOAD_WINDOW_MS = 60_000;
 const DOWNLOAD_MAX_REQUESTS = 90;
 const DOWNLOAD_MAX_BYTES = 1024 * 1024 * 1024; // 1GB / 分钟 / IP
-const downloadTrack = new Map<string, { times: number[]; bytes: number }>();
+// 字节配额按时间戳随请求一起滑出窗口，否则 bytes 只增不减会让 IP 永久被封
+const downloadTrack = new Map<
+  string,
+  { times: number[]; bytes: { at: number; size: number }[] }
+>();
 
 function allowPublicDownload(
   ip: string | null,
@@ -100,19 +104,28 @@ function allowPublicDownload(
   const now = Date.now();
   const cur = downloadTrack.get(key);
   if (!cur) {
-    downloadTrack.set(key, { times: [now], bytes: contentLength });
+    downloadTrack.set(key, {
+      times: [now],
+      bytes: [{ at: now, size: contentLength }],
+    });
     return contentLength <= DOWNLOAD_MAX_BYTES;
   }
+
   const times = cur.times.filter((t) => now - t < DOWNLOAD_WINDOW_MS);
+  const recentBytes = cur.bytes.filter((b) => now - b.at < DOWNLOAD_WINDOW_MS);
+  const usedBytes = recentBytes.reduce((sum, b) => sum + b.size, 0);
+
   if (
     times.length >= DOWNLOAD_MAX_REQUESTS ||
-    cur.bytes + contentLength > DOWNLOAD_MAX_BYTES
+    usedBytes + contentLength > DOWNLOAD_MAX_BYTES
   ) {
-    downloadTrack.set(key, { times, bytes: cur.bytes });
+    downloadTrack.set(key, { times, bytes: recentBytes });
     return false;
   }
+
   times.push(now);
-  downloadTrack.set(key, { times, bytes: cur.bytes + contentLength });
+  recentBytes.push({ at: now, size: contentLength });
+  downloadTrack.set(key, { times, bytes: recentBytes });
   return true;
 }
 
