@@ -5813,36 +5813,16 @@ function FileBrowser({
     setPath(parts.join('/'));
   };
 
-  // 统一下载：先探测 429 限流并给出友好提示，成功则转 blob 保存
-  const triggerDownload = async (key: string) => {
-    try {
-      const res = await fetch(`${apiFileUrl(storage.id, key)}?action=download`);
-      if (res.status === 429) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        toast(data?.error || '下载过于频繁，请稍后再试', 'error');
-        return;
-      }
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        toast(data?.error || '下载失败', 'error');
-        return;
-      }
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = key.split('/').pop() || 'download';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
-      toast('网络错误', 'error');
-    }
+  // 统一下载：交给浏览器原生下载，不在 JS 层取流
+  // 早前用 fetch+blob 中转会把整个文件读进内存（大文件卡死），且 blob: URL 常被扩展拦截
+  const triggerDownload = (key: string) => {
+    const a = document.createElement('a');
+    a.href = `${apiFileUrl(storage.id, key)}?action=download`;
+    a.download = key.split('/').pop() || 'download';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const downloadFile = (key: string) => {
