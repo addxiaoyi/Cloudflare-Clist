@@ -119,7 +119,11 @@ function allowPublicDownload(
     times.length >= DOWNLOAD_MAX_REQUESTS ||
     usedBytes + contentLength > DOWNLOAD_MAX_BYTES
   ) {
-    downloadTrack.set(key, { times, bytes: recentBytes });
+    if (times.length === 0 && recentBytes.length === 0) {
+      downloadTrack.delete(key);
+    } else {
+      downloadTrack.set(key, { times, bytes: recentBytes });
+    }
     return false;
   }
 
