@@ -19,6 +19,7 @@ function Svg({ children, ...props }: IconProps) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      pointerEvents="none"
       {...props}
     >
       {children}

@@ -67,13 +67,14 @@ html.dark {
 /* ---------- Components ---------- */
 @layer components {
   /* 图标按钮：方形 hover 底色，内部 svg 默认 16px */
-  .icon-btn {
-    @apply inline-flex items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100;
-  }
-  .icon-btn > svg {
-    @apply h-[18px] w-[18px];
-    pointer-events: none;
-  }
+.icon-btn {
+  @apply inline-flex items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100;
+}
+/* 修复：SVG 图标不能拦截按钮点击 */
+.icon-btn > svg {
+  @apply h-[18px] w-[18px];
+  pointer-events: none !important;
+}
 
   /* 按钮基类 + 变体 */
   .btn {
@@ -81,7 +82,7 @@ html.dark {
   }
   .btn > svg {
     @apply h-4 w-4;
-    pointer-events: none;
+    pointer-events: none !important;
   }
   .btn-sm {
     @apply px-2.5 py-1.5;
