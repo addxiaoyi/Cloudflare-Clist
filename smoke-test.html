@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>按钮点击冒烑测试 - 修复验证</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+      padding: 40px 20px; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      margin: 0;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: white; margin: 0 0 20px 0; }
+    h2 { color: white; font-size: 18px; margin: 0 0 16px 0; }
+    .card { 
+      background: white; 
+      border-radius: 12px; 
+      padding: 24px; 
+      margin-bottom: 20px; 
+      box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+    }
+    .btn { 
+      display: inline-flex; 
+      align-items: center; 
+      justify-content: center;
+      gap: 10px; 
+      padding: 12px 20px; 
+      border-radius: 10px; 
+      border: 2px solid #e5e7eb; 
+      background: white; 
+      cursor: pointer; 
+      transition: all 0.15s;
+      font-size: 16px;
+      font-weight: 500;
+      color: #1f2937;
+    }
+    .btn:hover { background: #f9fafb; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .btn:active { transform: translateY(0.5px); }
+    .btn-primary { 
+      background: #3b82f6; 
+      border-color: #3b82f6; 
+      color: white;
+    }
+    .btn-primary:hover { background: #2563eb; border-color: #2563eb; }
+    .icon-btn { 
+      display: inline-flex; 
+      align-items: center; 
+      justify-content: center;
+      gap: 8px;
+      width: 40px; 
+      height: 40px; 
+      border-radius: 10px; 
+      cursor: pointer; 
+      background: white;
+      border: 2px solid #e5e7eb;
+      transition: all 0.15s;
+    }
+    .icon-btn:hover { background: #f9fafb; transform: scale(1.05); }
+    svg { pointer-events: none; }
+    .status { padding: 16px; border-radius: 8px; margin: 12px 0; }
+    .status.success { background: #dcfce7; color: #065f46; border: 1px solid #86efac; }
+    .status.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .status.info { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .result { 
+      padding: 10px 14px; 
+      margin: 6px 0; 
+      border-radius: 6px; 
+      font-size: 13px; 
+      font-family: 'JetBrains Mono', 'Monaco', monospace;
+    }
+    .pass { background: #dcfce7; color: #065f46; border: 1px solid #86efac; }
+    .fail { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .counters { display: flex; gap: 20px; flex-wrap: wrap; }
+    .counter { flex: 1; min-width: 120px; padding: 16px; background: #f8fafc; border-radius: 8px; text-align: center; }
+    .count { font-size: 28px; font-weight: bold; color: #1e40af; }
+    .label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .log { background: #1e293b; color: #86efac; padding: 14px; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; margin-top: 10px; }
+    .event { margin: 2px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 按钮点击冒烑测试</h1>
+    <p style="color: white; margin: 0;">验证 button 点击事件是否被 SVG 图标阻止</p>
+    
+    <div class="card">
+      <h2>测试区域</h2>
+      <p style="color: #64748b; margin: 0 0 16px 0;">
+        <strong>修复要点：</strong> 为所有 SVG 图标添加 <code>pointer-events="none"</code> 内联属性
+      </p>
+      
+      <div class="counters">
+        <div class="counter">
+          <div class="count" id="click-count">0</div>
+          <div class="label">点击次数</div>
+        </div>
+        <div class="counter">
+          <div class="count" id="download-count">0</div>
+          <div class="label">下载次数</div>
+        </div>
+        <div class="counter">
+          <div class="count" id="test-pass">0</div>
+          <div class="label">通过</div>
+        </div>
+      </div>
+      
+      <div style="margin: 20px 0; display: flex; gap: 16px; flex-wrap: wrap;">
+        <button id="main-btn" class="btn btn-primary">
+          主下载按钮 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
+        </button>
+        
+        <div class="icon-btn" id="icon-btn" title="下载文件" aria-label="下载文件"></div>
+      </div>
+      
+      <!-- Icon 容器 -->
+      <div id="icon-btn" class="icon-btn" title="下载文件" aria-label="下载文件"></div>
+    </div>
+
+    <div class="card">
+      <h2>测试结果</h2>
+      <div id="results"></div>
+    </div>
+    
+    <div class="card">
+      <h2>事件日志</h2>
+      <div class="log" id="log"></div>
+      <button class="btn" style="margin-top: 12px;" onclick="clearLog()">清除日志</button>
+    </div>
+  </div>
+
+  <script>
+    let clickCount = 0;
+    let downloadCount = 0;
+    let testResults = [];
+    
+    const clickCountEl = document.getElementById('click-count');
+    const downloadCountEl = document.getElementById('download-count');
+    const testPassEl = document.getElementById('test-pass');
+    const resultsEl = document.getElementById('results');
+    const logEl = document.getElementById('log');
+    const mainBtn = document.getElementById('main-btn');
+    
+    function log(msg) {
+      const entry = document.createElement('div');
+      entry.className = 'event';
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    
+    function addResult(test, passed, message) {
+      const result = { test, passed, message, time: new Date().toLocaleTimeString() };
+      testResults.push(result);
+      
+      const div = document.createElement('div');
+      div.className = `result ${passed ? 'pass' : 'fail'}`;
+      div.innerHTML = `<strong>${passed ? '✓' : '✗'}</strong> ${test}: ${message}`;
+      resultsEl.appendChild(div);
+      
+      const passCount = testResults.filter(r => r.passed).length;
+      testPassEl.textContent = passCount;
+    }
+    
+    function updateCounters() {
+      clickCountEl.textContent = clickCount;
+      downloadCountEl.textContent = downloadCount;
+    }
+    
+    function createSvg() {
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('width', 20);
+      svg.setAttribute('height', 20);
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', 'currentColor');
+      svg.setAttribute('stroke-width', 2);
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('pointer-events', 'none');
+      
+      const path1 = document.createElementNS(svgNS, 'path');
+      path1.setAttribute('d', 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4');
+      svg.appendChild(path1);
+      
+      const polyline = document.createElementNS(svgNS, 'polyline');
+      polyline.setAttribute('points', '7 10 12 15 17 10');
+      svg.appendChild(polyline);
+      
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', '12');
+      line.setAttribute('y1', '15');
+      line.setAttribute('x2', '12');
+      line.setAttribute('y2', '3');
+      svg.appendChild(line);
+      
+      return svg;
+    }
+    
+    // 测试初始化
+    function initTests() {
+      log('页面初始化完成');
+      
+      const btn = document.getElementById('icon-btn');
+      btn.appendChild(createSvg());
+      
+      const svg = btn.querySelector('svg');
+      addResult('SVG pointer-events', svg.getAttribute('pointer-events') === 'none', 
+        \`pointer-events = \${svg.getAttribute('pointer-events')}\`);
+      
+      log('初始测试完成');
+    }
+    
+    // 点击处理
+    function handleClick(e) {
+      clickCount++;
+      updateCounters();
+      log(\`按钮点击! 次数: \${clickCount}\`);
+      
+      if (clickCount === 1) {
+        addResult('按钮点击事件传递', true, '事件正常传递，SVG 不阻止点击');
+      }
+    }
+    
+    function handleDownload() {
+      downloadCount++;
+      updateCounters();
+      log(\`文件下载! 次数: \${downloadCount}\`);
+    }
+    
+    // 绑定事件
+    mainBtn.addEventListener('click', handleClick);
+    
+    const iconBtn = document.getElementById('icon-btn');
+    iconBtn.addEventListener('mousedown', (e) => log('mousedown: ' + e.target.tagName));
+    iconBtn.addEventListener('mouseup', (e) => log('mouseup: ' + e.target.tagName));
+    
+    iconBtn.addEventListener('click', function(e) {
+      log(\`图标容器点击: target = \${e.target.tagName}\`);
+      handleClick(e);
+      handleDownload(e);
+    });
+    
+    document.addEventListener('click', (e) => {
+      if (!mainBtn.contains(e.target) && !iconBtn.contains(e.target)) {
+        log(\`外部点击: \${e.target.tagName}\`);
+      }
+    });
+    
+    function clearLog() {
+      logEl.innerHTML = '';
+      log('日志清除');
+    }
+    
+    // 页面加载后运行测试
+    window.addEventListener('DOMContentLoaded', initTests);
+  </script>
+</body>
+</html>
