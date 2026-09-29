@@ -74,6 +74,17 @@ export function FilePreview({
     });
   };
 
+  // 动态 <a> 触发下载：避开 <a download> 标签在弹窗/代理场景下被劫持或忽略的问题
+  const triggerDownload = () => {
+    const a = document.createElement('a');
+    a.href = downloadFileUrl;
+    a.download = fileName;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -145,15 +156,13 @@ export function FilePreview({
               信息
             </button>
           )}
-          <a
-            href={downloadFileUrl}
-            download={fileName}
+          <button
+            onClick={(e) => { e.stopPropagation(); triggerDownload(); }}
             className="inline-flex items-center gap-1.5 text-zinc-300 hover:text-white text-sm px-3 py-1.5 border border-zinc-700 hover:border-zinc-500 rounded-md transition"
-            onClick={(e) => e.stopPropagation()}
           >
             <Download className="h-4 w-4" />
             下载
-          </a>
+          </button>
           <button
             onClick={onClose}
             className="grid h-9 w-9 place-items-center rounded-md text-zinc-400 hover:bg-white/10 hover:text-white transition"
@@ -220,13 +229,12 @@ export function FilePreview({
           {fileType === "unknown" && (
             <div className="text-zinc-400 font-mono text-center">
               <p className="text-lg mb-2">无法预览此文件类型</p>
-              <a
-                href={downloadFileUrl}
-                download={fileName}
+              <button
+                onClick={triggerDownload}
                 className="text-blue-400 hover:text-blue-300 underline"
               >
                 点击下载
-              </a>
+              </button>
             </div>
           )}
         </div>
