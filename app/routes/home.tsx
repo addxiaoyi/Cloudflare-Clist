@@ -2364,151 +2364,6 @@ function ScanModal({ results, scanning, onNavigate, onClose }: { results: { bigF
   );
 }
 
-interface ReleaseItem {
-  version: string;
-  name: string;
-  body: string;
-  publishedAt: string;
-  url: string;
-  isPrerelease: boolean;
-  author: string;
-}
-
-function ChangelogModal({ onClose }: { onClose: () => void }) {
-  const [releases, setReleases] = useState<ReleaseItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const fetchReleases = async () => {
-      try {
-        const res = await fetch("/api/changelog");
-        if (res.ok) {
-          const data = await res.json() as { releases: ReleaseItem[] };
-          setReleases(data.releases);
-        } else {
-          setError("获取更新日志失败");
-        }
-      } catch {
-        setError("网络错误");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchReleases();
-  }, []);
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-  };
-
-  const parseBody = (body: string) => {
-    // Parse the changelog body and highlight different types
-    return body.split("\n").map((line, i) => {
-      const trimmed = line.trim();
-      if (!trimmed) return null;
-
-      let colorClass = "text-zinc-600 dark:text-zinc-400";
-      if (trimmed.toLowerCase().startsWith("#update") || trimmed.toLowerCase().startsWith("update")) {
-        colorClass = "text-blue-600 dark:text-blue-400";
-      } else if (trimmed.toLowerCase().startsWith("#fix") || trimmed.toLowerCase().startsWith("fix")) {
-        colorClass = "text-green-600 dark:text-green-400";
-      } else if (trimmed.toLowerCase().startsWith("#breaking") || trimmed.toLowerCase().startsWith("breaking")) {
-        colorClass = "text-red-600 dark:text-red-400";
-      } else if (trimmed.toLowerCase().startsWith("#new") || trimmed.toLowerCase().startsWith("new")) {
-        colorClass = "text-purple-600 dark:text-purple-400";
-      }
-
-      return (
-        <div key={i} className={`${colorClass} text-sm`}>
-          {trimmed}
-        </div>
-      );
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 w-full max-w-2xl max-h-[80vh] rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between shrink-0">
-          <span className="text-zinc-900 dark:text-zinc-100 font-semibold text-sm flex items-center gap-2">
-            <span className="text-blue-500">📋</span> 更新日志
-          </span>
-          <button onClick={onClose} className="icon-btn h-7 w-7" aria-label="关闭"><X /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <span className="text-zinc-400 dark:text-zinc-500 text-sm">加载中...</span>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center py-8">
-              <span className="text-red-500 text-sm">{error}</span>
-            </div>
-          ) : releases.length === 0 ? (
-            <div className="flex items-center justify-center py-8">
-              <span className="text-zinc-400 dark:text-zinc-500 text-sm">暂无更新日志</span>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {releases.map((release, idx) => (
-                <div key={release.version} className="relative">
-                  {idx > 0 && <div className="absolute -top-3 left-0 right-0 border-t border-zinc-200 dark:border-zinc-700" />}
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      idx === 0
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                    }`}>
-                      {release.version}
-                    </span>
-                    {idx === 0 && (
-                      <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400">
-                        Latest
-                      </span>
-                    )}
-                    {release.isPrerelease && (
-                      <span className="px-2 py-0.5 text-xs font-medium rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400">
-                        Pre-release
-                      </span>
-                    )}
-                    <span className="text-xs text-zinc-400 dark:text-zinc-500 font-mono">
-                      {formatDate(release.publishedAt)}
-                    </span>
-                  </div>
-                  {release.name && release.name !== release.version && (
-                    <h3 className="text-sm text-zinc-800 dark:text-zinc-200 mb-2">{release.name}</h3>
-                  )}
-                  <div className="space-y-1 pl-2 border-l-2 border-zinc-200 dark:border-zinc-700">
-                    {parseBody(release.body)}
-                  </div>
-                  <a
-                    href={release.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block mt-2 text-xs text-blue-500 hover:text-blue-400 font-mono"
-                  >
-                    查看详情 →
-                  </a>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 shrink-0">
-          <button
-            onClick={onClose}
-            className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-500 text-white text-sm transition rounded"
-          >
-            关闭
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: StorageInfo; isAdmin: boolean; isDark: boolean; chunkSizeMB: number }) {
   // Permission checks
   const canList = isAdmin || storage.guestList;
@@ -4647,7 +4502,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   const [showStorageForm, setShowStorageForm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showAnnouncement, setShowAnnouncement] = useState(false);
-  const [showChangelog, setShowChangelog] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [statsStorage, setStatsStorage] = useState<StorageInfo | null>(null);
   const [editingStorage, setEditingStorage] = useState<StorageInfo | null>(null);
@@ -5006,9 +4860,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           announcement={siteAnnouncement}
           onClose={() => setShowAnnouncement(false)}
         />
-      )}
-      {showChangelog && (
-        <ChangelogModal onClose={() => setShowChangelog(false)} />
       )}
       {showStats && statsStorage && (
         <StorageStatsModal
