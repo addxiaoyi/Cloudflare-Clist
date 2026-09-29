@@ -5813,30 +5813,15 @@ function FileBrowser({
     setPath(parts.join('/'));
   };
 
-  // 统一下载：HEAD 预检探测限流，再原生下载
-  // 预检用 HEAD，后端不把 0 字节计入下载配额，429 时给友好提示
-  const triggerDownload = async (key: string) => {
+  const triggerDownload = (key: string) => {
     const url = `${apiFileUrl(storage.id, key)}?action=download`;
-    try {
-      const probe = await fetch(url, { method: 'HEAD' });
-      if (!probe.ok) {
-        // HEAD 无响应体，取不到 error 字段，按状态码区分提示
-        toast(
-          probe.status === 429 ? '下载过于频繁，请稍后再试' : '下载失败',
-          'error',
-        );
-        return;
-      }
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = key.split('/').pop() || 'download';
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch {
-      toast('网络错误', 'error');
-    }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = key.split('/').pop() || 'download';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const downloadFile = (key: string) => {
