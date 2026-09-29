@@ -39,6 +39,7 @@ interface Share {
 interface StorageInfo {
   id: number;
   name: string;
+  guestDownload?: boolean;
 }
 
 function formatBytes(bytes: number): string {
@@ -157,11 +158,18 @@ export default function Share({ loaderData }: Route.ComponentProps) {
     setPath(newPath.replace(/^\//, "").replace(/\/$/, ""));
   };
 
+  const downloadUrl = (key: string) => {
+    return `${apiFileUrl(storage!.id, key)}?action=download&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ""}`;
+  };
+
   const downloadFile = (key: string) => {
-    window.open(
-      `${apiFileUrl(storage!.id, key)}?action=download&token=${token}${accessPassword ? `&password=${encodeURIComponent(accessPassword)}` : ""}`,
-      "_blank"
-    );
+    const a = document.createElement('a');
+    a.href = downloadUrl(key);
+    a.download = key.split('/').pop() || 'download';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const verifyPassword = async () => {
@@ -187,6 +195,8 @@ export default function Share({ loaderData }: Route.ComponentProps) {
   };
 
   const canPreviewImage = (obj: S3Object) => !obj.isDirectory && getFileType(obj.name) === "image";
+
+  const canDownload = !share?.hasPassword || passwordVerified;
 
   if (error && !share) {
     return (
@@ -346,7 +356,7 @@ export default function Share({ loaderData }: Route.ComponentProps) {
                   <td className="py-1.5 px-6 text-right">
                     {!obj.isDirectory && (
                       <div className="flex items-center justify-end gap-0.5">
-                        {canPreviewImage(obj) && (
+                        {canDownload && canPreviewImage(obj) && (
                           <button
                             onClick={() => setPreviewFile(obj)}
                             className="icon-btn h-7 w-7"
@@ -356,14 +366,16 @@ export default function Share({ loaderData }: Route.ComponentProps) {
                             <Play />
                           </button>
                         )}
-                        <button
-                          onClick={() => downloadFile(obj.key)}
-                          className="icon-btn h-7 w-7"
-                          title="下载"
-                          aria-label="下载"
-                        >
-                          <Download />
-                        </button>
+                        {canDownload && (
+                          <button
+                            onClick={() => downloadFile(obj.key)}
+                            className="icon-btn h-7 w-7"
+                            title="下载"
+                            aria-label="下载"
+                          >
+                            <Download />
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
