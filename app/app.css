@@ -72,6 +72,7 @@ html.dark {
   }
   .icon-btn > svg {
     @apply h-[18px] w-[18px];
+    pointer-events: none;
   }
 
   /* 按钮基类 + 变体 */
@@ -80,6 +81,7 @@ html.dark {
   }
   .btn > svg {
     @apply h-4 w-4;
+    pointer-events: none;
   }
   .btn-sm {
     @apply px-2.5 py-1.5;
