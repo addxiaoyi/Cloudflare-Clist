@@ -3104,9 +3104,9 @@ function FileBrowser({ storage, isAdmin, isDark, chunkSizeMB }: { storage: Stora
       return;
     }
 
-    // 纯文件直下，间隔触发避免浏览器拦截多窗口
+    // 纯文件直下：用动态 <a> 触发；window.open 会被弹窗拦截且静默无反应
     files.forEach((f, i) => {
-      setTimeout(() => window.open(`${apiFileUrl(storage.id, f.key)}?action=download`, "_blank"), i * 400);
+      setTimeout(() => downloadFile(f.key), i * 400);
     });
   };
 
